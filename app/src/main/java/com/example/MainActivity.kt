@@ -9,7 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
@@ -21,8 +22,12 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -30,6 +35,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.ui.screens.HistoryScreen
+import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.RecordScreen
 import com.example.ui.screens.ResultScreen
 import com.example.ui.screens.SettingsScreen
@@ -38,6 +44,7 @@ import com.example.viewmodel.HistoryViewModel
 import com.example.viewmodel.RecordViewModel
 import com.example.viewmodel.ResultViewModel
 import com.example.viewmodel.SettingsViewModel
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +72,21 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val userName by settingsViewModel.userName.collectAsState()
+
+    // Logika anti-flicker: Tunggu DataStore ngebaca nama user sepersekian detik
+    var isReady by remember { mutableStateOf(false) }
+    LaunchedEffect(userName) {
+        delay(100) 
+        isReady = true
+    }
+
+    if (!isReady) {
+        Box(modifier = Modifier.fillMaxSize()) // Splash screen kosong sementara
+        return
+    }
+
+    // Logika Interseptor Onboarding
+    val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
     Scaffold(
         bottomBar = {
@@ -106,14 +128,24 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController, 
-            startDestination = "record",
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding),
-            // Transisi antar tab instan (0 ms) menghilangkan efek ghosting
             enterTransition = { fadeIn(animationSpec = tween(0)) },
             exitTransition = { fadeOut(animationSpec = tween(0)) },
             popEnterTransition = { fadeIn(animationSpec = tween(0)) },
             popExitTransition = { fadeOut(animationSpec = tween(0)) }
         ) {
+            composable("onboarding") {
+                OnboardingScreen(
+                    onComplete = { name, key ->
+                        settingsViewModel.saveUserName(name)
+                        settingsViewModel.saveApiKey(key)
+                        navController.navigate("record") {
+                            popUpTo("onboarding") { inclusive = true }
+                        }
+                    }
+                )
+            }
             composable("record") {
                 val recordViewModel: RecordViewModel = viewModel(
                     factory = RecordViewModel.provideFactory(
@@ -139,7 +171,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             composable("settings") {
                 SettingsScreen(viewModel = settingsViewModel)
             }
-            // Animasi Morphing (Scale) khusus untuk buka Catatan
             composable(
                 "result/{noteId}",
                 enterTransition = { scaleIn(initialScale = 0.85f, animationSpec = tween(300)) + fadeIn(tween(300)) },
