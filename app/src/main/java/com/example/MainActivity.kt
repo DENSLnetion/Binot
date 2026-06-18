@@ -4,8 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -61,8 +64,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-
-    // Ambil userName dari settings buat di-pass ke RecordScreen
     val userName by settingsViewModel.userName.collectAsState()
 
     Scaffold(
@@ -107,12 +108,11 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             navController = navController, 
             startDestination = "record",
             modifier = Modifier.padding(innerPadding),
-            // Matikan transisi navigasi Fade yang menye-menye. 
-            // Sekali klik tab, langsung pindah layar dengan tegas.
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None }
+            // Transisi antar tab instan (0 ms) menghilangkan efek ghosting
+            enterTransition = { fadeIn(animationSpec = tween(0)) },
+            exitTransition = { fadeOut(animationSpec = tween(0)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(0)) },
+            popExitTransition = { fadeOut(animationSpec = tween(0)) }
         ) {
             composable("record") {
                 val recordViewModel: RecordViewModel = viewModel(
@@ -137,20 +137,19 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 )
             }
             composable("settings") {
-                SettingsScreen(
-                    viewModel = settingsViewModel
-                )
+                SettingsScreen(viewModel = settingsViewModel)
             }
-            composable("result/{noteId}") { backStackEntry ->
+            // Animasi Morphing (Scale) khusus untuk buka Catatan
+            composable(
+                "result/{noteId}",
+                enterTransition = { scaleIn(initialScale = 0.85f, animationSpec = tween(300)) + fadeIn(tween(300)) },
+                exitTransition = { scaleOut(targetScale = 0.85f, animationSpec = tween(300)) + fadeOut(tween(300)) }
+            ) { backStackEntry ->
                 val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                 val apiKey by settingsViewModel.apiKey.collectAsState()
                 
                 val resultViewModel: ResultViewModel = viewModel(
-                    factory = ResultViewModel.provideFactory(
-                        noteId,
-                        appContainer.noteRepository,
-                        apiKey
-                    )
+                    factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, apiKey)
                 )
                 ResultScreen(
                     viewModel = resultViewModel,
@@ -160,3 +159,4 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
+
