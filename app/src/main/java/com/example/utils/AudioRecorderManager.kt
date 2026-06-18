@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -32,7 +33,10 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
-    // ULTIMATE MUTE HACK: Paksa MUTE semua jalur suara pake fungsi Native OS
+    // Variabel buat nyimpen status awal haptic feedback
+    private var originalHapticFeedbackStatus = -1
+
+    // ULTIMATE MUTE HACK V2: Bantai semua stream, termasuk panggilan suara, dan matikan haptic feedback
     private fun forceMuteAllBeeps() {
         try {
             audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
@@ -40,6 +44,13 @@ class AudioRecorderManager(private val context: Context) {
             audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
             audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0)
             audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_MUTE, 0)
+            // Tambahan: Siapa tau Bip-nya nyusup lewat jalur telepon
+            audioManager.adjustStreamVolume(AudioManager.STREAM_VOICE_CALL, AudioManager.ADJUST_MUTE, 0) 
+
+            // Matikan Haptic Feedback (suara "tek" saat UI ditekan)
+            originalHapticFeedbackStatus = Settings.System.getInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 1)
+            Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 0)
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -53,6 +64,13 @@ class AudioRecorderManager(private val context: Context) {
             audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0)
             audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
             audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0)
+            audioManager.adjustStreamVolume(AudioManager.STREAM_VOICE_CALL, AudioManager.ADJUST_UNMUTE, 0)
+
+            // Kembalikan status Haptic Feedback
+            if (originalHapticFeedbackStatus != -1) {
+                Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, originalHapticFeedbackStatus)
+                originalHapticFeedbackStatus = -1
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -64,7 +82,6 @@ class AudioRecorderManager(private val context: Context) {
         _isRecording.value = true
         _recognizedText.value = ""
         
-        // Sengaja dimute SEKALI SAJA saat pencet tombol rekam, dan TIDAK DIKEMBALIKAN selama ngerekam
         forceMuteAllBeeps()
         
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -91,7 +108,6 @@ class AudioRecorderManager(private val context: Context) {
                     }
                     override fun onError(error: Int) {
                         if (_isRecording.value) {
-                            // Mesin otomatis looping. Volume HP tetep MUTE
                             initSpeechRecognizer()
                         } else {
                             _amplitude.value = 0f
@@ -151,7 +167,6 @@ class AudioRecorderManager(private val context: Context) {
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
         
-        // TAHAN 600ms buat nunggu Bip Terakhir nabrak tembok bisu, baru balikin suara HP.
         coroutineScope.launch {
             delay(600)
             restoreAllVolumes()
