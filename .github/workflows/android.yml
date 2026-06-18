@@ -21,7 +21,16 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: '9.3.1'
-          cache-enabled: true
+
+      - name: Create debug keystore
+        run: |
+          keytool -genkeypair \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -storepass android -keypass android \
+            -keystore debug.keystore \
+            -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Build with Gradle
         run: gradle assembleDebug
