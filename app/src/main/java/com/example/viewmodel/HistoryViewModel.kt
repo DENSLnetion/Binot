@@ -18,7 +18,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // Logika Search Bar Realtime
     val filteredNotes: StateFlow<List<NoteEntity>> = combine(
         repository.allNotes, _searchQuery
     ) { notes, query ->
@@ -41,25 +40,35 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _searchQuery.value = query
     }
 
-    // Mode Multi-Select: Hapus
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
             ids.forEach { repository.deleteById(it) }
         }
     }
 
-    // Mode Multi-Select: Kloning (Perbaikan Logika)
     fun cloneMultiple(ids: Set<Int>) {
         viewModelScope.launch {
             ids.forEach { id ->
-                // Ambil data pasti langsung dari database berdasarkan ID
                 val note = repository.getNoteById(id)
                 if (note != null) {
                     val clonedNote = note.copy(
-                        id = 0, // 0 agar Room AutoGenerate ID baru
-                        title = "${note.title} (Copy)"
+                        id = 0, 
+                        title = "${note.title} (Copy)",
+                        isPinned = false // Kloning jangan otomatis di-pin
                     )
                     repository.insert(clonedNote)
+                }
+            }
+        }
+    }
+
+    // Logika Pintar untuk Pin Catatan
+    fun togglePinMultiple(ids: Set<Int>, pinState: Boolean) {
+        viewModelScope.launch {
+            ids.forEach { id ->
+                val note = repository.getNoteById(id)
+                if (note != null) {
+                    repository.update(note.copy(isPinned = pinState))
                 }
             }
         }
