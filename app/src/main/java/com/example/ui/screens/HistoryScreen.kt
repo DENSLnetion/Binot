@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,15 +35,16 @@ fun HistoryScreen(
     val notes by viewModel.filteredNotes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
-    // State Multi-select
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Dynamic Top Bar (Selection Mode vs Search Mode)
+    // Ngecek apakah SEMUA catatan yang dipilih udah di-pin atau belum
+    val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
+        notes.find { it.id == id }?.isPinned == true 
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
         if (selectionMode) {
             TopAppBar(
                 title = { Text("${selectedNotes.size} Selected") },
@@ -55,6 +57,18 @@ fun HistoryScreen(
                     }
                 },
                 actions = {
+                    // Tombol Pin Dinamis
+                    IconButton(onClick = { 
+                        viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
+                        selectionMode = false
+                        selectedNotes = emptySet()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.PushPin, 
+                            contentDescription = "Pin",
+                            tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     IconButton(onClick = { 
                         viewModel.cloneMultiple(selectedNotes)
                         selectionMode = false
@@ -69,7 +83,6 @@ fun HistoryScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             )
         } else {
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.updateSearchQuery(it) },
@@ -112,7 +125,6 @@ fun HistoryScreen(
                     NoteCard(
                         note = note,
                         isSelected = isSelected,
-                        selectionMode = selectionMode,
                         onLongClick = {
                             if (!selectionMode) {
                                 selectionMode = true
@@ -148,14 +160,10 @@ fun HistoryScreen(
                     showDeleteDialog = false
                     selectionMode = false
                     selectedNotes = emptySet()
-                }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -166,7 +174,6 @@ fun HistoryScreen(
 fun NoteCard(
     note: NoteEntity, 
     isSelected: Boolean, 
-    selectionMode: Boolean,
     onLongClick: () -> Unit, 
     onClick: () -> Unit
 ) {
@@ -174,7 +181,7 @@ fun NoteCard(
     val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
     
     Card(
-        shape = RoundedCornerShape(12.dp), // Ga terlalu bulat sesuai request
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer 
                              else MaterialTheme.colorScheme.surfaceVariant
@@ -188,9 +195,7 @@ fun NoteCard(
                 onLongClick = onLongClick
             )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = note.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -207,11 +212,26 @@ fun NoteCard(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = formatter.format(Date(note.timestamp)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatter.format(Date(note.timestamp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                // Indikator kalau catatan ini di-Pin
+                if (note.isPinned) {
+                    Icon(
+                        imageVector = Icons.Default.PushPin,
+                        contentDescription = "Pinned",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 }
