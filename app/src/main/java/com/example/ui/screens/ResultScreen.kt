@@ -1,11 +1,12 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
@@ -35,22 +37,16 @@ fun ResultScreen(
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     
-    // Panel States
     var searchHighlightQuery by remember { mutableStateOf("") }
     var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
-    val scrollState = rememberScrollState()
-
-    LaunchedEffect(isLoading) {
-        if (isLoading) {
-            scrollState.animateScrollTo(0)
-        }
-    }
+    // LazyListState untuk kontrol scroll secara programatis
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                // Judul pindah ke TopBar biar bersih
                 title = { 
                     if (note != null) {
                         BasicTextField(
@@ -76,7 +72,6 @@ fun ResultScreen(
                             expanded = showLanguageMenu,
                             onDismissRequest = { showLanguageMenu = false }
                         ) {
-                            // Bahasa dirombak sesuai request
                             val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
                             languages.forEach { lang ->
                                 DropdownMenuItem(
@@ -89,7 +84,6 @@ fun ResultScreen(
                             }
                         }
                     }
-                    // Tombol Titik Tiga (Side Panel)
                     IconButton(onClick = { showSidePanel = true }) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
                     }
@@ -102,17 +96,16 @@ fun ResultScreen(
                 CircularProgressIndicator()
             }
         } else {
+            // Kita hapus verticalScroll dari Column utama! 
+            // MarkdownText yang sekarang bakal handle scroll-nya.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .verticalScroll(scrollState)
             ) {
                 if (isLoading) {
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Column(
@@ -143,7 +136,8 @@ fun ResultScreen(
                         text = note!!.summary!!, 
                         highlightQuery = searchHighlightQuery, 
                         fontFamily = selectedFont,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        listState = listState, // Pass state ke dalam
+                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                     )
                 } else if (!isLoading) {
                     Text(
@@ -153,22 +147,17 @@ fun ResultScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }
 
-    // Modal Bottom Sheet sebagai Side Panel
-    if (showSidePanel) {
+    if (showSidePanel && note != null) {
         ModalBottomSheet(
             onDismissRequest = { showSidePanel = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
+                modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
                 Text("Find & Format", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -180,6 +169,43 @@ fun ResultScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Logika Dropdown Morphing buat hasil pencarian
+                val textToSearch = note!!.summary ?: note!!.rawText
+                val lines = textToSearch.split("\n")
+                val searchResults = lines.mapIndexedNotNull { index, line ->
+                    if (searchHighlightQuery.isNotBlank() && line.contains(searchHighlightQuery, ignoreCase = true)) {
+                        index to line.trim()
+                    } else null
+                }
+
+                if (searchHighlightQuery.isNotBlank() && searchResults.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp) // Batasi tinggi list pencarian
+                    ) {
+                        items(searchResults) { (index, line) ->
+                            Text(
+                                text = line,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        // Ajaib: Scroll langsung ke paragrafnya, panel nutup
+                                        coroutineScope.launch { listState.animateScrollToItem(index) }
+                                        showSidePanel = false
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 8.dp)
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Reading Font", style = MaterialTheme.typography.titleMedium)
