@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.random.Random
 import java.util.Locale
 
@@ -33,21 +32,40 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
-    // Fungsi brutal buat ngebungkam Bip Android dari 2 jalur stream sekaligus
-    private fun muteSystemBeep() {
+    // Variabel buat nyimpen angka volume asli HP User
+    private var originalMusicVolume = -1
+    private var originalSystemVolume = -1
+    private var originalNotificationVolume = -1
+
+    // Fungsi Brutal: Maksa angka volume HP jadi 0
+    private fun forceMuteSystemBeep() {
         try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
+            // Rekam volume asli
+            originalMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            originalSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
+            originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
+            
+            // Banting angka volume ke 0 mutlak di semua stream yang berpotensi bunyi Bip
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+            audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0)
+            audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // Fungsi buat ngebalikin volume normal
-    private fun unmuteSystemBeep() {
+    // Fungsi Restorasi: Balikin angka volume sesuai aslinya
+    private fun restoreSystemVolume() {
         try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
+            if (originalMusicVolume != -1) {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMusicVolume, 0)
+            }
+            if (originalSystemVolume != -1) {
+                audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, originalSystemVolume, 0)
+            }
+            if (originalNotificationVolume != -1) {
+                audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotificationVolume, 0)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -73,10 +91,10 @@ class AudioRecorderManager(private val context: Context) {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
-                        // TAHAN 400ms! Biar Bip-nya bener-bener beres bunyi di latar belakang, baru di-unmute.
+                        // TAHAN 300ms buat mastiin proses audio inisialisasi Google App kelar, baru balikin volume.
                         coroutineScope.launch {
-                            delay(400)
-                            unmuteSystemBeep()
+                            delay(300)
+                            restoreSystemVolume()
                         }
                     }
                     override fun onBeginningOfSpeech() {}
@@ -88,7 +106,7 @@ class AudioRecorderManager(private val context: Context) {
                         _amplitude.value = 0f
                     }
                     override fun onError(error: Int) {
-                        unmuteSystemBeep() // Jaga-jaga error tetep di-unmute
+                        restoreSystemVolume() 
                         if (_isRecording.value) {
                             initSpeechRecognizer()
                         } else {
@@ -115,13 +133,13 @@ class AudioRecorderManager(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 }
                 
-                // Bungkam sistem SEBELUM rekaman nyala
-                muteSystemBeep()
+                // Setel volume ke 0 mutlak SEBELUM mikrofon dibuka
+                forceMuteSystemBeep()
                 startListening(intent)
             }
         } catch (e: Exception) {
             _isRecording.value = false
-            unmuteSystemBeep()
+            restoreSystemVolume()
             e.printStackTrace()
         }
     }
@@ -129,10 +147,8 @@ class AudioRecorderManager(private val context: Context) {
     private fun startSimulatedRecording() {
         val thread = Thread {
             val phrases = listOf(
-                "Ini adalah simulasi rekaman suara pada emulator.",
-                "Binot sedang merekam apa yang Anda pikirkan.",
-                "Gagasan cemerlang datang saat Anda merenungkan kehidupan.",
-                "Aplikasi akan merangkum semua ucapan dengan teknologi AI dari Gemini."
+                "Ini adalah simulasi.",
+                "Binot merekam."
             )
             var phraseIndex = 0
             
@@ -152,7 +168,7 @@ class AudioRecorderManager(private val context: Context) {
 
     fun stopRecording() {
         _isRecording.value = false
-        unmuteSystemBeep() // Pastikan volume balik normal pas user berhenti ngerekam
+        restoreSystemVolume() // Pastikan volume balik kalau di-stop manual
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
     }
