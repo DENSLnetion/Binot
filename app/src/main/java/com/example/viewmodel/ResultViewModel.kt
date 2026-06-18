@@ -61,7 +61,24 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
-                val prompt = "Rangkum teks berikut secara ekstensif dan detail dalam bahasa $language. Wajib gunakan format Markdown yang RAPI: gunakan '# ' untuk Judul Utama (H1), '## ' untuk Sub Judul (H2), '**teks**' untuk cetak tebal, '*teks*' untuk miring, dan list wajib menggunakan '- ' atau angka '1. '. Jangan gunakan blok kode.\n\nTeks mentah:\n${currentNote.rawText}"
+                // Prompt Dewa: Ngajarin AI jadi asisten notulen yang pinter buang sampah kalimat
+                val prompt = """
+                    Anda adalah asisten notulen profesional. Tugas Anda merapihkan dan merangkum transkrip suara mentah berikut ke dalam bahasa $language.
+                    
+                    ATURAN MUTLAK:
+                    1. Abaikan kata-kata pengisi (seperti "eee", "hmm", "anu", dll) dan perbaiki struktur kalimat yang terputus atau rancu.
+                    2. Buat rangkuman yang komprehensif, jangan hilangkan poin penting dari pembicaraan.
+                    3. Wajib gunakan format Markdown yang sangat rapi:
+                       - Gunakan '# ' untuk Judul Utama (H1).
+                       - Gunakan '## ' untuk Sub Judul (H2).
+                       - Gunakan bullet points ('- ') untuk poin-poin.
+                       - PENTING: Berikan baris kosong antar paragraf, antar judul, dan antar list agar mudah dibaca.
+                    4. Jangan gunakan blok kode (```).
+                    
+                    Teks Mentah:
+                    ${currentNote.rawText}
+                """.trimIndent()
+                
                 val request = GenerateContentRequest(
                     contents = listOf(Content(parts = listOf(Part(text = prompt))))
                 )
