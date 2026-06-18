@@ -1,13 +1,17 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -15,31 +19,63 @@ import com.example.viewmodel.SettingsViewModel
 fun SettingsScreen(
     viewModel: SettingsViewModel
 ) {
+    val userName by viewModel.userName.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
 
+    var nameInput by remember(userName) { mutableStateOf(userName) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
 
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
         CenterAlignedTopAppBar(
-            title = { Text("Pengaturan", style = MaterialTheme.typography.headlineMedium) }
+            title = { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
         )
         
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Card buat ganti Nama
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        "Kunci API Gemini",
+                        "Personalization",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nameInput,
+                        onValueChange = { nameInput = it },
+                        label = { Text("Your Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.saveUserName(nameInput) },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Save Name")
+                    }
+                }
+            }
+
+            // Card buat API Key
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = MaterialTheme.shapes.extraLarge
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Gemini API Key",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -47,7 +83,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = keyInput,
                         onValueChange = { keyInput = it },
-                        label = { Text("Masukkan API Key") },
+                        label = { Text("Enter API Key") },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -56,23 +92,24 @@ fun SettingsScreen(
                         onClick = { viewModel.saveApiKey(keyInput) },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("Simpan Kunci")
+                        Text("Save Key")
                     }
                     Text(
-                        "Kunci API tersimpan secara aman di DataStore lokal.",
+                        "Your key is safely stored locally.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
 
+            // Card buat Tema
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        "Tema Tampilan",
+                        "Appearance",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -105,11 +142,18 @@ fun SettingsScreen(
                             onClick = { viewModel.saveThemeMode(3) },
                             selected = themeMode == 3
                         ) {
-                            Text("Amoled")
+                            // Solusi font kepanjangan buat AMOLED
+                            Text(
+                                text = "Amoled",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 12.sp 
+                            )
                         }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
