@@ -42,7 +42,7 @@ data class GeminiError(
 // --- Retrofit Setup ---
 
 interface GeminiApiService {
-    // Model disesuaikan ke gemini-2.5-flash agar koneksi ke AI Studio berhasil dan output kencang
+    // Model diset ke gemini-2.5-flash (Ini engine ngebut yg sama pintarnya kayak pro)
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
@@ -51,12 +51,13 @@ interface GeminiApiService {
 }
 
 object RetrofitClient {
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/"
+    private const val BASE_URL = "[https://generativelanguage.googleapis.com/](https://generativelanguage.googleapis.com/)"
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        // TIMEOUT DINAIKIN JADI 180 DETIK (3 MENIT) BIAR GA PUTUS PAS MEETING PANJANG
+        .connectTimeout(180, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
+        .writeTimeout(180, TimeUnit.SECONDS)
         .build()
 
     val moshi = Moshi.Builder()
