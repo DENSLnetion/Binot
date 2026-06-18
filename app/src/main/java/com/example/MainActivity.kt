@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -60,6 +62,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // Ambil userName dari settings buat di-pass ke RecordScreen
+    val userName by settingsViewModel.userName.collectAsState()
+
     Scaffold(
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
@@ -71,8 +76,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                             launchSingleTop = true
                             restoreState = true
                         }},
-                        icon = { Icon(Icons.Default.Mic, contentDescription = "Rekam") },
-                        label = { Text("Rekam") }
+                        icon = { Icon(Icons.Default.Mic, contentDescription = "Record") },
+                        label = { Text("Record") }
                     )
                     NavigationBarItem(
                         selected = currentRoute == "history",
@@ -81,8 +86,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                             launchSingleTop = true
                             restoreState = true
                         }},
-                        icon = { Icon(Icons.Default.History, contentDescription = "Riwayat") },
-                        label = { Text("Riwayat") }
+                        icon = { Icon(Icons.Default.History, contentDescription = "History") },
+                        label = { Text("History") }
                     )
                     NavigationBarItem(
                         selected = currentRoute == "settings",
@@ -91,8 +96,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                             launchSingleTop = true
                             restoreState = true
                         }},
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Pengaturan") },
-                        label = { Text("Pengaturan") }
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") }
                     )
                 }
             }
@@ -101,7 +106,13 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         NavHost(
             navController = navController, 
             startDestination = "record",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            // Matikan transisi navigasi Fade yang menye-menye. 
+            // Sekali klik tab, langsung pindah layar dengan tegas.
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable("record") {
                 val recordViewModel: RecordViewModel = viewModel(
@@ -112,6 +123,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 )
                 RecordScreen(
                     viewModel = recordViewModel,
+                    userName = userName,
                     onNavigateToResult = { id -> navController.navigate("result/$id") }
                 )
             }
@@ -148,4 +160,3 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
-
