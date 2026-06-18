@@ -1,15 +1,22 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
@@ -26,12 +33,14 @@ fun ResultScreen(
     val error by viewModel.error.collectAsState()
 
     var showLanguageMenu by remember { mutableStateOf(false) }
+    var showSidePanel by remember { mutableStateOf(false) }
     
-    // Scroll state untuk mendeteksi koordinat scroll
-    val scrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
+    // Panel States
+    var searchHighlightQuery by remember { mutableStateOf("") }
+    var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
-    // Logika Auto-Scroll: Kalau loading jalan, paksa scroll layar balik ke paling atas (0)
+    val scrollState = rememberScrollState()
+
     LaunchedEffect(isLoading) {
         if (isLoading) {
             scrollState.animateScrollTo(0)
@@ -41,25 +50,37 @@ fun ResultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Membaca", style = MaterialTheme.typography.headlineMedium) },
+                // Judul pindah ke TopBar biar bersih
+                title = { 
+                    if (note != null) {
+                        BasicTextField(
+                            value = note!!.title,
+                            onValueChange = { viewModel.updateTitle(it) },
+                            textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     Box {
                         IconButton(onClick = { showLanguageMenu = true }) {
-                            Icon(imageVector = Icons.Default.Translate, contentDescription = "Terjemahkan")
+                            Icon(imageVector = Icons.Default.Translate, contentDescription = "Translate")
                         }
                         DropdownMenu(
                             expanded = showLanguageMenu,
                             onDismissRequest = { showLanguageMenu = false }
                         ) {
-                            val languages = listOf("Indonesia", "Inggris", "Jawa", "Sunda", "Jepang")
+                            // Bahasa dirombak sesuai request
+                            val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
                             languages.forEach { lang ->
                                 DropdownMenuItem(
-                                    text = { Text("Rangkum dalam $lang") },
+                                    text = { Text("Summarize in $lang") },
                                     onClick = {
                                         viewModel.summarizeText(lang)
                                         showLanguageMenu = false
@@ -67,6 +88,10 @@ fun ResultScreen(
                                 )
                             }
                         }
+                    }
+                    // Tombol Titik Tiga (Side Panel)
+                    IconButton(onClick = { showSidePanel = true }) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
                     }
                 }
             )
@@ -81,21 +106,8 @@ fun ResultScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .verticalScroll(scrollState) // <-- Scroll state dipasang di sini
+                    .verticalScroll(scrollState)
             ) {
-                OutlinedTextField(
-                    value = note!!.title,
-                    onValueChange = { viewModel.updateTitle(it) },
-                    textStyle = MaterialTheme.typography.headlineMedium.copy(color = MaterialTheme.colorScheme.primary),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-
                 if (isLoading) {
                     Card(
                         modifier = Modifier
@@ -110,7 +122,7 @@ fun ResultScreen(
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "Gemini sedang merapihkan catatan Anda...",
+                                "AI is organizing your notes...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
@@ -127,10 +139,15 @@ fun ResultScreen(
                 }
 
                 if (!note!!.summary.isNullOrEmpty()) {
-                    MarkdownText(text = note!!.summary!!, modifier = Modifier.padding(horizontal = 4.dp))
+                    MarkdownText(
+                        text = note!!.summary!!, 
+                        highlightQuery = searchHighlightQuery, 
+                        fontFamily = selectedFont,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 } else if (!isLoading) {
                     Text(
-                        text = "Catatan Mentah:\n\n${note!!.rawText}",
+                        text = "Raw Transcript:\n\n${note!!.rawText}",
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(16.dp),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
@@ -141,4 +158,53 @@ fun ResultScreen(
             }
         }
     }
+
+    // Modal Bottom Sheet sebagai Side Panel
+    if (showSidePanel) {
+        ModalBottomSheet(
+            onDismissRequest = { showSidePanel = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+            ) {
+                Text("Find & Format", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedTextField(
+                    value = searchHighlightQuery,
+                    onValueChange = { searchHighlightQuery = it },
+                    label = { Text("Find word in note...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Reading Font", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                        onClick = { selectedFont = FontFamily.SansSerif },
+                        selected = selectedFont == FontFamily.SansSerif
+                    ) { Text("Sans") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                        onClick = { selectedFont = FontFamily.Serif },
+                        selected = selectedFont == FontFamily.Serif
+                    ) { Text("Serif") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                        onClick = { selectedFont = FontFamily.Monospace },
+                        selected = selectedFont == FontFamily.Monospace
+                    ) { Text("Mono") }
+                }
+                Spacer(modifier = Modifier.height(48.dp))
+            }
+        }
+    }
 }
+
