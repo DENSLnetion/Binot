@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 class ResultViewModel(
     private val noteId: Int,
@@ -52,7 +53,7 @@ class ResultViewModel(
     fun summarizeText(language: String) {
         val currentNote = _note.value ?: return
         if (apiKey.isBlank()) {
-            _error.value = "Kunci API Gemini tidak ditemukan. Harap atur di Pengaturan."
+            _error.value = "API Key not found. Please set it in Settings."
             return
         }
 
@@ -61,21 +62,20 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
-                // Prompt Dewa: Ngajarin AI jadi asisten notulen yang pinter buang sampah kalimat
                 val prompt = """
-                    Anda adalah asisten notulen profesional. Tugas Anda merapihkan dan merangkum transkrip suara mentah berikut ke dalam bahasa $language.
+                    You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                     
-                    ATURAN MUTLAK:
-                    1. Abaikan kata-kata pengisi (seperti "eee", "hmm", "anu", dll) dan perbaiki struktur kalimat yang terputus atau rancu.
-                    2. Buat rangkuman yang komprehensif, jangan hilangkan poin penting dari pembicaraan.
-                    3. Wajib gunakan format Markdown yang sangat rapi:
-                       - Gunakan '# ' untuk Judul Utama (H1).
-                       - Gunakan '## ' untuk Sub Judul (H2).
-                       - Gunakan bullet points ('- ') untuk poin-poin.
-                       - PENTING: Berikan baris kosong antar paragraf, antar judul, dan antar list agar mudah dibaca.
-                    4. Jangan gunakan blok kode (```).
+                    STRICT RULES:
+                    1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
+                    2. Create a comprehensive summary without losing key points.
+                    3. MUST use neat Markdown formatting:
+                       - Use '# ' for Main Title (H1).
+                       - Use '## ' for Subtitles (H2).
+                       - Use bullet points ('- ') for items.
+                       - Provide empty lines between paragraphs and lists for readability.
+                    4. Do not use code blocks.
                     
-                    Teks Mentah:
+                    Raw Text:
                     ${currentNote.rawText}
                 """.trimIndent()
                 
@@ -91,10 +91,17 @@ class ResultViewModel(
                     _note.value = updatedNote
                     noteRepository.update(updatedNote)
                 } else {
-                    _error.value = "Gagal mendapatkan rangkuman. Respons kosong."
+                    _error.value = "Failed to generate summary. Empty response."
+                }
+            } catch (e: HttpException) {
+                // Fallback khusus Limit API 429
+                if (e.code() == 429) {
+                    _error.value = "API Key limit exhausted. Please wait or use a different key."
+                } else {
+                    _error.value = "HTTP Error: ${e.code()} - ${e.message()}"
                 }
             } catch (e: Exception) {
-                _error.value = "Terjadi kesalahan: ${e.message}"
+                _error.value = "An error occurred: ${e.message}"
             } finally {
                 _isLoading.value = false
             }
@@ -115,3 +122,5 @@ class ResultViewModel(
             }
     }
 }
+
+
