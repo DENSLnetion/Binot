@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier) {
     val lines = text.split("\n")
-    Column(modifier = modifier.padding(vertical = 8.dp)) {
+    Column(modifier = modifier.padding(vertical = 8.dp, horizontal = 12.dp)) {
         for (line in lines) {
             when {
                 line.startsWith("# ") -> {
@@ -23,7 +23,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                         text = line.removePrefix("# ").trim(),
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)
+                        modifier = Modifier.padding(top = 32.dp, bottom = 16.dp) // Spasi ekstra biar napas
                     )
                 }
                 line.startsWith("## ") -> {
@@ -31,7 +31,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                         text = line.removePrefix("## ").trim(),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)
                     )
                 }
                 line.startsWith("### ") -> {
@@ -39,12 +39,12 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                         text = line.removePrefix("### ").trim(),
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                     )
                 }
                 line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
-                        Text("•", modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Row(modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                        Text("•", modifier = Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
                         BasicMarkdownLine(line.substring(2).trim())
                     }
                 }
@@ -52,13 +52,13 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                     val dotIndex = line.indexOf(".")
                     val number = line.substring(0, dotIndex + 1)
                     val content = line.substring(dotIndex + 1).trim()
-                    Row(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
-                        Text(number, modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Row(modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                        Text(number, modifier = Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
                         BasicMarkdownLine(content)
                     }
                 }
-                line.isBlank() -> Spacer(modifier = Modifier.height(8.dp))
-                else -> BasicMarkdownLine(line, modifier = Modifier.padding(bottom = 6.dp))
+                line.isBlank() -> Spacer(modifier = Modifier.height(16.dp)) // Jarak beneran kalau paragraf kosong
+                else -> BasicMarkdownLine(line, modifier = Modifier.padding(bottom = 8.dp)) // Padding standar kalimat
             }
         }
     }
@@ -91,7 +91,7 @@ fun BasicMarkdownLine(text: String, modifier: Modifier = Modifier) {
     }
     Text(
         text = annotatedString,
-        style = MaterialTheme.typography.bodyLarge,
+        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = androidx.compose.ui.unit.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp)),
         color = MaterialTheme.colorScheme.onBackground,
         modifier = modifier
     )
