@@ -36,13 +36,14 @@ import java.util.Calendar
 @Composable
 fun RecordScreen(
     viewModel: RecordViewModel,
-    userName: String, // Ini parameter yang bikin error kemarin karena lu lupa copas!
+    userName: String,
     onNavigateToResult: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
     val amplitude by viewModel.amplitude.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState()
+    val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
@@ -61,14 +62,18 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // Logika Sapaan Waktu berdasarkan jam HP user
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetingTime = when (hour) {
         in 0..11 -> "Good morning"
         in 12..17 -> "Good afternoon"
         else -> "Good evening"
     }
-    val greeting = if (userName.isNotBlank()) "$greetingTime, $userName!" else "$greetingTime!"
+    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
+
+    // Format timer (00:00)
+    val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
+    val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
+    val timeString = "$minutes:$seconds"
 
     Column(
         modifier = Modifier
@@ -76,25 +81,46 @@ fun RecordScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Padding atas udah dipangkas biar ga terlalu keatasan
         Spacer(modifier = Modifier.height(48.dp))
 
-        Text(
-            text = greeting,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
+        // Teks Sapaan Rata Kiri & Kapsul Timer
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+            Text(
+                text = greeting,
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Start
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Kapsul Timer Material You
+            Surface(
+                shape = CircleShape,
+                color = if (isRecording) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                Text(
+                    text = timeString,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isRecording) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        if (isRecording) {
-            AudioWaveform(
-                amplitude = amplitude,
-                modifier = Modifier.padding(vertical = 32.dp)
-            )
-        } else {
-            Spacer(modifier = Modifier.height(164.dp))
+        // Waveform sekarang selalu muncul, kalau mati dia cuma garis lurus
+        AudioWaveform(
+            amplitude = amplitude,
+            modifier = Modifier.padding(vertical = 32.dp)
+        )
+
+        // Kotak Live Text sekarang Rata Kiri
+        val scrollState = rememberScrollState()
+        // Auto scroll ke bawah kalau teks nambah
+        LaunchedEffect(recognizedText) {
+            scrollState.animateScrollTo(scrollState.maxValue)
         }
 
         Box(
@@ -109,8 +135,10 @@ fun RecordScreen(
                 text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center)
+                textAlign = TextAlign.Start, // Rata Kiri
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
             )
         }
 
@@ -121,7 +149,7 @@ fun RecordScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Live Text Viewer Button (Mata) menggantikan tombol Edit lawas
+            // Live Text Viewer Button (Side Eye / Live View)
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
@@ -142,7 +170,7 @@ fun RecordScreen(
                 )
             }
 
-            // Morphing Record Button (Capsule memanjang ketimbang bulat)
+            // Morphing Record Button
             var isPressed by remember { mutableStateOf(false) }
             val width by animateDpAsState(
                 targetValue = if (isPressed) 200.dp else if (isRecording) 180.dp else 140.dp,
@@ -215,7 +243,6 @@ fun RecordScreen(
         Spacer(modifier = Modifier.height(48.dp))
     }
 
-    // Modal Bottom Sheet buat nampilin Live Text (ga ganggu teks utama)
     if (showLiveTextSheet) {
         ModalBottomSheet(
             onDismissRequest = { showLiveTextSheet = false },
@@ -243,5 +270,4 @@ fun RecordScreen(
         }
     }
 }
-
 
