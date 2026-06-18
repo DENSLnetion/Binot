@@ -1,6 +1,9 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,16 +18,25 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// Rombak total: Dari Column biasa jadi LazyColumn ber-index biar bisa di-scroll programatis
 @Composable
 fun MarkdownText(
     text: String, 
+    listState: LazyListState,
     highlightQuery: String = "", 
     fontFamily: FontFamily = FontFamily.SansSerif, 
     modifier: Modifier = Modifier
 ) {
     val lines = text.split("\n")
-    Column(modifier = modifier.padding(vertical = 8.dp, horizontal = 12.dp)) {
-        for (line in lines) {
+    
+    LazyColumn(
+        state = listState,
+        modifier = modifier.padding(horizontal = 12.dp)
+    ) {
+        // Spacer atas
+        item { Spacer(modifier = Modifier.height(8.dp)) }
+
+        itemsIndexed(lines) { _, line ->
             val indentSpaces = line.takeWhile { it == ' ' || it == '\t' }.length
             val trimmedLine = line.trimStart()
 
@@ -100,6 +112,9 @@ fun MarkdownText(
                 )
             }
         }
+        
+        // Spacer bawah
+        item { Spacer(modifier = Modifier.height(40.dp)) }
     }
 }
 
@@ -134,7 +149,7 @@ fun BasicMarkdownLine(
         }
         append(text.substring(currentIndex))
         
-        // Logika Highlighter Warna Kuning Kalo User Nyari Kata
+        // Highlight kuning eksekutor
         if (highlightQuery.isNotBlank()) {
             val plainString = this.toAnnotatedString().text.lowercase()
             val queryLower = highlightQuery.lowercase()
