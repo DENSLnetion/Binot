@@ -9,9 +9,20 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NoteDao {
-    // Logika Pintar: Urutkan berdasarkan yang di-Pin dulu (1/true), baru berdasarkan waktu terbaru
     @Query("SELECT * FROM notes ORDER BY isPinned DESC, timestamp DESC")
     fun getAllNotes(): Flow<List<NoteEntity>>
+
+    // Tambahan buat narik data sekali jalan (buat fungsi Backup JSON)
+    @Query("SELECT * FROM notes")
+    suspend fun getAllNotesSync(): List<NoteEntity>
+
+    // Tambahan buat nge-reset tabel pas Restore JSON
+    @Query("DELETE FROM notes")
+    suspend fun deleteAllNotes()
+
+    // Buat masukin banyak data sekaligus pas Restore
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertNotes(notes: List<NoteEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNote(note: NoteEntity): Long
