@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,7 +40,6 @@ fun HistoryScreen(
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // Ngecek apakah SEMUA catatan yang dipilih udah di-pin atau belum
     val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
         notes.find { it.id == id }?.isPinned == true 
     }
@@ -57,7 +57,6 @@ fun HistoryScreen(
                     }
                 },
                 actions = {
-                    // Tombol Pin Dinamis
                     IconButton(onClick = { 
                         viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
                         selectionMode = false
@@ -125,6 +124,10 @@ fun HistoryScreen(
                     NoteCard(
                         note = note,
                         isSelected = isSelected,
+                        onPinToggle = { 
+                            // PERBAIKAN: Fitur Quick Pin. Ga usah ditahan, langsung pin aja!
+                            viewModel.togglePinMultiple(setOf(note.id), !note.isPinned) 
+                        },
                         onLongClick = {
                             if (!selectionMode) {
                                 selectionMode = true
@@ -174,6 +177,7 @@ fun HistoryScreen(
 fun NoteCard(
     note: NoteEntity, 
     isSelected: Boolean, 
+    onPinToggle: () -> Unit,
     onLongClick: () -> Unit, 
     onClick: () -> Unit
 ) {
@@ -222,17 +226,21 @@ fun NoteCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
-                // Indikator kalau catatan ini di-Pin
-                if (note.isPinned) {
+                // PERBAIKAN: Quick Pin Icon. Langsung bisa dipencet di luar mode seleksi!
+                IconButton(
+                    onClick = onPinToggle,
+                    modifier = Modifier.size(24.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.PushPin,
-                        contentDescription = "Pinned",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = if (note.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Toggle Pin",
+                        tint = if (note.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
         }
     }
 }
+
 
