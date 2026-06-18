@@ -74,13 +74,10 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    // PERBAIKAN: Bungkus seluruh layar pakai verticalScroll biar UI ga gepeng di layar HP kecil
-    val mainScrollState = rememberScrollState()
-
+    // PERBAIKAN: Ga pake verticalScroll di induk biar ga gepeng
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(mainScrollState) 
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -109,12 +106,11 @@ fun RecordScreen(
             }
         }
 
-        // Pakai Spacer minimum biar Waveform ga nempel banget kalau teks di atasnya panjang
-        Spacer(modifier = Modifier.heightIn(min = 32.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
         AudioWaveform(
             amplitude = amplitude,
-            modifier = Modifier.padding(vertical = 32.dp)
+            modifier = Modifier.padding(vertical = 16.dp)
         )
 
         val textScrollState = rememberScrollState()
@@ -122,10 +118,11 @@ fun RecordScreen(
             textScrollState.animateScrollTo(textScrollState.maxValue)
         }
 
+        // PERBAIKAN: Kotak dipendekin jadi 160.dp biar muat pas di layar, ga nutupin kapsul
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(160.dp) 
                 .clip(MaterialTheme.shapes.extraLarge)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(24.dp)
@@ -141,7 +138,7 @@ fun RecordScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -237,7 +234,7 @@ fun RecordScreen(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
     }
 
     if (showLiveTextSheet) {
