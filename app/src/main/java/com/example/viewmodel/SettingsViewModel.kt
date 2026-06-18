@@ -11,6 +11,14 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(private val repository: SettingsRepository) : ViewModel() {
 
+    // Tambahan variabel userName. 
+    // WARNING: Pastikan 'userNameFlow' dan 'saveUserName' udah dibikin di SettingsRepository.kt lu!
+    val userName: StateFlow<String> = repository.userNameFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ""
+    )
+
     val apiKey: StateFlow<String> = repository.geminiApiKeyFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -22,6 +30,10 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 0
     )
+
+    fun saveUserName(name: String) {
+        viewModelScope.launch { repository.saveUserName(name) }
+    }
 
     fun saveApiKey(key: String) {
         viewModelScope.launch { repository.saveGeminiApiKey(key) }
