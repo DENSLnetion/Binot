@@ -32,12 +32,27 @@ jobs:
           EOF
           chmod +x gradlew
 
-      - name: Download Gradle wrapper jar
+      - name: Download Gradle wrapper jar (robust)
         run: |
+          set -e
           mkdir -p gradle/wrapper
+          echo "Downloading gradle-8.4-bin.zip..."
           curl -L -o gradle-8.4-bin.zip https://services.gradle.org/distributions/gradle-8.4-bin.zip
-          unzip -j gradle-8.4-bin.zip 'gradle-8.4/lib/gradle-wrapper.jar' -d gradle/wrapper
+          echo "Looking for gradle-wrapper.jar inside the zip..."
+          FILE=$(unzip -Z1 gradle-8.4-bin.zip 2>/dev/null | grep 'gradle-wrapper.jar' | head -n1 || true)
+          if [ -z "$FILE" ]; then
+            FILE=$(unzip -l gradle-8.4-bin.zip | awk '{print $4}' | grep 'gradle-wrapper.jar' | head -n1 || true)
+          fi
+          if [ -z "$FILE" ]; then
+            echo "ERROR: gradle-wrapper.jar not found in zip. Listing zip contents for debugging:"
+            unzip -l gradle-8.4-bin.zip | sed -n '1,200p'
+            rm gradle-8.4-bin.zip
+            exit 1
+          fi
+          echo "Found in zip: $FILE"
+          unzip -j gradle-8.4-bin.zip "$FILE" -d gradle/wrapper
           rm gradle-8.4-bin.zip
+          ls -la gradle/wrapper
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew || true
