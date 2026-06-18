@@ -11,54 +11,80 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier) {
     val lines = text.split("\n")
     Column(modifier = modifier.padding(vertical = 8.dp, horizontal = 12.dp)) {
         for (line in lines) {
+            // Hitung jumlah spasi di awal buat nentuin ini poin utama atau sub-poin
+            val indentSpaces = line.takeWhile { it == ' ' || it == '\t' }.length
+            val trimmedLine = line.trimStart()
+
             when {
-                line.startsWith("# ") -> {
+                trimmedLine.startsWith("# ") -> {
                     Text(
-                        text = line.removePrefix("# ").trim(),
+                        text = trimmedLine.removePrefix("# ").trim(),
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 32.dp, bottom = 16.dp) // Spasi ekstra biar napas
+                        modifier = Modifier.padding(top = 32.dp, bottom = 16.dp)
                     )
                 }
-                line.startsWith("## ") -> {
+                trimmedLine.startsWith("## ") -> {
                     Text(
-                        text = line.removePrefix("## ").trim(),
+                        text = trimmedLine.removePrefix("## ").trim(),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)
                     )
                 }
-                line.startsWith("### ") -> {
+                trimmedLine.startsWith("### ") -> {
                     Text(
-                        text = line.removePrefix("### ").trim(),
+                        text = trimmedLine.removePrefix("### ").trim(),
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                     )
                 }
-                line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)) {
-                        Text("•", modifier = Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
-                        BasicMarkdownLine(line.substring(2).trim())
+                trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ") -> {
+                    // Kalkulasi jarak menjorok ke dalam berdasarkan spasi dari Gemini
+                    val paddingStart = 16.dp + (indentSpaces * 6).dp
+                    Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
+                        Text(
+                            text = if (indentSpaces > 0) "◦" else "•", // Poin dalem pake bullet beda
+                            modifier = Modifier.width(24.dp), // Lebar tetap biar sejajar
+                            style = MaterialTheme.typography.bodyLarge, 
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        // weight(1f) memastikan teks melipat dengan rapi ke bawah, bukan nyerobot tempat bullet
+                        BasicMarkdownLine(
+                            text = trimmedLine.substring(2).trim(), 
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
-                line.matches(Regex("^[0-9]+\\.\\s.*")) -> {
-                    val dotIndex = line.indexOf(".")
-                    val number = line.substring(0, dotIndex + 1)
-                    val content = line.substring(dotIndex + 1).trim()
-                    Row(modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)) {
-                        Text(number, modifier = Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
-                        BasicMarkdownLine(content)
+                trimmedLine.matches(Regex("^[0-9]+\\.\\s.*")) -> {
+                    val dotIndex = trimmedLine.indexOf(".")
+                    val number = trimmedLine.substring(0, dotIndex + 1)
+                    val content = trimmedLine.substring(dotIndex + 1).trim()
+                    val paddingStart = 16.dp + (indentSpaces * 6).dp
+                    
+                    Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
+                        Text(
+                            text = number, 
+                            modifier = Modifier.width(32.dp), 
+                            style = MaterialTheme.typography.bodyLarge, 
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        BasicMarkdownLine(
+                            text = content, 
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
-                line.isBlank() -> Spacer(modifier = Modifier.height(16.dp)) // Jarak beneran kalau paragraf kosong
-                else -> BasicMarkdownLine(line, modifier = Modifier.padding(bottom = 8.dp)) // Padding standar kalimat
+                trimmedLine.isBlank() -> Spacer(modifier = Modifier.height(16.dp))
+                else -> BasicMarkdownLine(text = trimmedLine, modifier = Modifier.padding(bottom = 8.dp))
             }
         }
     }
@@ -68,6 +94,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
 fun BasicMarkdownLine(text: String, modifier: Modifier = Modifier) {
     val annotatedString = buildAnnotatedString {
         var currentIndex = 0
+        // Perbaikan Regex biar ga nyaplok bintang yang posisinya nempel-nempel
         val pattern = Regex("\\*\\*(.*?)\\*\\*|\\*(.*?)\\*|_(.*?)_")
         val matches = pattern.findAll(text)
         for (match in matches) {
@@ -91,8 +118,9 @@ fun BasicMarkdownLine(text: String, modifier: Modifier = Modifier) {
     }
     Text(
         text = annotatedString,
-        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = androidx.compose.ui.unit.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp)),
+        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp),
         color = MaterialTheme.colorScheme.onBackground,
         modifier = modifier
     )
 }
+
