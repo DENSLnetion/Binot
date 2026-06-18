@@ -42,7 +42,6 @@ data class GeminiError(
 // --- Retrofit Setup ---
 
 interface GeminiApiService {
-    // Model diset ke gemini-2.5-flash (Ini engine ngebut yg sama pintarnya kayak pro)
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
@@ -51,10 +50,11 @@ interface GeminiApiService {
 }
 
 object RetrofitClient {
-    private const val BASE_URL = "[https://generativelanguage.googleapis.com/](https://generativelanguage.googleapis.com/)"
+    // PERINGATAN KERAS: JANGAN UBAH STRING INI JADI API KEY! 
+    // Biarin aja begini, API Key lu bakal otomatis dimasukin ke parameter pas request.
+    private const val BASE_URL = "https://generativelanguage.googleapis.com/"
 
     private val okHttpClient = OkHttpClient.Builder()
-        // TIMEOUT DINAIKIN JADI 180 DETIK (3 MENIT) BIAR GA PUTUS PAS MEETING PANJANG
         .connectTimeout(180, TimeUnit.SECONDS)
         .readTimeout(180, TimeUnit.SECONDS)
         .writeTimeout(180, TimeUnit.SECONDS)
@@ -73,3 +73,4 @@ object RetrofitClient {
         retrofit.create(GeminiApiService::class.java)
     }
 }
+
