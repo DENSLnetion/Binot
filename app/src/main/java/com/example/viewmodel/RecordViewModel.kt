@@ -6,7 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
 import com.example.utils.AudioRecorderManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class RecordViewModel(
@@ -18,12 +22,34 @@ class RecordViewModel(
     val amplitude: StateFlow<Float> = audioRecorderManager.amplitude
     val recognizedText: StateFlow<String> = audioRecorderManager.recognizedText
 
+    // Logika Timer Kapsul
+    private val _recordingSeconds = MutableStateFlow(0)
+    val recordingSeconds: StateFlow<Int> = _recordingSeconds.asStateFlow()
+    private var timerJob: Job? = null
+
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
             audioRecorderManager.stopRecording()
+            stopTimer()
         } else {
             audioRecorderManager.startRecording(isEmulator)
+            startTimer()
         }
+    }
+
+    private fun startTimer() {
+        _recordingSeconds.value = 0
+        timerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _recordingSeconds.value += 1
+            }
+        }
+    }
+
+    private fun stopTimer() {
+        timerJob?.cancel()
+        timerJob = null
     }
 
     fun saveNote(onSaved: (Int) -> Unit) {
@@ -32,7 +58,8 @@ class RecordViewModel(
         
         viewModelScope.launch {
             val title = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
-            val note = NoteEntity(title = title, rawText = text, summary = null)
+            // default isPinned false
+            val note = NoteEntity(title = title, rawText = text, summary = null, isPinned = false)
             val id = repository.insert(note).toInt()
             onSaved(id)
         }
@@ -41,6 +68,7 @@ class RecordViewModel(
     override fun onCleared() {
         super.onCleared()
         audioRecorderManager.stopRecording()
+        stopTimer()
     }
 
     companion object {
