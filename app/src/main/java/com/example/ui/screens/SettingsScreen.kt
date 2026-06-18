@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,21 +27,27 @@ fun SettingsScreen(
     var nameInput by remember(userName) { mutableStateOf(userName) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        CenterAlignedTopAppBar(
-            title = { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
-        )
-        
+    // State buat Snackbar Feedback
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Card buat ganti Nama
+            Spacer(modifier = Modifier.height(8.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
@@ -60,7 +67,10 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { viewModel.saveUserName(nameInput) },
+                        onClick = { 
+                            viewModel.saveUserName(nameInput) 
+                            coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") }
+                        },
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text("Save Name")
@@ -68,7 +78,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Card buat API Key
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
@@ -89,20 +98,17 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { viewModel.saveApiKey(keyInput) },
+                        onClick = { 
+                            viewModel.saveApiKey(keyInput) 
+                            coroutineScope.launch { snackbarHostState.showSnackbar("API Key saved securely!") }
+                        },
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text("Save Key")
                     }
-                    Text(
-                        "Your key is safely stored locally.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
                 }
             }
 
-            // Card buat Tema
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
@@ -120,29 +126,22 @@ fun SettingsScreen(
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4),
                             onClick = { viewModel.saveThemeMode(0) },
                             selected = themeMode == 0
-                        ) {
-                            Text("Auto")
-                        }
+                        ) { Text("Auto") }
                         SegmentedButton(
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4),
                             onClick = { viewModel.saveThemeMode(1) },
                             selected = themeMode == 1
-                        ) {
-                            Text("Light")
-                        }
+                        ) { Text("Light") }
                         SegmentedButton(
                             shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4),
                             onClick = { viewModel.saveThemeMode(2) },
                             selected = themeMode == 2
-                        ) {
-                            Text("Dark")
-                        }
+                        ) { Text("Dark") }
                         SegmentedButton(
                             shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4),
                             onClick = { viewModel.saveThemeMode(3) },
                             selected = themeMode == 3
                         ) {
-                            // Solusi font kepanjangan buat AMOLED
                             Text(
                                 text = "Amoled",
                                 maxLines = 1,
@@ -157,3 +156,4 @@ fun SettingsScreen(
         }
     }
 }
+
