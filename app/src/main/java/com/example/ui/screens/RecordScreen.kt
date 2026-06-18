@@ -70,20 +70,22 @@ fun RecordScreen(
     }
     val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
 
-    // Format timer (00:00)
     val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
+    // PERBAIKAN: Bungkus seluruh layar pakai verticalScroll biar UI ga gepeng di layar HP kecil
+    val mainScrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(mainScrollState) 
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Teks Sapaan Rata Kiri & Kapsul Timer
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
             Text(
                 text = greeting,
@@ -93,7 +95,6 @@ fun RecordScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Kapsul Timer Material You
             Surface(
                 shape = CircleShape,
                 color = if (isRecording) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
@@ -108,19 +109,17 @@ fun RecordScreen(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        // Pakai Spacer minimum biar Waveform ga nempel banget kalau teks di atasnya panjang
+        Spacer(modifier = Modifier.heightIn(min = 32.dp))
 
-        // Waveform sekarang selalu muncul, kalau mati dia cuma garis lurus
         AudioWaveform(
             amplitude = amplitude,
             modifier = Modifier.padding(vertical = 32.dp)
         )
 
-        // Kotak Live Text sekarang Rata Kiri
-        val scrollState = rememberScrollState()
-        // Auto scroll ke bawah kalau teks nambah
+        val textScrollState = rememberScrollState()
         LaunchedEffect(recognizedText) {
-            scrollState.animateScrollTo(scrollState.maxValue)
+            textScrollState.animateScrollTo(textScrollState.maxValue)
         }
 
         Box(
@@ -135,10 +134,10 @@ fun RecordScreen(
                 text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start, // Rata Kiri
+                textAlign = TextAlign.Start, 
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .verticalScroll(textScrollState)
             )
         }
 
@@ -149,7 +148,6 @@ fun RecordScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Live Text Viewer Button (Side Eye / Live View)
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
@@ -170,7 +168,6 @@ fun RecordScreen(
                 )
             }
 
-            // Morphing Record Button
             var isPressed by remember { mutableStateOf(false) }
             val width by animateDpAsState(
                 targetValue = if (isPressed) 200.dp else if (isRecording) 180.dp else 140.dp,
@@ -270,4 +267,5 @@ fun RecordScreen(
         }
     }
 }
+
 
