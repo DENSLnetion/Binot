@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +26,17 @@ fun ResultScreen(
     val error by viewModel.error.collectAsState()
 
     var showLanguageMenu by remember { mutableStateOf(false) }
+    
+    // Scroll state untuk mendeteksi koordinat scroll
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Logika Auto-Scroll: Kalau loading jalan, paksa scroll layar balik ke paling atas (0)
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            scrollState.animateScrollTo(0)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -69,7 +81,7 @@ fun ResultScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState) // <-- Scroll state dipasang di sini
             ) {
                 OutlinedTextField(
                     value = note!!.title,
@@ -79,16 +91,31 @@ fun ResultScreen(
                         focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
                         unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent
                     ),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 )
 
                 if (isLoading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(
-                        "AI sedang merangkum...",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "Gemini sedang merapihkan catatan Anda...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                 }
 
                 if (error != null) {
@@ -101,7 +128,7 @@ fun ResultScreen(
 
                 if (!note!!.summary.isNullOrEmpty()) {
                     MarkdownText(text = note!!.summary!!, modifier = Modifier.padding(horizontal = 4.dp))
-                } else {
+                } else if (!isLoading) {
                     Text(
                         text = "Catatan Mentah:\n\n${note!!.rawText}",
                         style = MaterialTheme.typography.bodyLarge,
