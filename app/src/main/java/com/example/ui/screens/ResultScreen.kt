@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -40,7 +41,6 @@ fun ResultScreen(
     var searchHighlightQuery by remember { mutableStateOf("") }
     var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
-    // LazyListState untuk kontrol scroll secara programatis
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -96,56 +96,54 @@ fun ResultScreen(
                 CircularProgressIndicator()
             }
         } else {
-            // Kita hapus verticalScroll dari Column utama! 
-            // MarkdownText yang sekarang bakal handle scroll-nya.
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                if (isLoading) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+            // AJAIB: Bungkus seluruh konten membaca pakai SelectionContainer
+            // Biar user bisa ngeblok dan copy teks layaknya aplikasi native
+            SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (isLoading) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                         ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                "AI is organizing your notes...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "AI is organizing your notes...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
-                }
 
-                if (error != null) {
-                    Text(
-                        text = error!!,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
+                    if (error != null) {
+                        Text(
+                            text = error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
 
-                if (!note!!.summary.isNullOrEmpty()) {
-                    MarkdownText(
-                        text = note!!.summary!!, 
-                        highlightQuery = searchHighlightQuery, 
-                        fontFamily = selectedFont,
-                        listState = listState, // Pass state ke dalam
-                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                    )
-                } else if (!isLoading) {
-                    Text(
-                        text = "Raw Transcript:\n\n${note!!.rawText}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
+                    if (!note!!.summary.isNullOrEmpty()) {
+                        MarkdownText(
+                            text = note!!.summary!!, 
+                            highlightQuery = searchHighlightQuery, 
+                            fontFamily = selectedFont,
+                            listState = listState,
+                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                        )
+                    } else if (!isLoading) {
+                        Text(
+                            text = "Raw Transcript:\n\n${note!!.rawText}",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
         }
@@ -170,7 +168,6 @@ fun ResultScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Logika Dropdown Morphing buat hasil pencarian
                 val textToSearch = note!!.summary ?: note!!.rawText
                 val lines = textToSearch.split("\n")
                 val searchResults = lines.mapIndexedNotNull { index, line ->
@@ -184,7 +181,7 @@ fun ResultScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp) // Batasi tinggi list pencarian
+                            .heightIn(max = 200.dp) 
                     ) {
                         items(searchResults) { (index, line) ->
                             Text(
@@ -196,7 +193,6 @@ fun ResultScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        // Ajaib: Scroll langsung ke paragrafnya, panel nutup
                                         coroutineScope.launch { listState.animateScrollToItem(index) }
                                         showSidePanel = false
                                     }
