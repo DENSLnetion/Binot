@@ -9,5 +9,7 @@ data class NoteEntity(
     val title: String,
     val rawText: String,
     val summary: String?,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isPinned: Boolean = false // Ini logika baru buat fitur Pin
 )
+
