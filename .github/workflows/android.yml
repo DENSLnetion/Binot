@@ -1,40 +1,52 @@
-  - name: set up JDK 17
-    uses: actions/setup-java@v3
-    with:
-      java-version: '17'
-      distribution: 'temurin'
-      cache: gradle
+name: Android CI
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  - name: Create minimal gradlew script
-    run: |
-      cat > gradlew <<'EOF'
-      #!/usr/bin/env sh
-      set -e
-      SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
-      WRAPPER_JAR="$SCRIPT_DIR/gradle/wrapper/gradle-wrapper.jar"
-      if [ ! -f "$WRAPPER_JAR" ]; then
-        echo "ERROR: gradle-wrapper.jar tidak ditemukan di $WRAPPER_JAR"
-        exit 1
-      fi
-      exec java -jar "$WRAPPER_JAR" "$@"
-      EOF
-      chmod +x gradlew
+      - name: set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
 
-  - name: Download Gradle wrapper jar
-    run: |
-      mkdir -p gradle/wrapper
-      curl -L -o gradle-8.4-bin.zip https://services.gradle.org/distributions/gradle-8.4-bin.zip
-      unzip -j gradle-8.4-bin.zip 'gradle-8.4/lib/gradle-wrapper.jar' -d gradle/wrapper
-      rm gradle-8.4-bin.zip
+      - name: Create minimal gradlew script
+        run: |
+          cat > gradlew <<'EOF'
+          #!/usr/bin/env sh
+          set -e
+          SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
+          WRAPPER_JAR="$SCRIPT_DIR/gradle/wrapper/gradle-wrapper.jar"
+          if [ ! -f "$WRAPPER_JAR" ]; then
+            echo "ERROR: gradle-wrapper.jar tidak ditemukan di $WRAPPER_JAR"
+            exit 1
+          fi
+          exec java -jar "$WRAPPER_JAR" "$@"
+          EOF
+          chmod +x gradlew
 
-  - name: Grant execute permission for gradlew
-    run: chmod +x gradlew || true
+      - name: Download Gradle wrapper jar
+        run: |
+          mkdir -p gradle/wrapper
+          curl -L -o gradle-8.4-bin.zip https://services.gradle.org/distributions/gradle-8.4-bin.zip
+          unzip -j gradle-8.4-bin.zip 'gradle-8.4/lib/gradle-wrapper.jar' -d gradle/wrapper
+          rm gradle-8.4-bin.zip
 
-  - name: Build with Gradle
-    run: ./gradlew assembleDebug
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew || true
 
-  - name: Upload Artifact
-    uses: actions/upload-artifact@v4
-    with:
-      name: app-debug
-      path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Build with Gradle
+        run: ./gradlew assembleDebug
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
