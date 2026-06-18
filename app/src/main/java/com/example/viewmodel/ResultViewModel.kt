@@ -37,7 +37,14 @@ class ResultViewModel(
 
     private fun loadNote() {
         viewModelScope.launch {
-            _note.value = noteRepository.getNoteById(noteId)
+            val fetchedNote = noteRepository.getNoteById(noteId)
+            if (fetchedNote != null) {
+                // TRIK PINDAH KE ATAS HISTORY: 
+                // Tiap dibuka, timestamp catatan diubah jadi detik sekarang.
+                val updatedNote = fetchedNote.copy(timestamp = System.currentTimeMillis())
+                noteRepository.update(updatedNote)
+                _note.value = updatedNote
+            }
         }
     }
 
@@ -94,7 +101,6 @@ class ResultViewModel(
                     _error.value = "Failed to generate summary. Empty response."
                 }
             } catch (e: HttpException) {
-                // Fallback khusus Limit API 429
                 if (e.code() == 429) {
                     _error.value = "API Key limit exhausted. Please wait or use a different key."
                 } else {
