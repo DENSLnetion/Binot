@@ -38,9 +38,15 @@ fun AudioWaveform(
 
         for (i in 0 until numBars) {
             val x = i * (barWidth + gap)
-            // Create a fake wave pattern modulated by the real amplitude
-            val baseHeight = (sin(i.toFloat() * 0.5f) * 10f) + 15f
-            val dynamicHeight = (baseHeight + (amplitude * height * 0.8f * Math.random().toFloat())).coerceIn(10f, height)
+            
+            // Logika lurus: Kalau nganggur (amplitude 0), tinggi bar cuma 4f (garis lurus tipis).
+            // Kalau ngerekam, baru dia goyang ngikutin rumus sin + random
+            val dynamicHeight = if (amplitude > 0f) {
+                val baseHeight = (sin(i.toFloat() * 0.5f) * 10f) + 15f
+                (baseHeight + (amplitude * height * 0.8f * Math.random().toFloat())).coerceIn(10f, height)
+            } else {
+                4f 
+            }
             
             val yOffset = centerY - (dynamicHeight / 2)
 
@@ -53,3 +59,4 @@ fun AudioWaveform(
         }
     }
 }
+
