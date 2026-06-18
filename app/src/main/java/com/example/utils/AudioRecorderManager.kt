@@ -122,9 +122,9 @@ class AudioRecorderManager(private val context: Context) {
 
     fun stopRecording() {
         _isRecording.value = false
+        // HANYA panggil stopListening() di sini. 
+        // Jangan di-destroy() agar Android bisa mengirimkan hasil teks terakhir ke fungsi onResults.
         speechRecognizer?.stopListening()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
         _amplitude.value = 0f
     }
 }
