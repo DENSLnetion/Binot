@@ -41,23 +41,26 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _searchQuery.value = query
     }
 
-    // Hapus Mode Multi-Select
+    // Mode Multi-Select: Hapus
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
             ids.forEach { repository.deleteById(it) }
         }
     }
 
-    // Kloning Mode Multi-Select
+    // Mode Multi-Select: Kloning (Perbaikan Logika)
     fun cloneMultiple(ids: Set<Int>) {
         viewModelScope.launch {
-            val notesToClone = repository.allNotes.value.filter { it.id in ids }
-            notesToClone.forEach { note ->
-                val clonedNote = note.copy(
-                    id = 0, // 0 agar Room AutoGenerate ID baru
-                    title = "${note.title} (Copy)"
-                )
-                repository.insert(clonedNote)
+            ids.forEach { id ->
+                // Ambil data pasti langsung dari database berdasarkan ID
+                val note = repository.getNoteById(id)
+                if (note != null) {
+                    val clonedNote = note.copy(
+                        id = 0, // 0 agar Room AutoGenerate ID baru
+                        title = "${note.title} (Copy)"
+                    )
+                    repository.insert(clonedNote)
+                }
             }
         }
     }
@@ -72,4 +75,5 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
+
 
