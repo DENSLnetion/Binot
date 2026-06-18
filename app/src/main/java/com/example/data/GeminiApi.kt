@@ -42,7 +42,8 @@ data class GeminiError(
 // --- Retrofit Setup ---
 
 interface GeminiApiService {
-    @POST("v1beta/models/gemini-3.5-flash:generateContent")
+    // Model disesuaikan ke gemini-2.5-flash agar koneksi ke AI Studio berhasil dan output kencang
+    @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
