@@ -20,7 +20,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: '8.4'
+          gradle-version: '9.3.1'
           cache-enabled: true
 
       - name: Build with Gradle
