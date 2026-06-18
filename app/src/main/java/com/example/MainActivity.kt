@@ -53,8 +53,12 @@ class MainActivity : ComponentActivity() {
         val appContainer = (application as BinotApplication).container
 
         setContent {
+            // PERBAIKAN DI SINI: Masukin noteRepository biar SettingsViewModel bisa Backup/Restore
             val settingsViewModel: SettingsViewModel = viewModel(
-                factory = SettingsViewModel.provideFactory(appContainer.settingsRepository)
+                factory = SettingsViewModel.provideFactory(
+                    appContainer.settingsRepository, 
+                    appContainer.noteRepository
+                )
             )
             
             val themeMode by settingsViewModel.themeMode.collectAsState()
@@ -73,7 +77,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val currentRoute = navBackStackEntry?.destination?.route
     val userName by settingsViewModel.userName.collectAsState()
 
-    // Logika anti-flicker: Tunggu DataStore ngebaca nama user sepersekian detik
+    // Logika anti-flicker
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(userName) {
         delay(100) 
@@ -81,11 +85,11 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     }
 
     if (!isReady) {
-        Box(modifier = Modifier.fillMaxSize()) // Splash screen kosong sementara
+        Box(modifier = Modifier.fillMaxSize())
         return
     }
 
-    // Logika Interseptor Onboarding
+    // Interseptor Onboarding
     val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
     Scaffold(
@@ -190,4 +194,5 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
+
 
