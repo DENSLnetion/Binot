@@ -39,10 +39,8 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // --- LOGIKA BACKUP & RESTORE ---
     val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
-    // Launcher buat Create File (Export JSON)
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -53,7 +51,6 @@ fun SettingsScreen(
         }
     }
 
-    // Launcher buat Open File (Import JSON)
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -77,7 +74,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()), // Anti-gepeng
+                .verticalScroll(rememberScrollState()), 
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -186,7 +183,6 @@ fun SettingsScreen(
                 }
             }
 
-            // KARTU BARU: Data & System (Backup & Update)
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
@@ -199,14 +195,18 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Backup & Restore
+                    // PERBAIKAN: Tombol Backup Gepeng
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Notes Backup", style = MaterialTheme.typography.bodyLarge)
-                        Row {
+                        Text(
+                            text = "Notes Backup", 
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f) // Biar teks ngalah ke kiri
+                        )
+                        Row(horizontalArrangement = Arrangement.End) {
                             OutlinedButton(
                                 onClick = { 
                                     importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) 
@@ -224,7 +224,6 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Version & Update
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -235,8 +234,8 @@ fun SettingsScreen(
                             Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Button(onClick = { 
-                            // Lempar user ke halaman releases GitHub repo lu
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/aistudio-id/Binot/releases"))
+                            // PERBAIKAN: Link Rilis DENSLnetion
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
                             context.startActivity(intent)
                         }) { Text("Check Update") }
                     }
