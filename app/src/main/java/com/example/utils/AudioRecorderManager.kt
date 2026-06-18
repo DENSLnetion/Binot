@@ -2,6 +2,7 @@ package com.example.utils
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -16,6 +17,9 @@ import java.util.Locale
 class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
+    
+    // AudioManager untuk mematikan suara "Beep" sistem Android
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
@@ -33,7 +37,6 @@ class AudioRecorderManager(private val context: Context) {
         _recognizedText.value = ""
         
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
-            // Emulate recording
             startSimulatedRecording()
             return
         }
@@ -46,7 +49,10 @@ class AudioRecorderManager(private val context: Context) {
             speechRecognizer?.destroy()
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        // Unmute sistem setelah mesin siap biar fitur lain ga ikut bisu
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+                    }
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {
                         if (_isRecording.value) _amplitude.value = (rmsdB / 10f).coerceIn(0f, 1f)
@@ -56,7 +62,7 @@ class AudioRecorderManager(private val context: Context) {
                         _amplitude.value = 0f
                     }
                     override fun onError(error: Int) {
-                        // Restart listening if we are still supposed to be recording
+                        audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
                         if (_isRecording.value) {
                             initSpeechRecognizer()
                         } else {
@@ -69,17 +75,11 @@ class AudioRecorderManager(private val context: Context) {
                             val current = _recognizedText.value
                             _recognizedText.value = current + (if (current.isNotEmpty()) "\n" else "") + matches[0]
                         }
-                        // Restart listening if we are still supposed to be recording
                         if (_isRecording.value) {
                             initSpeechRecognizer()
                         }
                     }
-                    override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            // Can append to a secondary temporary state if needed
-                        }
-                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
                 })
                 
@@ -88,10 +88,15 @@ class AudioRecorderManager(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 }
+                
+                // HACK MUTE: Matikan stream music sebelum startListening biar gak ada suara Bip
+                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
                 startListening(intent)
             }
         } catch (e: Exception) {
             _isRecording.value = false
+            // Jaga-jaga error, unmute lagi biar HP user ga rusak settingan suaranya
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
             e.printStackTrace()
         }
     }
@@ -122,9 +127,8 @@ class AudioRecorderManager(private val context: Context) {
 
     fun stopRecording() {
         _isRecording.value = false
-        // HANYA panggil stopListening() di sini. 
-        // Jangan di-destroy() agar Android bisa mengirimkan hasil teks terakhir ke fungsi onResults.
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
     }
 }
+
