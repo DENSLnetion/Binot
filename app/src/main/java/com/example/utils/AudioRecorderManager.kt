@@ -33,42 +33,94 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
-    // Variabel buat nyimpen status awal haptic feedback
+    // Variabel penampung angka volume asli HP User
+    private var originalMusicVolume = -1
+    private var originalSystemVolume = -1
+    private var originalRingVolume = -1
+    private var originalNotificationVolume = -1
+    private var originalAlarmVolume = -1
+    private var originalVoiceCallVolume = -1
+    
+    private var originalRingerMode = -1
     private var originalHapticFeedbackStatus = -1
 
-    // ULTIMATE MUTE HACK V2: Bantai semua stream, termasuk panggilan suara, dan matikan haptic feedback
+    // ULTIMATE MUTE FINAL: Banting semua angka volume ke 0 Mutlak
     private fun forceMuteAllBeeps() {
         try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_MUTE, 0)
-            // Tambahan: Siapa tau Bip-nya nyusup lewat jalur telepon
-            audioManager.adjustStreamVolume(AudioManager.STREAM_VOICE_CALL, AudioManager.ADJUST_MUTE, 0) 
+            // 1. Simpan semua volume dan mode asli HANYA kalau belum disimpen
+            if (originalMusicVolume == -1) {
+                originalMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                originalSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
+                originalRingVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
+                originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
+                originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
+                originalVoiceCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+                
+                originalRingerMode = audioManager.ringerMode
+            }
 
-            // Matikan Haptic Feedback (suara "tek" saat UI ditekan)
-            originalHapticFeedbackStatus = Settings.System.getInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 1)
-            Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 0)
+            // 2. Coba paksa HP masuk mode Silent (dibungkus try-catch karena beberapa OS butuh izin DND)
+            try { audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT } catch (e: Exception) {}
+
+            // 3. Banting angka volume ke 0 mutlak! (Pake try-catch per baris biar kalau 1 gagal, yang lain tetep 0)
+            try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0) } catch (e: Exception) {}
+            try { audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0) } catch (e: Exception) {}
+            try { audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0) } catch (e: Exception) {}
+            try { audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0) } catch (e: Exception) {}
+            try { audioManager.setStreamVolume(AudioManager.STREAM_ALARM, 0, 0) } catch (e: Exception) {}
+            try { audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, 0, 0) } catch (e: Exception) {}
+
+            // 4. Matikan Haptic Feedback (suara sentuhan UI)
+            try {
+                originalHapticFeedbackStatus = Settings.System.getInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 1)
+                Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 0)
+            } catch (e: Exception) {}
 
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // Balikin normal
+    // Balikin ke angka aslinya
     private fun restoreAllVolumes() {
         try {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0)
-            audioManager.adjustStreamVolume(AudioManager.STREAM_VOICE_CALL, AudioManager.ADJUST_UNMUTE, 0)
+            // Kembalikan Ringer Mode dulu
+            if (originalRingerMode != -1) {
+                try { audioManager.ringerMode = originalRingerMode } catch (e: Exception) {}
+                originalRingerMode = -1
+            }
+
+            // Kembalikan semua angka volume
+            if (originalMusicVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMusicVolume, 0) } catch (e: Exception) {}
+                originalMusicVolume = -1
+            }
+            if (originalSystemVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, originalSystemVolume, 0) } catch (e: Exception) {}
+                originalSystemVolume = -1
+            }
+            if (originalRingVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_RING, originalRingVolume, 0) } catch (e: Exception) {}
+                originalRingVolume = -1
+            }
+            if (originalNotificationVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotificationVolume, 0) } catch (e: Exception) {}
+                originalNotificationVolume = -1
+            }
+            if (originalAlarmVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_ALARM, originalAlarmVolume, 0) } catch (e: Exception) {}
+                originalAlarmVolume = -1
+            }
+            if (originalVoiceCallVolume != -1) {
+                try { audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, originalVoiceCallVolume, 0) } catch (e: Exception) {}
+                originalVoiceCallVolume = -1
+            }
 
             // Kembalikan status Haptic Feedback
             if (originalHapticFeedbackStatus != -1) {
-                Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, originalHapticFeedbackStatus)
+                try {
+                    Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, originalHapticFeedbackStatus)
+                } catch (e: Exception) {}
                 originalHapticFeedbackStatus = -1
             }
         } catch (e: Exception) {
@@ -82,6 +134,7 @@ class AudioRecorderManager(private val context: Context) {
         _isRecording.value = true
         _recognizedText.value = ""
         
+        // Heningkan SEMUANYA saat awal rekam
         forceMuteAllBeeps()
         
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
