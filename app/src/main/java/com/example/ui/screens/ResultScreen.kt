@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ResultScreen(
     viewModel: ResultViewModel,
-    noteId: Int, // Terima ID buat Kunci Morphing
+    noteId: Int, 
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
     onNavigateBack: () -> Unit
@@ -52,10 +52,11 @@ fun ResultScreen(
 
     with(sharedTransitionScope) {
         Scaffold(
-            // Terapkan kunci Morphing di parent terluar layar membaca
+            // PERBAIKAN: ResizeMode ScaleToBounds bikin animasi Morphing ga nge-glitch waktu buka/tutup
             modifier = Modifier.sharedBounds(
                 sharedContentState = rememberSharedContentState(key = "note-$noteId"),
-                animatedVisibilityScope = animatedVisibilityScope
+                animatedVisibilityScope = animatedVisibilityScope,
+                resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
             ),
             topBar = {
                 TopAppBar(
