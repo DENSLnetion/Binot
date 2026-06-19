@@ -9,9 +9,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -25,10 +31,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -40,6 +48,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,10 +88,8 @@ fun ResultScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // FITUR 1: ZEN MODE (Sembunyiin Header pas Scroll Bawah)
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
-    // FITUR 3: Save MP3
     val exportAudioLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("audio/mp4")
     ) { uri ->
@@ -102,7 +109,7 @@ fun ResultScreen(
                     animatedVisibilityScope = animatedVisibilityScope,
                     resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
                 )
-                .nestedScroll(scrollBehavior.nestedScrollConnection), // Hook buat Zen Mode
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
                     title = { 
@@ -148,13 +155,13 @@ fun ResultScreen(
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
                         }
                     },
-                    scrollBehavior = scrollBehavior // Aktifin animasi nyelip ke atas
+                    scrollBehavior = scrollBehavior
                 )
             }
         ) { paddingValues ->
             if (note == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
                 SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -165,15 +172,17 @@ fun ResultScreen(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(16.dp),
+                                    modifier = Modifier.padding(24.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    // Animasi AI Thinking Material 3 Expressive
+                                    AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Spacer(modifier = Modifier.height(16.dp))
                                     Text(
                                         "AI is processing your text...",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
@@ -196,10 +205,15 @@ fun ResultScreen(
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
                         } else if (!isLoading) {
+                            // Teks mentah yang bisa di scroll murni
                             Text(
                                 text = "Raw Transcript:\n\n${note!!.rawText}",
                                 style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
-                                modifier = Modifier.padding(16.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .verticalScroll(rememberScrollState()),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                             )
                         }
@@ -209,7 +223,6 @@ fun ResultScreen(
         }
     }
 
-    // BOTTOM SHEET PANEL
     if (showSidePanel && note != null) {
         ModalBottomSheet(
             onDismissRequest = { showSidePanel = false },
@@ -218,16 +231,32 @@ fun ResultScreen(
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
-                
-                // FITUR 2 & 3: Smart Chips + Audio Export (Material 3 Expressive Morphing Pill)
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // Fallback Card Elegan
+                if (note!!.audioPath == null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
                 
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Smart Chip: Play Audio Asli (Morphing Capsule)
                     if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
                         val playWidth by animateDpAsState(
@@ -262,7 +291,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Smart Chip: Save MP3
                     if (note!!.audioPath != null) {
                         Box(
                             modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
@@ -278,7 +306,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Smart Chip: Copy
                     Box(
                         modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -295,7 +322,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Smart Chip: Share
                     Box(
                         modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                             val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -315,7 +341,6 @@ fun ResultScreen(
                     }
                 }
 
-                // Slider Audio Progress (Hanya Muncul Kalo Ada Audio)
                 if (note!!.audioPath != null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Slider(
@@ -329,7 +354,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // FORMAT & SEARCH SECTION
                 Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
@@ -388,6 +412,39 @@ fun ResultScreen(
                 }
                 Spacer(modifier = Modifier.height(48.dp))
             }
+        }
+    }
+}
+
+// KOMPONEN BARU: Animasi AI Thinking (Breathing Waveform)
+@Composable
+private fun AiThinkingAnimation(color: Color) {
+    val infiniteTransition = rememberInfiniteTransition(label = "ai_thinking")
+    val heights = List(4) { index ->
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 400, delayMillis = index * 100, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "height_$index"
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.height(32.dp)
+    ) {
+        heights.forEach { height ->
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .fillMaxHeight(height.value)
+                    .clip(CircleShape)
+                    .background(color)
+            )
         }
     }
 }
