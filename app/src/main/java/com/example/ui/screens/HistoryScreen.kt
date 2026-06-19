@@ -340,9 +340,6 @@ fun MorphingSearchBar(
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     
-    // Logika Total Tinggi Konsisten:
-    // Pas kuncup: margin = topInsets + 8, padding dalem = 16. Total atas = topInsets + 24
-    // Pas melar: margin = 0, padding dalem = topInsets + 24. Total atas = topInsets + 24 (SAMA PERSIS, GA ADA LONCATAN LAGI)
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
@@ -356,7 +353,10 @@ fun MorphingSearchBar(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
+            modifier = Modifier
+                .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
+                // FIX FATAL: Pasang penahan tiang! Biar kaga ngempes pas tombol ☰ dibuang dari layar.
+                .defaultMinSize(minHeight = 48.dp) 
         ) {
             AnimatedVisibility(
                 visible = !isFocused,
@@ -440,4 +440,3 @@ fun NoteCard(
         }
     }
 }
-
