@@ -4,6 +4,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
@@ -21,7 +22,6 @@ data class Content(
     val parts: List<Part>
 )
 
-// LOGIKA BARU: Tambah InlineData biar Gemini bisa nelan file Audio Base64
 data class Part(
     val text: String? = null,
     val inlineData: InlineData? = null
@@ -29,7 +29,7 @@ data class Part(
 
 data class InlineData(
     val mimeType: String,
-    val data: String // Teks sandi (Base64) dari file MP3 lu
+    val data: String 
 )
 
 data class GenerateContentResponse(
@@ -45,10 +45,22 @@ data class GeminiError(
     val message: String? = null
 )
 
+// --- GitHub API Models buat In-App Update ---
+data class GithubRelease(
+    val tag_name: String,
+    val name: String?,
+    val body: String?,
+    val html_url: String,
+    val assets: List<GithubAsset>?
+)
+
+data class GithubAsset(
+    val browser_download_url: String
+)
+
 // --- Retrofit Setup ---
 
 interface GeminiApiService {
-    // Tetep pake 2.5 Flash. Ini model paling mutakhir & ngebut dari Google buat Audio
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
@@ -56,10 +68,16 @@ interface GeminiApiService {
     ): GenerateContentResponse
 }
 
-object RetrofitClient {
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/"
+interface GithubApiService {
+    // Pengecek Rilis Otomatis ke Repo Lu!
+    @GET("repos/DENSLnetion/Binot/releases/latest")
+    suspend fun getLatestRelease(): GithubRelease
+}
 
-    // Timeout digedein jadi 180 detik buat ngasih nafas pas upload Audio MP3 ke server
+object RetrofitClient {
+    private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
+    private const val GITHUB_BASE_URL = "https://api.github.com/"
+
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(180, TimeUnit.SECONDS)
         .readTimeout(180, TimeUnit.SECONDS)
@@ -71,12 +89,22 @@ object RetrofitClient {
         .build()
 
     val service: GeminiApiService by lazy {
-        val retrofit = Retrofit.Builder()
-            .baseUrl(BASE_URL)
+        Retrofit.Builder()
+            .baseUrl(GEMINI_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
-        retrofit.create(GeminiApiService::class.java)
+            .create(GeminiApiService::class.java)
+    }
+
+    // Mesin GitHub Inspector
+    val githubService: GithubApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(GITHUB_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(GithubApiService::class.java)
     }
 }
 
