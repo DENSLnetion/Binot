@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -82,42 +83,60 @@ fun HistoryScreen(
         }
     }
 
+    // LOGIKA HARDWARE BACK BUTTON: Atur Kelakuan Keyboard & Search Bar
+    BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode) {
+        if (selectionMode) {
+            selectionMode = false
+            selectedNotes = emptySet()
+        } else if (isSearchFocused) {
+            focusManager.clearFocus() // Pencet pertama: Nutup Keyboard
+        } else {
+            viewModel.updateSearchQuery("") // Pencet kedua: Bersihin teks & nguncupin kapsul
+        }
+    }
+
     Scaffold(
         topBar = {
             if (selectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedNotes.size} Selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { 
-                            selectionMode = false; selectedNotes = emptySet() 
-                        }) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
-                    },
-                    actions = {
-                        IconButton(onClick = { 
-                            viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
-                            selectionMode = false; selectedNotes = emptySet()
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.PushPin, 
-                                contentDescription = "Pin",
-                                tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = { 
-                            viewModel.cloneMultiple(selectedNotes)
-                            selectionMode = false; selectedNotes = emptySet()
-                        }) { Icon(Icons.Default.ContentCopy, contentDescription = "Clone") }
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                // LOGIKA FULLSCREEN HEADER: Paksa background narik sampe status bar
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
+                ) {
+                    TopAppBar(
+                        title = { Text("${selectedNotes.size} Selected") },
+                        navigationIcon = {
+                            IconButton(onClick = { 
+                                selectionMode = false; selectedNotes = emptySet() 
+                            }) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                        },
+                        actions = {
+                            IconButton(onClick = { 
+                                viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
+                                selectionMode = false; selectedNotes = emptySet()
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.PushPin, 
+                                    contentDescription = "Pin",
+                                    tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { 
+                                viewModel.cloneMultiple(selectedNotes)
+                                selectionMode = false; selectedNotes = emptySet()
+                            }) { Icon(Icons.Default.ContentCopy, contentDescription = "Clone") }
+                            IconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent, // Biar ngikutin Surface di atas
+                            titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                )
+                }
             } else {
                 MorphingSearchBar(
                     query = searchQuery,
@@ -130,7 +149,6 @@ fun HistoryScreen(
         },
         floatingActionButton = {
             if (!selectionMode) {
-                // Balik jadi Kapsul FAB Tunggal Murni yang membal!
                 ExtendedFloatingActionButton(
                     onClick = { importLauncher.launch("audio/*") },
                     expanded = isFabExpanded,
@@ -249,13 +267,10 @@ fun MorphingSearchBar(
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit
 ) {
-    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    
+    // LOGIKA FULLSCREEN SEARCH: Background melar ke atas nutupin status bar
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "tMargin")
-    
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
         modifier = Modifier
@@ -264,10 +279,12 @@ fun MorphingSearchBar(
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            // Kalo lagi full, pasang window insets biar teks ga ketutup jam
+            .let { if (isFocused) it.windowInsetsPadding(WindowInsets.statusBars) else it }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = contentTopPadding, bottom = 16.dp, start = 20.dp, end = 20.dp)
+            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp, start = 20.dp, end = 20.dp)
         ) {
             Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
@@ -280,6 +297,7 @@ fun MorphingSearchBar(
                     onValueChange = onQueryChange,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged { onFocusChange(it.isFocused) }
@@ -338,7 +356,7 @@ fun NoteCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = displayText,
+                text = displayText!!,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
