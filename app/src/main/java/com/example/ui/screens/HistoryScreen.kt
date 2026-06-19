@@ -80,6 +80,8 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
     var isSearchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -161,6 +163,7 @@ fun HistoryScreen(
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 if (selectionMode) {
                     Surface(
@@ -296,7 +299,25 @@ fun HistoryScreen(
             title = { Text("Delete Notes") },
             text = { Text("Are you sure you want to delete ${selectedNotes.size} notes?") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteMultiple(selectedNotes); showDeleteDialog = false; selectionMode = false; selectedNotes = emptySet() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = {
+                    val idsToDelete = selectedNotes
+                    viewModel.deleteMultiple(idsToDelete)
+                    showDeleteDialog = false
+                    selectionMode = false
+                    selectedNotes = emptySet()
+                    coroutineScope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = "${idsToDelete.size} note${if (idsToDelete.size > 1) "s" else ""} deleted",
+                            actionLabel = "Undo",
+                            duration = SnackbarDuration.Short
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.undoDelete()
+                        } else {
+                            viewModel.clearRecentlyDeleted()
+                        }
+                    }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
