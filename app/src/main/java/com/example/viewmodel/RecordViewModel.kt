@@ -22,14 +22,16 @@ class RecordViewModel(
     val amplitude: StateFlow<Float> = audioRecorderManager.amplitude
     val recognizedText: StateFlow<String> = audioRecorderManager.recognizedText
 
-    // Logika Timer Kapsul
     private val _recordingSeconds = MutableStateFlow(0)
     val recordingSeconds: StateFlow<Int> = _recordingSeconds.asStateFlow()
     private var timerJob: Job? = null
+    
+    // Penampung path audio yang baru aja kelar direkam
+    private var lastRecordedAudioPath: String? = null
 
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
-            audioRecorderManager.stopRecording()
+            lastRecordedAudioPath = audioRecorderManager.stopRecording()
             stopTimer()
         } else {
             audioRecorderManager.startRecording(isEmulator)
@@ -58,8 +60,14 @@ class RecordViewModel(
         
         viewModelScope.launch {
             val title = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
-            // default isPinned false
-            val note = NoteEntity(title = title, rawText = text, summary = null, isPinned = false)
+            // Save sekalian sama file audionya
+            val note = NoteEntity(
+                title = title, 
+                rawText = text, 
+                summary = null, 
+                isPinned = false,
+                audioPath = lastRecordedAudioPath
+            )
             val id = repository.insert(note).toInt()
             onSaved(id)
         }
@@ -84,3 +92,5 @@ class RecordViewModel(
             }
     }
 }
+
+
