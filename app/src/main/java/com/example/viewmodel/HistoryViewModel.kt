@@ -78,7 +78,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // LOGIKA TUKANG FOTOKOPI: Salin MP3 dari luar ke Cache, lalu bikin Catatan Kosong
     fun importAudio(context: Context, uri: Uri, onResult: (Int) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -93,7 +92,7 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
                 val note = NoteEntity(
                     title = "Imported Audio",
-                    rawText = "", // Sengaja Dikosongin! Biar jadi trigger buat ditranskrip Gemini
+                    rawText = "",
                     summary = null,
                     isPinned = false,
                     audioPath = file.absolutePath
@@ -103,6 +102,21 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+        }
+    }
+
+    // LOGIKA HACKER: Simpen Link YouTube dengan sandi "yt:" di kolom audioPath
+    fun importYouTubeLink(link: String, onResult: (Int) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val note = NoteEntity(
+                title = "YouTube Transcript",
+                rawText = "", // Dikosongin buat trigger mesin Scraper
+                summary = null,
+                isPinned = false,
+                audioPath = "yt:$link" 
+            )
+            val id = repository.insert(note).toInt()
+            launch(Dispatchers.Main) { onResult(id) }
         }
     }
 
