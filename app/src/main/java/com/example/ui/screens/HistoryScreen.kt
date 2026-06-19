@@ -340,15 +340,11 @@ fun MorphingSearchBar(
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     
-    // FIX FATAL: Logika Matematika Animasi Mulus
-    // Kuncup: Latar belakang turun aman ngelewatin jam (topInsets + 8.dp)
-    // Melar: Latar belakang nempel ujung atas layar (0.dp)
+    // Logika Total Tinggi Konsisten:
+    // Pas kuncup: margin = topInsets + 8, padding dalem = 16. Total atas = topInsets + 24
+    // Pas melar: margin = 0, padding dalem = topInsets + 24. Total atas = topInsets + 24 (SAMA PERSIS, GA ADA LONCATAN LAGI)
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
-    
-    // Padding teks di dalam kapsul:
-    // Kuncup: Normal (16.dp) karena kotak udah aman di bawah jam
-    // Melar: Teks didorong ke bawah sejauh jam (topInsets + 16.dp) biar kaga ketutupan
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
+    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
         modifier = Modifier
@@ -357,7 +353,6 @@ fun MorphingSearchBar(
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) 
-            // Fungsi windowInsetsPadding kita hapus karena bikin loncat instan!
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
