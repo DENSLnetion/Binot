@@ -23,8 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 class ResultViewModel(
     private val noteId: Int,
@@ -59,12 +57,9 @@ class ResultViewModel(
             val fetchedNote = noteRepository.getNoteById(noteId)
             _note.value = fetchedNote
             
+            // Trigger otomatis transkrip file import MP3 murni
             if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
-                if (fetchedNote.audioPath.startsWith("yt:")) {
-                    scrapeYouTubeTranscript(fetchedNote.audioPath.removePrefix("yt:"))
-                } else {
-                    transcribeImportedAudio()
-                }
+                transcribeImportedAudio()
             }
         }
     }
@@ -160,73 +155,6 @@ class ResultViewModel(
                 launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
             } catch (e: Exception) {
                 launch(Dispatchers.Main) { onResult("Failed to export audio: ${e.message}") }
-            }
-        }
-    }
-
-    // MESIN PENYEDOT YOUTUBE (VERSI KEBAL PELURU)
-    private fun scrapeYouTubeTranscript(videoUrl: String) {
-        val currentNote = _note.value ?: return
-        _isLoading.value = true
-        _error.value = null
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // 1. Jaring pengaman URL (Kalo user lupa ngetik https://)
-                var cleanUrl = videoUrl.trim()
-                if (!cleanUrl.startsWith("http")) {
-                    cleanUrl = "https://$cleanUrl"
-                }
-
-                // 2. Nyamar jadi browser & Buka halaman YouTube
-                val connection = URL(cleanUrl).openConnection() as HttpURLConnection
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                val html = connection.inputStream.bufferedReader().readText()
-
-                // 3. Gali kode rahasia "captionTracks" (List Subtitle)
-                val captionRegex = "\"captionTracks\":\\[(.*?)\\]".toRegex()
-                val match = captionRegex.find(html) ?: throw Exception("No auto-generated or manual subtitles found for this video.")
-                val tracksJson = match.groupValues[1]
-
-                // 4. Ambil URL file XML subtitle (Ambil yang pertama/default)
-                val baseUrlRegex = "\"baseUrl\":\"(.*?)\"".toRegex()
-                val baseUrls = baseUrlRegex.findAll(tracksJson).map { it.groupValues[1] }.toList()
-                var targetUrl = baseUrls.firstOrNull() ?: throw Exception("Subtitle URL not found.")
-
-                // BINGO FIX 1: Basmi semua karakter escape JSON yang bikin URL Parser Java muntah
-                targetUrl = targetUrl
-                    .replace("\\u0026", "&")
-                    .replace("\\/", "/")
-                    .replace("\\u003d", "=")
-
-                // 5. Download file XML subtitle-nya
-                val xmlConnection = URL(targetUrl).openConnection() as HttpURLConnection
-                val xml = xmlConnection.inputStream.bufferedReader().readText()
-
-                // BINGO FIX 2: Tambahin (?s) DotAll biar Regex nembus enter/multi-line text
-                val textRegex = "(?s)<text[^>]*>(.*?)</text>".toRegex()
-                val rawTranscript = textRegex.findAll(xml).joinToString(" ") {
-                    it.groupValues[1]
-                        .replace("&#39;", "'")
-                        .replace("&amp;", "&")
-                        .replace("&quot;", "\"")
-                        .replace("\n", " ")
-                }.replace(Regex("<[^>]*>"), "") // Basmi sisa-sisa HTML tag
-
-                if (rawTranscript.isBlank()) throw Exception("Extracted transcript is empty.")
-
-                // 6. Langsung lempar ke Database sebagai Raw Text (Nol Rupiah API Cost!)
-                launch(Dispatchers.Main) {
-                    val updatedNote = currentNote.copy(rawText = rawTranscript, timestamp = System.currentTimeMillis())
-                    _note.value = updatedNote
-                    noteRepository.update(updatedNote)
-                    _isLoading.value = false
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    _error.value = "YouTube Extractor Error: ${e.message}"
-                    _isLoading.value = false
-                }
             }
         }
     }
