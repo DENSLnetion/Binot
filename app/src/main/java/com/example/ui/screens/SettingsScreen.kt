@@ -4,19 +4,26 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.viewmodel.SettingsViewModel
+import com.example.viewmodel.UpdateState
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,6 +38,10 @@ fun SettingsScreen(
     val userName by viewModel.userName.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    
+    val updateState by viewModel.updateState.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val latestVersionStr by viewModel.latestVersionStr.collectAsState()
 
     var nameInput by remember(userName) { mutableStateOf(userName) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
@@ -38,6 +49,13 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+    
+    // DETEKSI VERSI ASLI HP (Otomatis baca dari build.gradle)
+    val currentVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) { "1.0.0" }
+    }
     
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -72,7 +90,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // PERBAIKAN: Padding atas disunat biar nempel rapi sama status bar
             Spacer(modifier = Modifier.height(topInsets + 4.dp))
 
             Text(
@@ -232,14 +249,52 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                             Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                            Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            
+                            // Versi aplikasi yang tampil sekarang 100% dari dalem mesin Android HP (Bukan hardcode lagi)
+                            Text("v$currentVersion", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            
+                            if (updateState == UpdateState.Downloading) {
+                                val animatedProgress by animateFloatAsState(targetValue = downloadProgress / 100f, label = "progress")
+                                Spacer(Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = { animatedProgress },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small),
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text("Downloading... $downloadProgress%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            } else if (updateState == UpdateState.Available) {
+                                Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            } else if (updateState == UpdateState.Error) {
+                                Text("Failed to check update.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
+                                // Udah dicek tapi ternyata versinya sama atau lebih tinggi
+                                Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
-                        Button(onClick = { 
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
-                            context.startActivity(intent)
-                        }) { Text("Check Update") }
+                        
+                        AnimatedContent(targetState = updateState, label = "update_btn") { state ->
+                            when (state) {
+                                UpdateState.Idle -> Button(onClick = { viewModel.checkForUpdate(currentVersion) }) { Text("Check Update") } // Manggil pake versi dinamis
+                                UpdateState.Checking -> Button(onClick = {}, enabled = false) { 
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                }
+                                UpdateState.Available -> Button(onClick = { viewModel.startDownload(context) }) { Text("Update App") }
+                                UpdateState.Downloading -> OutlinedButton(onClick = {}) { Text("Downloading") }
+                                UpdateState.Downloaded -> Button(onClick = { viewModel.promptInstall(context) }) { 
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Install") 
+                                }
+                                UpdateState.Error -> OutlinedButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { 
+                                    Icon(Icons.Default.Error, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Retry") 
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -248,4 +303,5 @@ fun SettingsScreen(
         }
     }
 }
+
 
