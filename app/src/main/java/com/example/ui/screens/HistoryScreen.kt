@@ -50,7 +50,6 @@ fun HistoryScreen(
         notes.find { it.id == id }?.isPinned == true 
     }
 
-    // PERBAIKAN: Pisahin catatan jadi 2 Rak (Pinned dan Biasa)
     val pinnedNotes = notes.filter { it.isPinned }
     val unpinnedNotes = notes.filter { !it.isPinned }
 
@@ -129,7 +128,6 @@ fun HistoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalItemSpacing = 8.dp
             ) {
-                // Rak Pinned
                 if (pinnedNotes.isNotEmpty()) {
                     item(span = StaggeredGridItemSpan.FullLine) {
                         Text(
@@ -169,7 +167,6 @@ fun HistoryScreen(
                     }
                 }
 
-                // Rak Collection
                 if (unpinnedNotes.isNotEmpty()) {
                     item(span = StaggeredGridItemSpan.FullLine) {
                         Text(
@@ -243,7 +240,9 @@ fun NoteCard(
     onLongClick: () -> Unit, 
     onClick: () -> Unit
 ) {
-    val height = remember(note.id) { (150..250).random().dp }
+    // PERBAIKAN: Ga usah dikunci rigid, biarin dia melar ke bawah minimal 120.dp
+    // Jadi kalau rangkuman kepanjangan, tanggalnya ga bakal lenyap kepotong!
+    val minHeight = remember(note.id) { (140..220).random().dp }
     val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
     
     Card(
@@ -255,7 +254,7 @@ fun NoteCard(
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
             .fillMaxWidth()
-            .height(height)
+            .heightIn(min = minHeight)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -281,7 +280,8 @@ fun NoteCard(
             Text(
                 text = formatter.format(Date(note.timestamp)),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.padding(top = 8.dp) // Jarak aman buat tanggal
             )
         }
     }
