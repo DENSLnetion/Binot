@@ -1,10 +1,13 @@
 package com.example.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
@@ -54,7 +59,7 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                     val clonedNote = note.copy(
                         id = 0, 
                         title = "${note.title} (Copy)",
-                        isPinned = false // Kloning jangan otomatis di-pin
+                        isPinned = false 
                     )
                     repository.insert(clonedNote)
                 }
@@ -62,7 +67,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // Logika Pintar untuk Pin Catatan
     fun togglePinMultiple(ids: Set<Int>, pinState: Boolean) {
         viewModelScope.launch {
             ids.forEach { id ->
@@ -70,6 +74,34 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 if (note != null) {
                     repository.update(note.copy(isPinned = pinState))
                 }
+            }
+        }
+    }
+
+    // LOGIKA TUKANG FOTOKOPI: Salin MP3 dari luar ke Cache, lalu bikin Catatan Kosong
+    fun importAudio(context: Context, uri: Uri, onResult: (Int) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val fileName = "Binot_Import_${System.currentTimeMillis()}.mp3"
+                val file = File(context.cacheDir, fileName)
+                val outputStream = FileOutputStream(file)
+                
+                inputStream?.copyTo(outputStream)
+                inputStream?.close()
+                outputStream.close()
+
+                val note = NoteEntity(
+                    title = "Imported Audio",
+                    rawText = "", // Sengaja Dikosongin! Biar jadi trigger buat ditranskrip Gemini
+                    summary = null,
+                    isPinned = false,
+                    audioPath = file.absolutePath
+                )
+                val id = repository.insert(note).toInt()
+                launch(Dispatchers.Main) { onResult(id) }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
