@@ -26,8 +26,8 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _selectedLabel = MutableStateFlow<String?>(null)
-    val selectedLabel: StateFlow<String?> = _selectedLabel.asStateFlow()
+    private val _selectedLabels = MutableStateFlow<Set<String>>(emptySet())
+    val selectedLabels: StateFlow<Set<String>> = _selectedLabels.asStateFlow()
 
     private val _sortMode = MutableStateFlow(0) // 0 = Terbaru, 1 = Terlama, 2 = A-Z
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
@@ -50,14 +50,15 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredNotes: StateFlow<List<NoteEntity>> = combine(
-        repository.allNotes, _searchQuery, _selectedLabel, _sortMode
-    ) { notes, query, label, sort ->
+        repository.allNotes, _searchQuery, _selectedLabels, _sortMode
+    ) { notes, query, labels, sort ->
 
         // WAJIB: Sembunyiin catatan kamus dari UI utama!
         val realNotes = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
 
-        val labelFilteredNotes = if (label == null) realNotes else realNotes.filter { note ->
-            note.label?.split("|")?.map { it.trim() }?.contains(label) == true
+        val labelFilteredNotes = if (labels.isEmpty()) realNotes else realNotes.filter { note ->
+            val noteLabels = note.label?.split("|")?.map { it.trim() }?.toSet() ?: emptySet()
+            labels.all { it in noteLabels }
         }
 
         val searchedNotes = if (query.isBlank()) {
@@ -82,8 +83,16 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         initialValue = emptyList()
     )
 
-    fun filterByLabel(label: String?) {
-        _selectedLabel.value = label
+    fun toggleLabelFilter(label: String) {
+        _selectedLabels.value = if (label in _selectedLabels.value) {
+            _selectedLabels.value - label
+        } else {
+            _selectedLabels.value + label
+        }
+    }
+
+    fun clearLabelFilter() {
+        _selectedLabels.value = emptySet()
     }
 
     fun setSortMode(mode: Int) {
@@ -137,9 +146,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
             }
 
-            // Kalau lagi difilter pakai label lama, pindahin filter ke label baru
-            if (_selectedLabel.value == oldLabel) {
-                _selectedLabel.value = newLabel
+            // Kalau lagi difilter pakai label lama, update ke label baru di set
+            if (oldLabel in _selectedLabels.value) {
+                _selectedLabels.value = (_selectedLabels.value - oldLabel) + newLabel
             }
         }
     }
@@ -172,9 +181,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 }
             }
 
-            // Kalau lagi difilter pakai label yang dihapus, balikin ke All Notes
-            if (_selectedLabel.value == label) {
-                _selectedLabel.value = null
+            // Kalau lagi difilter pakai label yang dihapus, lepas dari filter set
+            if (label in _selectedLabels.value) {
+                _selectedLabels.value = _selectedLabels.value - label
             }
         }
     }
