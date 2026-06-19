@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -23,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -74,7 +76,6 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    // PERBAIKAN: Ga pake verticalScroll di induk biar ga gepeng
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -110,19 +111,18 @@ fun RecordScreen(
 
         AudioWaveform(
             amplitude = amplitude,
-            modifier = Modifier.padding(vertical = 16.dp)
+            modifier = Modifier.padding(vertical = 32.dp)
         )
 
-        val textScrollState = rememberScrollState()
+        val scrollState = rememberScrollState()
         LaunchedEffect(recognizedText) {
-            textScrollState.animateScrollTo(textScrollState.maxValue)
+            scrollState.animateScrollTo(scrollState.maxValue)
         }
 
-        // PERBAIKAN: Kotak dipendekin jadi 160.dp biar muat pas di layar, ga nutupin kapsul
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(160.dp) 
+                .height(160.dp)
                 .clip(MaterialTheme.shapes.extraLarge)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(24.dp)
@@ -131,10 +131,10 @@ fun RecordScreen(
                 text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start, 
+                textAlign = TextAlign.Start,
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(textScrollState)
+                    .verticalScroll(scrollState)
             )
         }
 
@@ -145,14 +145,28 @@ fun RecordScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // PERBAIKAN: Animasi Scale (Mengecil/Membal) buat tombol View
+            var isViewPressed by remember { mutableStateOf(false) }
+            val viewScale by animateFloatAsState(
+                targetValue = if (isViewPressed) 0.85f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "viewScale"
+            )
+
             Box(
                 modifier = Modifier
+                    .scale(viewScale)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondaryContainer)
                     .pointerInput(Unit) {
-                        detectTapGestures {
-                            showLiveTextSheet = true
-                        }
+                        detectTapGestures(
+                            onPress = {
+                                isViewPressed = true
+                                tryAwaitRelease()
+                                isViewPressed = false
+                                showLiveTextSheet = true
+                            }
+                        )
                     }
                     .padding(horizontal = 24.dp, vertical = 24.dp),
                 contentAlignment = Alignment.Center
@@ -175,17 +189,8 @@ fun RecordScreen(
                 label = "buttonWidth"
             )
 
-            val buttonColor = if (isRecording) {
-                MaterialTheme.colorScheme.tertiary
-            } else {
-                MaterialTheme.colorScheme.primary
-            }
-            
-            val iconColor = if (isRecording) {
-                MaterialTheme.colorScheme.onTertiary
-            } else {
-                MaterialTheme.colorScheme.onPrimary
-            }
+            val buttonColor = if (isRecording) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+            val iconColor = if (isRecording) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary
 
             Box(
                 modifier = Modifier
@@ -264,5 +269,4 @@ fun RecordScreen(
         }
     }
 }
-
 
