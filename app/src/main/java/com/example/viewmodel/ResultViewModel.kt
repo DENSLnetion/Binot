@@ -48,7 +48,6 @@ class ResultViewModel(
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
 
-    // Semua Label yang pernah dibuat (Biar bisa di-assign dari Side Panel)
     private val _allLabels = MutableStateFlow<List<String>>(emptyList())
     val allLabels: StateFlow<List<String>> = _allLabels.asStateFlow()
 
@@ -67,10 +66,15 @@ class ResultViewModel(
         }
     }
 
+    // LOGIKA HACKER: Bongkar kamus label biar bisa ditampilin di panel
     private fun loadAllLabels() {
         viewModelScope.launch(Dispatchers.IO) {
-            val labels = noteRepository.getAllNotesSync().mapNotNull { it.label }.distinct().sorted()
-            _allLabels.value = labels
+            val notes = noteRepository.getAllNotesSync()
+            val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+            val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+            val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.mapNotNull { it.label }
+            
+            _allLabels.value = (customLabels + noteLabels).distinct().sorted()
         }
     }
 
@@ -78,17 +82,32 @@ class ResultViewModel(
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(title = newTitle, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        viewModelScope.launch { noteRepository.update(updatedNote) }
+        viewModelScope.launch { 
+            noteRepository.update(updatedNote) 
+        }
     }
 
-    // LOGIKA LABEL BARU
     fun updateLabel(newLabel: String?) {
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(label = newLabel, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        viewModelScope.launch { 
+        viewModelScope.launch(Dispatchers.IO) { 
             noteRepository.update(updatedNote) 
-            loadAllLabels() // Refresh list label
+            
+            // Jaga-jaga: kalau labelnya baru dibikin langsung dari ResultScreen,
+            // Simpen juga ke kamus biar kaga mati kalau catatannya dihapus
+            if (newLabel != null) {
+                val notes = noteRepository.getAllNotesSync()
+                val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+                if (sysNote != null) {
+                    val labels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
+                    labels.add(newLabel)
+                    noteRepository.update(sysNote.copy(rawText = labels.joinToString("|")))
+                } else {
+                    noteRepository.insert(NoteEntity(title = "[[BINOT_SYSTEM_LABELS]]", rawText = newLabel, summary = null))
+                }
+            }
+            loadAllLabels() 
         }
     }
 
@@ -97,7 +116,9 @@ class ResultViewModel(
         if (currentNote.summary == null) return
         val updatedNote = currentNote.copy(summary = null, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        viewModelScope.launch { noteRepository.update(updatedNote) }
+        viewModelScope.launch { 
+            noteRepository.update(updatedNote) 
+        }
     }
 
     fun toggleAudio() {
@@ -113,15 +134,21 @@ class ResultViewModel(
                 setDataSource(path)
                 prepare()
                 setOnCompletionListener {
-                    _isPlaying.value = false; _playbackProgress.value = 0f; progressJob?.cancel()
+                    _isPlaying.value = false
+                    _playbackProgress.value = 0f
+                    progressJob?.cancel()
                 }
             }
         }
 
         if (mediaPlayer?.isPlaying == true) {
-            mediaPlayer?.pause(); _isPlaying.value = false; progressJob?.cancel()
+            mediaPlayer?.pause()
+            _isPlaying.value = false
+            progressJob?.cancel()
         } else {
-            mediaPlayer?.start(); _isPlaying.value = true; startProgressTracker()
+            mediaPlayer?.start()
+            _isPlaying.value = true
+            startProgressTracker()
         }
     }
 
@@ -129,7 +156,11 @@ class ResultViewModel(
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (_isPlaying.value) {
-                mediaPlayer?.let { if (it.duration > 0) { _playbackProgress.value = it.currentPosition.toFloat() / it.duration.toFloat() } }
+                mediaPlayer?.let { 
+                    if (it.duration > 0) { 
+                        _playbackProgress.value = it.currentPosition.toFloat() / it.duration.toFloat() 
+                    } 
+                }
                 delay(100)
             }
         }
@@ -156,14 +187,21 @@ class ResultViewModel(
                     sourceFile.inputStream().use { input -> input.copyTo(output) }
                 }
                 launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
-            } catch (e: Exception) { launch(Dispatchers.Main) { onResult("Failed to export audio: ${e.message}") } }
+            } catch (e: Exception) { 
+                launch(Dispatchers.Main) { onResult("Failed to export audio: ${e.message}") } 
+            }
         }
     }
 
     private fun transcribeImportedAudio() {
         val currentNote = _note.value ?: return
         val audioPath = currentNote.audioPath ?: return
-        if (apiKey.isBlank()) { _error.value = "API Key not found. Cannot transcribe audio."; return }
+        
+        if (apiKey.isBlank()) { 
+            _error.value = "API Key not found. Cannot transcribe audio."
+            return 
+        }
+        
         _isLoading.value = true
         _error.value = null
 
@@ -171,9 +209,11 @@ class ResultViewModel(
             try {
                 val file = File(audioPath)
                 if (!file.exists()) throw Exception("Audio file missing from cache.")
+                
                 val bytes = file.readBytes()
                 val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
                 val mimeType = "audio/mp3"
+                
                 val promptText = """
                     You are an expert audio transcriber. Transcribe the following audio precisely.
                     CRITICAL MATHEMATICAL RULES:
@@ -183,7 +223,16 @@ class ResultViewModel(
                     1. DO NOT summarize. Output the exact raw transcript word-for-word.
                     2. DO NOT add conversational filler or AI pleasantries. Just output the text.
                 """.trimIndent()
-                val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = promptText), Part(inlineData = InlineData(mimeType = mimeType, data = base64Audio))))))
+                
+                val request = GenerateContentRequest(
+                    contents = listOf(
+                        Content(parts = listOf(
+                            Part(text = promptText), 
+                            Part(inlineData = InlineData(mimeType = mimeType, data = base64Audio))
+                        ))
+                    )
+                )
+                
                 val response = RetrofitClient.service.generateContent(apiKey, request)
                 val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
 
@@ -192,17 +241,33 @@ class ResultViewModel(
                         val updatedNote = currentNote.copy(rawText = transcript.trim(), timestamp = System.currentTimeMillis())
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
-                    } else { _error.value = "Failed to transcribe audio. Empty response from Gemini." }
+                    } else { 
+                        _error.value = "Failed to transcribe audio. Empty response from Gemini." 
+                    }
                     _isLoading.value = false
                 }
-            } catch (e: HttpException) { launch(Dispatchers.Main) { _error.value = if (e.code() == 429) "API Key limit exhausted." else "HTTP Error: ${e.code()}"; _isLoading.value = false }
-            } catch (e: Exception) { launch(Dispatchers.Main) { _error.value = "Transcription error: ${e.message}"; _isLoading.value = false } }
+            } catch (e: HttpException) { 
+                launch(Dispatchers.Main) { 
+                    _error.value = if (e.code() == 429) "API Key limit exhausted. Please wait or use a different key." else "HTTP Error: ${e.code()}"
+                    _isLoading.value = false 
+                }
+            } catch (e: Exception) { 
+                launch(Dispatchers.Main) { 
+                    _error.value = "Transcription error: ${e.message}"
+                    _isLoading.value = false 
+                } 
+            }
         }
     }
 
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
-        if (apiKey.isBlank()) { _error.value = "API Key not found. Please set it in Settings."; return }
+        
+        if (apiKey.isBlank()) { 
+            _error.value = "API Key not found. Please set it in Settings."
+            return 
+        }
+        
         _isLoading.value = true
         _error.value = null
 
@@ -245,24 +310,42 @@ class ResultViewModel(
                         ${currentNote.rawText}
                     """.trimIndent()
                 }
+                
                 val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = prompt)))))
                 val response = RetrofitClient.service.generateContent(apiKey, request)
                 val processedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                
                 if (processedText != null) {
                     val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
-                    _note.value = updatedNote; noteRepository.update(updatedNote)
-                } else { _error.value = "Failed to process text. Empty response from AI." }
-            } catch (e: HttpException) { _error.value = if (e.code() == 429) "API Key limit exhausted. Please wait or use a different key." else "HTTP Error: ${e.code()} - ${e.message()}"
-            } catch (e: Exception) { _error.value = "An error occurred: ${e.message}"
-            } finally { _isLoading.value = false }
+                    _note.value = updatedNote
+                    noteRepository.update(updatedNote)
+                } else { 
+                    _error.value = "Failed to process text. Empty response from AI." 
+                }
+            } catch (e: HttpException) { 
+                _error.value = if (e.code() == 429) "API Key limit exhausted. Please wait or use a different key." else "HTTP Error: ${e.code()} - ${e.message()}"
+            } catch (e: Exception) { 
+                _error.value = "An error occurred: ${e.message}"
+            } finally { 
+                _isLoading.value = false 
+            }
         }
     }
 
-    override fun onCleared() { super.onCleared(); mediaPlayer?.release(); mediaPlayer = null; progressJob?.cancel() }
+    override fun onCleared() { 
+        super.onCleared()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        progressJob?.cancel() 
+    }
 
     companion object {
         fun provideFactory(noteId: Int, repository: NoteRepository, apiKey: String): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T { return ResultViewModel(noteId, repository, apiKey) as T }
+            @Suppress("UNCHECKED_CAST") 
+            override fun <T : ViewModel> create(modelClass: Class<T>): T { 
+                return ResultViewModel(noteId, repository, apiKey) as T 
+            }
         }
     }
 }
+
