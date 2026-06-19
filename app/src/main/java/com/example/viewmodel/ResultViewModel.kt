@@ -1,335 +1,451 @@
-package com.example.viewmodel
+package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
-import android.media.MediaPlayer
-import android.net.Uri
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
-import com.example.data.Candidate
-import com.example.data.Content
-import com.example.data.GenerateContentRequest
-import com.example.data.InlineData
-import com.example.data.NoteEntity
-import com.example.data.NoteRepository
-import com.example.data.Part
-import com.example.data.RetrofitClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.example.ui.components.MarkdownText
+import com.example.viewmodel.ResultViewModel
 import kotlinx.coroutines.launch
-import retrofit2.HttpException
-import java.io.File
 
-class ResultViewModel(
-    private val noteId: Int,
-    private val noteRepository: NoteRepository,
-    private val apiKey: String
-) : ViewModel() {
-
-    private val _note = MutableStateFlow<NoteEntity?>(null)
-    val note: StateFlow<NoteEntity?> = _note.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
-
-    private var mediaPlayer: MediaPlayer? = null
-    private var progressJob: Job? = null
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@Composable
+fun ResultScreen(
+    viewModel: ResultViewModel,
+    noteId: Int, 
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    sharedTransitionScope: SharedTransitionScope,
+    onNavigateBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val note by viewModel.note.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
     
-    private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
-    
-    private val _playbackProgress = MutableStateFlow(0f)
-    val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
+    // Audio States
+    val isPlaying by viewModel.isPlaying.collectAsState()
+    val playbackProgress by viewModel.playbackProgress.collectAsState()
 
-    init {
-        loadNote()
-    }
+    var showLanguageMenu by remember { mutableStateOf(false) }
+    var showSidePanel by remember { mutableStateOf(false) }
+    var searchHighlightQuery by remember { mutableStateOf("") }
+    var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
-    private fun loadNote() {
-        viewModelScope.launch {
-            val fetchedNote = noteRepository.getNoteById(noteId)
-            _note.value = fetchedNote
-            
-            // LOGIKA JENIUS: Kalo catatan ini baru di-import (Audio ada tapi rawText kosong),
-            // Otomatis jalanin transkrip tanpa user harus mencet apa-apa!
-            if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
-                transcribeImportedAudio()
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+
+    val exportAudioLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("audio/mp4")
+    ) { uri ->
+        uri?.let {
+            viewModel.exportAudio(context, it) { msg ->
+                coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
             }
         }
     }
 
-    fun updateTitle(newTitle: String) {
-        val currentNote = _note.value ?: return
-        val updatedNote = currentNote.copy(title = newTitle, timestamp = System.currentTimeMillis())
-        _note.value = updatedNote
-        viewModelScope.launch {
-            noteRepository.update(updatedNote)
-        }
-    }
-
-    fun toggleAudio() {
-        val path = _note.value?.audioPath ?: return
-        val file = File(path)
-        if (!file.exists()) {
-            _error.value = "Original audio file not found or corrupted."
-            return
-        }
-
-        if (mediaPlayer == null) {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(path)
-                prepare()
-                setOnCompletionListener {
-                    _isPlaying.value = false
-                    _playbackProgress.value = 0f
-                    progressJob?.cancel()
-                }
-            }
-        }
-
-        if (mediaPlayer?.isPlaying == true) {
-            mediaPlayer?.pause()
-            _isPlaying.value = false
-            progressJob?.cancel()
-        } else {
-            mediaPlayer?.start()
-            _isPlaying.value = true
-            startProgressTracker()
-        }
-    }
-
-    private fun startProgressTracker() {
-        progressJob?.cancel()
-        progressJob = viewModelScope.launch {
-            while (_isPlaying.value) {
-                mediaPlayer?.let {
-                    if (it.duration > 0) {
-                        _playbackProgress.value = it.currentPosition.toFloat() / it.duration.toFloat()
-                    }
-                }
-                delay(100)
-            }
-        }
-    }
-
-    fun seekAudio(progress: Float) {
-        mediaPlayer?.let {
-            val seekTo = (it.duration * progress).toInt()
-            it.seekTo(seekTo)
-            _playbackProgress.value = progress
-        }
-    }
-
-    fun exportAudio(context: Context, uri: Uri, onResult: (String) -> Unit) {
-        val path = _note.value?.audioPath
-        if (path == null || !File(path).exists()) {
-            onResult("Audio file not found!")
-            return
-        }
-        
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val sourceFile = File(path)
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    sourceFile.inputStream().use { input ->
-                        input.copyTo(output)
-                    }
-                }
-                launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) { onResult("Failed to export audio: ${e.message}") }
-            }
-        }
-    }
-
-    // MESIN TRANSKRIP AUDIO LANGSUNG KE GEMINI 2.5 FLASH
-    private fun transcribeImportedAudio() {
-        val currentNote = _note.value ?: return
-        val audioPath = currentNote.audioPath ?: return
-
-        if (apiKey.isBlank()) {
-            _error.value = "API Key not found. Cannot transcribe audio."
-            return
-        }
-
-        _isLoading.value = true
-        _error.value = null
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val file = File(audioPath)
-                if (!file.exists()) throw Exception("Audio file missing from cache.")
-
-                // Ubah file MP3 jadi sandi Base64
-                val bytes = file.readBytes()
-                val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                
-                // Gemini nerima mp3, m4a, dll pake tipe ini
-                val mimeType = "audio/mp3"
-
-                // Murni cuma ngetranskrip, TIDAK meringkas! Tetep ikutin aturan matematika.
-                val promptText = """
-                    You are an expert audio transcriber. Transcribe the following audio precisely.
-                    
-                    CRITICAL MATHEMATICAL RULES:
-                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √). 
-                    2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
-                    
-                    STRICT FORMATTING RULES:
-                    1. DO NOT summarize. Output the exact raw transcript word-for-word.
-                    2. DO NOT add conversational filler or AI pleasantries. Just output the text.
-                """.trimIndent()
-
-                // Request ke API pake inlineData Audio
-                val request = GenerateContentRequest(
-                    contents = listOf(
-                        Content(
-                            parts = listOf(
-                                Part(text = promptText),
-                                Part(inlineData = InlineData(mimeType = mimeType, data = base64Audio))
+    with(sharedTransitionScope) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            modifier = Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "note-$noteId"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                )
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                TopAppBar(
+                    title = { 
+                        if (note != null) {
+                            BasicTextField(
+                                value = note!!.title,
+                                onValueChange = { viewModel.updateTitle(it) },
+                                textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        )
-                    )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showLanguageMenu = true }) {
+                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
+                            }
+                            DropdownMenu(
+                                expanded = showLanguageMenu,
+                                onDismissRequest = { showLanguageMenu = false }
+                            ) {
+                                val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
+                                languages.forEachIndexed { index, lang ->
+                                    Text(
+                                        text = lang,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                    DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
+                                    DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
+                                    if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                }
+                            }
+                        }
+                        IconButton(onClick = { showSidePanel = true }) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                        }
+                    },
+                    scrollBehavior = scrollBehavior
                 )
+            }
+        ) { paddingValues ->
+            if (note == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
+                }
+            } else {
+                SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (isLoading) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // PERBAIKAN: Animasi AI Thinking (Material 3 Expressive)
+                                    AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        "AI is processing your text...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
 
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                        if (error != null) {
+                            Text(
+                                text = error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
 
-                launch(Dispatchers.Main) {
-                    if (transcript != null) {
-                        val updatedNote = currentNote.copy(rawText = transcript.trim(), timestamp = System.currentTimeMillis())
-                        _note.value = updatedNote
-                        noteRepository.update(updatedNote)
-                    } else {
-                        _error.value = "Failed to transcribe audio. Empty response from Gemini."
+                        if (!note!!.summary.isNullOrEmpty()) {
+                            MarkdownText(
+                                text = note!!.summary!!, 
+                                highlightQuery = searchHighlightQuery, 
+                                fontFamily = selectedFont,
+                                listState = listState,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                            )
+                        } else if (!isLoading) {
+                            // PERBAIKAN: Raw Transcript sekarang dikasih otot Scrollable!
+                            Text(
+                                text = "Raw Transcript:\n\n${note!!.rawText}",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                                modifier = Modifier
+                                    .weight(1f) // Biar proporsional menuhin layar
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .verticalScroll(rememberScrollState()), // Otot Scroll
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                        }
                     }
-                    _isLoading.value = false
-                }
-            } catch (e: HttpException) {
-                launch(Dispatchers.Main) {
-                    _error.value = if (e.code() == 429) "API Key limit exhausted." else "HTTP Error: ${e.code()}"
-                    _isLoading.value = false
-                }
-            } catch (e: Exception) {
-                launch(Dispatchers.Main) {
-                    _error.value = "Transcription error: ${e.message}"
-                    _isLoading.value = false
                 }
             }
         }
     }
 
-    // Fungsi Rapiin/Ringkas dari TEKS (Bukan Audio) tetep jalan seperti biasa!
-    fun processText(language: String, mode: String) {
-        val currentNote = _note.value ?: return
-        if (apiKey.isBlank()) {
-            _error.value = "API Key not found. Please set it in Settings."
-            return
-        }
+    if (showSidePanel && note != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showSidePanel = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp)
+            ) {
+                Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(12.dp))
 
-        _isLoading.value = true
-        _error.value = null
-
-        viewModelScope.launch {
-            try {
-                val prompt = if (mode == "tidy") {
-                    """
-                        You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
-                        
-                        CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
-                        
-                        STRICT FORMATTING RULES:
-                        1. DO NOT summarize. Preserve every single detail, thought, and information from the raw transcript.
-                        2. ONLY fix grammatical errors, remove filler words (e.g., "umm", "uh", repetitions), and structure the text logically with proper punctuation.
-                        3. MUST use neat Markdown formatting:
-                           - Use '# ' for Main Title (H1).
-                           - Use '## ' for Subtitles (H2) if the topic shifts naturally.
-                           - Use bullet points ('- ') for lists if the speaker is listing items.
-                           - Provide empty lines between paragraphs for readability.
-                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the perfectly tidied up text.
-                        
-                        Raw Text:
-                        ${currentNote.rawText}
-                    """.trimIndent()
-                } else {
-                    """
-                        You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
-                        
-                        CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
-                        
-                        STRICT FORMATTING RULES:
-                        1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
-                        2. Create a comprehensive summary without losing key points.
-                        3. MUST use neat Markdown formatting:
-                           - Use '# ' for Main Title (H1).
-                           - Use '## ' for Subtitles (H2).
-                           - Use bullet points ('- ') for lists.
-                           - Provide empty lines between paragraphs.
-                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the summarized text.
-                        
-                        Raw Text:
-                        ${currentNote.rawText}
-                    """.trimIndent()
+                // PERBAIKAN: Fallback Card elegan buat Catatan tanpa Audio (Dikte Live)
+                if (note!!.audioPath == null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                 }
                 
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (note!!.audioPath != null) {
+                        var isPlayPressed by remember { mutableStateOf(false) }
+                        val playWidth by animateDpAsState(
+                            targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "playWidth"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(playWidth).height(48.dp).clip(CircleShape)
+                                .background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onPress = {
+                                        isPlayPressed = true; tryAwaitRelease(); isPlayPressed = false
+                                        viewModel.toggleAudio()
+                                    })
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (isPlaying) "Pause" else "Play", 
+                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    if (note!!.audioPath != null) {
+                        Box(
+                            modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                                exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4")
+                            }.padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
+                            coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
+                            showSidePanel = false
+                        }.padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Copy", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
+                            showSidePanel = false
+                        }.padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Share", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+
+                if (note!!.audioPath != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Slider(
+                        value = playbackProgress,
+                        onValueChange = { viewModel.seekAudio(it) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = searchHighlightQuery,
+                    onValueChange = { searchHighlightQuery = it },
+                    label = { Text("Find word in note...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val processedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                val textToSearch = note!!.summary ?: note!!.rawText
+                val lines = textToSearch.split("\n")
+                val searchResults = lines.mapIndexedNotNull { index, line ->
+                    if (searchHighlightQuery.isNotBlank() && line.contains(searchHighlightQuery, ignoreCase = true)) {
+                        index to line.trim()
+                    } else null
+                }
+
+                if (searchHighlightQuery.isNotBlank() && searchResults.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp)) {
+                        items(searchResults) { (index, line) ->
+                            Text(
+                                text = line, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    coroutineScope.launch { listState.animateScrollToItem(index) }
+                                    showSidePanel = false
+                                }.padding(vertical = 12.dp, horizontal = 8.dp)
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
                 
-                if (processedText != null) {
-                    val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
-                    _note.value = updatedNote
-                    noteRepository.update(updatedNote)
-                } else {
-                    _error.value = "Failed to process text. Empty response from AI."
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Reading Font", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                        onClick = { selectedFont = FontFamily.SansSerif },
+                        selected = selectedFont == FontFamily.SansSerif
+                    ) { Text("Sans") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                        onClick = { selectedFont = FontFamily.Serif },
+                        selected = selectedFont == FontFamily.Serif
+                    ) { Text("Serif") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                        onClick = { selectedFont = FontFamily.Monospace },
+                        selected = selectedFont == FontFamily.Monospace
+                    ) { Text("Mono") }
                 }
-            } catch (e: HttpException) {
-                if (e.code() == 429) {
-                    _error.value = "API Key limit exhausted. Please wait or use a different key."
-                } else {
-                    _error.value = "HTTP Error: ${e.code()} - ${e.message()}"
-                }
-            } catch (e: Exception) {
-                _error.value = "An error occurred: ${e.message}"
-            } finally {
-                _isLoading.value = false
+                Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }
+}
 
-    override fun onCleared() {
-        super.onCleared()
-        mediaPlayer?.release()
-        mediaPlayer = null
-        progressJob?.cancel()
+// KOMPONEN BARU: Animasi AI Thinking (Breathing Waveform)
+@Composable
+private fun AiThinkingAnimation(color: Color) {
+    val infiniteTransition = rememberInfiniteTransition(label = "ai_thinking")
+    val heights = List(4) { index ->
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 400, delayMillis = index * 100, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "height_$index"
+        )
     }
 
-    companion object {
-        fun provideFactory(
-            noteId: Int,
-            repository: NoteRepository,
-            apiKey: String
-        ): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return ResultViewModel(noteId, repository, apiKey) as T
-                }
-            }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.height(32.dp)
+    ) {
+        heights.forEach { height ->
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .fillMaxHeight(height.value)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
     }
 }
 
