@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -49,17 +50,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
@@ -82,11 +89,19 @@ fun ResultScreen(
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     var searchHighlightQuery by remember { mutableStateOf("") }
+    
+    // STATE BARU: Buat nyimpen highlight yang luntur perlahan
+    var temporaryHighlight by remember { mutableStateOf("") }
+    
     var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
     val listState = rememberLazyListState()
+    val rawTextScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val focusManager = LocalFocusManager.current
+    var isTitleFocused by remember { mutableStateOf(false) }
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
@@ -97,6 +112,15 @@ fun ResultScreen(
             viewModel.exportAudio(context, it) { msg ->
                 coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
             }
+        }
+    }
+
+    // LOGIKA HARDWARE BACK BUTTON (Nutup Keyboard Title Editor)
+    BackHandler(enabled = isTitleFocused || showSidePanel) {
+        if (showSidePanel) {
+            showSidePanel = false
+        } else if (isTitleFocused) {
+            focusManager.clearFocus()
         }
     }
 
@@ -121,9 +145,12 @@ fun ResultScreen(
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
+                                singleLine = true,
                                 textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged { isTitleFocused = it.isFocused }
                             )
                         }
                     },
@@ -202,21 +229,26 @@ fun ResultScreen(
                         if (!note!!.summary.isNullOrEmpty()) {
                             MarkdownText(
                                 text = note!!.summary!!, 
-                                highlightQuery = searchHighlightQuery, 
+                                highlightQuery = temporaryHighlight, // Pake Highlight Sementara
                                 fontFamily = selectedFont,
                                 listState = listState,
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
                         } else if (!isLoading) {
                             Text(
-                                text = "Raw Transcript:\n\n${note!!.rawText}",
+                                // LOGIKA BARU: Teks Mentah sekarang pake AnnotatedString biar bisa di-highlight!
+                                text = buildHighlightedString(
+                                    text = "Raw Transcript:\n\n${note!!.rawText}", 
+                                    query = temporaryHighlight,
+                                    highlightColor = Color.Yellow.copy(alpha = 0.5f),
+                                    textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                ),
                                 style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                    .verticalScroll(rawTextScrollState)
                             )
                         }
                     }
@@ -398,8 +430,19 @@ fun ResultScreen(
                                 text = line, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.fillMaxWidth().clickable {
-                                    coroutineScope.launch { listState.animateScrollToItem(index) }
-                                    showSidePanel = false
+                                    // LOGIKA FADING HIGHLIGHT: Lompat ke teks, tahan 4 detik, trus pudar!
+                                    coroutineScope.launch { 
+                                        temporaryHighlight = searchHighlightQuery
+                                        if (note!!.summary != null) {
+                                            listState.animateScrollToItem(index)
+                                        } else {
+                                            // Scroll buat raw text sekiranya bisa (di sini kita ambil aproksimasi simpel)
+                                            rawTextScrollState.animateScrollTo(index * 60)
+                                        }
+                                        showSidePanel = false
+                                        delay(4000)
+                                        temporaryHighlight = "" // Pudar!
+                                    }
                                 }.padding(vertical = 12.dp, horizontal = 8.dp)
                             )
                             HorizontalDivider()
@@ -434,6 +477,31 @@ fun ResultScreen(
     }
 }
 
+// MESIN HIGHLIGHTER BUAT TEKS MENTAH
+fun buildHighlightedString(text: String, query: String, highlightColor: Color, textColor: Color) = buildAnnotatedString {
+    if (query.isBlank()) {
+        withStyle(SpanStyle(color = textColor)) { append(text) }
+        return@buildAnnotatedString
+    }
+    
+    var startIndex = 0
+    val lowerText = text.lowercase()
+    val lowerQuery = query.lowercase()
+    
+    while (startIndex < text.length) {
+        val index = lowerText.indexOf(lowerQuery, startIndex)
+        if (index == -1) {
+            withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex)) }
+            break
+        }
+        withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex, index)) }
+        withStyle(SpanStyle(background = highlightColor, color = Color.Black)) {
+            append(text.substring(index, index + query.length))
+        }
+        startIndex = index + query.length
+    }
+}
+
 @Composable
 private fun AiThinkingAnimation(color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "ai_thinking")
@@ -465,3 +533,4 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
+
