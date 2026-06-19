@@ -1,4 +1,3 @@
-```kotlin
 package com.example.ui.screens
 
 import android.content.Intent
@@ -447,5 +446,3 @@ fun NoteCard(
         }
     }
 }
-
-
