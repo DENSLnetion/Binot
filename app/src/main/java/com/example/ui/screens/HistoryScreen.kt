@@ -280,7 +280,6 @@ fun HistoryScreen(
             confirmButton = {
                 Button(onClick = {
                     if (newLabelInput.isNotBlank()) {
-                        // PERBAIKAN: Cuma bikin label murni, KAGA buka catatan kosong!
                         viewModel.createIndependentLabel(newLabelInput.trim())
                         showNewLabelDialog = false
                         newLabelInput = ""
@@ -303,7 +302,6 @@ fun HistoryScreen(
         )
     }
 
-    // In-App Updater
     if (latestRelease != null) {
         ModalBottomSheet(onDismissRequest = { viewModel.dismissUpdateNotification() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
@@ -338,9 +336,18 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit
 ) {
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
-    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "tMargin")
+    
+    // FIX FATAL: Logika Matematika Animasi Mulus
+    // Kuncup: Latar belakang turun aman ngelewatin jam (topInsets + 8.dp)
+    // Melar: Latar belakang nempel ujung atas layar (0.dp)
+    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
+    
+    // Padding teks di dalam kapsul:
+    // Kuncup: Normal (16.dp) karena kotak udah aman di bawah jam
+    // Melar: Teks didorong ke bawah sejauh jam (topInsets + 16.dp) biar kaga ketutupan
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
@@ -350,7 +357,7 @@ fun MorphingSearchBar(
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) 
-            .let { if (isFocused) it.windowInsetsPadding(WindowInsets.statusBars) else it }
+            // Fungsi windowInsetsPadding kita hapus karena bikin loncat instan!
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
