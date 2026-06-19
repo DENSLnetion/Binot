@@ -5,8 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.GithubRelease
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
+import com.example.data.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +24,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
+    val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
     val filteredNotes: StateFlow<List<NoteEntity>> = combine(
         repository.allNotes, _searchQuery
@@ -40,6 +45,40 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
+
+    fun checkForAppUpdate(currentVersion: String) {
+        if (_latestRelease.value != null) return 
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val release = RetrofitClient.githubService.getLatestRelease()
+                // Cek 
+                if (isVersionGreater(release.tag_name, currentVersion)) {
+                    _latestRelease.value = release
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // (Semantic Versioning Comparator)
+    private fun isVersionGreater(latest: String, current: String): Boolean {
+        val l = latest.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
+        val c = current.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
+        
+        for (i in 0 until maxOf(l.size, c.size)) {
+            val lVal = l.getOrNull(i) ?: 0
+            val cVal = c.getOrNull(i) ?: 0
+            if (lVal > cVal) return true
+            if (lVal < cVal) return false
+        }
+        return false
+    }
+
+    fun dismissUpdateNotification() {
+        _latestRelease.value = null
+    }
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
@@ -115,5 +154,4 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
-
 
