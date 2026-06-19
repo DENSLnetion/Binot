@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
@@ -75,7 +76,6 @@ fun ResultScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     
-    // Audio States
     val isPlaying by viewModel.isPlaying.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
 
@@ -112,6 +112,11 @@ fun ResultScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
+                    // PERBAIKAN ZEN MODE: Hapus warna gelap saat scroll biar fullscreen illusion tetep mulus
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface
+                    ),
                     title = { 
                         if (note != null) {
                             BasicTextField(
@@ -175,7 +180,6 @@ fun ResultScreen(
                                     modifier = Modifier.padding(24.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    // Animasi AI Thinking Material 3 Expressive
                                     AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
@@ -205,7 +209,6 @@ fun ResultScreen(
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
                         } else if (!isLoading) {
-                            // Teks mentah yang bisa di scroll murni
                             Text(
                                 text = "Raw Transcript:\n\n${note!!.rawText}",
                                 style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
@@ -234,7 +237,6 @@ fun ResultScreen(
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Fallback Card Elegan
                 if (note!!.audioPath == null) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -257,6 +259,24 @@ fun ResultScreen(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // FITUR UNDO / RESTORE RAW TEXT
+                    if (note!!.summary != null) {
+                        Box(
+                            modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.errorContainer).clickable {
+                                viewModel.restoreRawText()
+                                coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
+                                showSidePanel = false
+                            }.padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
                     if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
                         val playWidth by animateDpAsState(
@@ -416,7 +436,6 @@ fun ResultScreen(
     }
 }
 
-// KOMPONEN BARU: Animasi AI Thinking (Breathing Waveform)
 @Composable
 private fun AiThinkingAnimation(color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "ai_thinking")
