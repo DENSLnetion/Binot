@@ -25,13 +25,11 @@ class RecordViewModel(
     private val _recordingSeconds = MutableStateFlow(0)
     val recordingSeconds: StateFlow<Int> = _recordingSeconds.asStateFlow()
     private var timerJob: Job? = null
-    
-    // Penampung path audio yang baru aja kelar direkam
-    private var lastRecordedAudioPath: String? = null
 
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
-            lastRecordedAudioPath = audioRecorderManager.stopRecording()
+            // Abaikan file path karena kita ga nyimpen MP4
+            audioRecorderManager.stopRecording()
             stopTimer()
         } else {
             audioRecorderManager.startRecording(isEmulator)
@@ -60,13 +58,13 @@ class RecordViewModel(
         
         viewModelScope.launch {
             val title = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
-            // Save sekalian sama file audionya
+            // audioPath dipaksa null karena hardware kaga ngizinin
             val note = NoteEntity(
                 title = title, 
                 rawText = text, 
                 summary = null, 
                 isPinned = false,
-                audioPath = lastRecordedAudioPath
+                audioPath = null 
             )
             val id = repository.insert(note).toInt()
             onSaved(id)
@@ -92,5 +90,4 @@ class RecordViewModel(
             }
     }
 }
-
 
