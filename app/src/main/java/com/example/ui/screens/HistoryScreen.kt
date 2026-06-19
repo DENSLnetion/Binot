@@ -30,16 +30,19 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -146,18 +149,19 @@ fun HistoryScreen(
                     Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        val sortIcons = listOf(
-                            androidx.compose.material.icons.Icons.Default.NewReleases,      // Terbaru
-                            androidx.compose.material.icons.Icons.Default.Audiotrack,        // Terlama (reuse icon)
-                            androidx.compose.material.icons.Icons.Default.Label              // A-Z
+                        // AccessTime = jam/terbaru, History = putar balik/terlama, SortByAlpha = A-Z
+                        data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
+                        val sortOptions = listOf(
+                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
+                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
-                        val sortDescriptions = listOf("Terbaru", "Terlama", "A–Z")
-                        sortIcons.forEachIndexed { index, icon ->
+                        sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortIcons.size),
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
                                 onClick = { viewModel.setSortMode(index) },
                                 selected = sortMode == index
-                            ) { Icon(icon, contentDescription = sortDescriptions[index], modifier = Modifier.size(18.dp)) }
+                            ) { Icon(option.icon, contentDescription = option.description, modifier = Modifier.size(18.dp)) }
                         }
                     }
 
