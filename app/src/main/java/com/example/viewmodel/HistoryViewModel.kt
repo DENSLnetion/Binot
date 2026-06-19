@@ -131,10 +131,30 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _searchQuery.value = query
     }
 
+    private val _recentlyDeleted = MutableStateFlow<List<NoteEntity>>(emptyList())
+    val recentlyDeleted: StateFlow<List<NoteEntity>> = _recentlyDeleted.asStateFlow()
+
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
+            // Simpan dulu sebelum hapus, untuk keperluan undo
+            val notesToDelete = ids.mapNotNull { repository.getNoteById(it) }
+            _recentlyDeleted.value = notesToDelete
             ids.forEach { repository.deleteById(it) }
         }
+    }
+
+    fun undoDelete() {
+        viewModelScope.launch {
+            _recentlyDeleted.value.forEach { note ->
+                // Insert balik dengan id asli supaya gak duplikat
+                repository.insert(note)
+            }
+            _recentlyDeleted.value = emptyList()
+        }
+    }
+
+    fun clearRecentlyDeleted() {
+        _recentlyDeleted.value = emptyList()
     }
 
     fun cloneMultiple(ids: Set<Int>) {
