@@ -1,5 +1,8 @@
 package com.example.viewmodel
 
+import android.content.Context
+import android.media.MediaPlayer
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,11 +13,15 @@ import com.example.data.NoteEntity
 import com.example.data.NoteRepository
 import com.example.data.Part
 import com.example.data.RetrofitClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import java.io.File
 
 class ResultViewModel(
     private val noteId: Int,
@@ -31,13 +38,22 @@ class ResultViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // LOGIKA AUDIO PLAYER
+    private var mediaPlayer: MediaPlayer? = null
+    private var progressJob: Job? = null
+    
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    
+    private val _playbackProgress = MutableStateFlow(0f)
+    val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
+
     init {
         loadNote()
     }
 
     private fun loadNote() {
         viewModelScope.launch {
-            // Murni cuma load data, ga nyentuh timestamp biar ga loncat
             _note.value = noteRepository.getNoteById(noteId)
         }
     }
@@ -51,7 +67,83 @@ class ResultViewModel(
         }
     }
 
-    // LOGIKA BARU: Nerima parameter mode "tidy" atau "summarize"
+    // Fungsi Mutakhir Pemutar Audio Asli
+    fun toggleAudio() {
+        val path = _note.value?.audioPath ?: return
+        val file = File(path)
+        if (!file.exists()) {
+            _error.value = "Original audio file not found or corrupted."
+            return
+        }
+
+        if (mediaPlayer == null) {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(path)
+                prepare()
+                setOnCompletionListener {
+                    _isPlaying.value = false
+                    _playbackProgress.value = 0f
+                    progressJob?.cancel()
+                }
+            }
+        }
+
+        if (mediaPlayer?.isPlaying == true) {
+            mediaPlayer?.pause()
+            _isPlaying.value = false
+            progressJob?.cancel()
+        } else {
+            mediaPlayer?.start()
+            _isPlaying.value = true
+            startProgressTracker()
+        }
+    }
+
+    private fun startProgressTracker() {
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            while (_isPlaying.value) {
+                mediaPlayer?.let {
+                    if (it.duration > 0) {
+                        _playbackProgress.value = it.currentPosition.toFloat() / it.duration.toFloat()
+                    }
+                }
+                delay(100)
+            }
+        }
+    }
+
+    fun seekAudio(progress: Float) {
+        mediaPlayer?.let {
+            val seekTo = (it.duration * progress).toInt()
+            it.seekTo(seekTo)
+            _playbackProgress.value = progress
+        }
+    }
+
+    // Fungsi Export File MP3/MP4 ke direktori luar
+    fun exportAudio(context: Context, uri: Uri, onResult: (String) -> Unit) {
+        val path = _note.value?.audioPath
+        if (path == null || !File(path).exists()) {
+            onResult("Audio file not found!")
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val sourceFile = File(path)
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    sourceFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) { onResult("Failed to export audio: ${e.message}") }
+            }
+        }
+    }
+
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
         if (apiKey.isBlank()) {
@@ -64,7 +156,6 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
-                // Cabang Logika Prompt AI yang Super Ketat
                 val prompt = if (mode == "tidy") {
                     """
                         You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
@@ -137,6 +228,13 @@ class ResultViewModel(
         }
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        progressJob?.cancel()
+    }
+
     companion object {
         fun provideFactory(
             noteId: Int,
@@ -151,4 +249,5 @@ class ResultViewModel(
             }
     }
 }
+
 
