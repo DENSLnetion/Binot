@@ -78,7 +78,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // LOGIKA TUKANG FOTOKOPI MURNI (Tanpa YouTube)
     fun importAudio(context: Context, uri: Uri, onResult: (Int) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -116,4 +115,5 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
+
 
