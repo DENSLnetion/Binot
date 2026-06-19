@@ -9,6 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,12 +18,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
@@ -48,6 +49,10 @@ fun HistoryScreen(
     val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
         notes.find { it.id == id }?.isPinned == true 
     }
+
+    // PERBAIKAN: Pisahin catatan jadi 2 Rak (Pinned dan Biasa)
+    val pinnedNotes = notes.filter { it.isPinned }
+    val unpinnedNotes = notes.filter { !it.isPinned }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (selectionMode) {
@@ -124,41 +129,87 @@ fun HistoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalItemSpacing = 8.dp
             ) {
-                items(notes, key = { it.id }) { note ->
-                    val isSelected = selectedNotes.contains(note.id)
-                    // Panggil fungsi Scope dari parent buat ngunci animasi
-                    with(sharedTransitionScope) {
-                        NoteCard(
-                            note = note,
-                            isSelected = isSelected,
-                            modifier = Modifier.sharedBounds(
-                                sharedContentState = rememberSharedContentState(key = "note-${note.id}"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            ),
-                            onPinToggle = { 
-                                viewModel.togglePinMultiple(setOf(note.id), !note.isPinned) 
-                            },
-                            onLongClick = {
-                                if (!selectionMode) {
-                                    selectionMode = true
-                                    selectedNotes = setOf(note.id)
-                                }
-                            },
-                            onClick = {
-                                if (selectionMode) {
-                                    selectedNotes = if (isSelected) {
-                                        selectedNotes - note.id
-                                    } else {
-                                        selectedNotes + note.id
-                                    }
-                                    if (selectedNotes.isEmpty()) selectionMode = false
-                                } else {
-                                    onNoteClick(note.id)
-                                }
-                            }
+                // Rak Pinned
+                if (pinnedNotes.isNotEmpty()) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Text(
+                            text = "Pinned",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp)
                         )
                     }
+                    items(pinnedNotes, key = { it.id }) { note ->
+                        val isSelected = selectedNotes.contains(note.id)
+                        with(sharedTransitionScope) {
+                            NoteCard(
+                                note = note,
+                                isSelected = isSelected,
+                                modifier = Modifier.sharedBounds(
+                                    sharedContentState = rememberSharedContentState(key = "note-${note.id}"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                ),
+                                onLongClick = {
+                                    if (!selectionMode) {
+                                        selectionMode = true
+                                        selectedNotes = setOf(note.id)
+                                    }
+                                },
+                                onClick = {
+                                    if (selectionMode) {
+                                        selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id
+                                        if (selectedNotes.isEmpty()) selectionMode = false
+                                    } else {
+                                        onNoteClick(note.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
+
+                // Rak Collection
+                if (unpinnedNotes.isNotEmpty()) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Text(
+                            text = "Collection",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                    items(unpinnedNotes, key = { it.id }) { note ->
+                        val isSelected = selectedNotes.contains(note.id)
+                        with(sharedTransitionScope) {
+                            NoteCard(
+                                note = note,
+                                isSelected = isSelected,
+                                modifier = Modifier.sharedBounds(
+                                    sharedContentState = rememberSharedContentState(key = "note-${note.id}"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                ),
+                                onLongClick = {
+                                    if (!selectionMode) {
+                                        selectionMode = true
+                                        selectedNotes = setOf(note.id)
+                                    }
+                                },
+                                onClick = {
+                                    if (selectionMode) {
+                                        selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id
+                                        if (selectedNotes.isEmpty()) selectionMode = false
+                                    } else {
+                                        onNoteClick(note.id)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
     }
@@ -188,8 +239,7 @@ fun HistoryScreen(
 fun NoteCard(
     note: NoteEntity, 
     isSelected: Boolean, 
-    modifier: Modifier = Modifier, // Modifier buat nangkep SharedElement
-    onPinToggle: () -> Unit,
+    modifier: Modifier = Modifier,
     onLongClick: () -> Unit, 
     onClick: () -> Unit
 ) {
@@ -203,7 +253,7 @@ fun NoteCard(
                              else MaterialTheme.colorScheme.surfaceVariant
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-        modifier = modifier // Inject kunci Morphing ke sini
+        modifier = modifier
             .fillMaxWidth()
             .height(height)
             .combinedClickable(
@@ -215,7 +265,7 @@ fun NoteCard(
             Text(
                 text = note.title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -228,28 +278,11 @@ fun NoteCard(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(modifier = Modifier.weight(1f))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = formatter.format(Date(note.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
-                IconButton(
-                    onClick = onPinToggle,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = if (note.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = "Toggle Pin",
-                        tint = if (note.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            Text(
+                text = formatter.format(Date(note.timestamp)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
         }
     }
 }
