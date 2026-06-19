@@ -4,11 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -53,7 +53,6 @@ class MainActivity : ComponentActivity() {
         val appContainer = (application as BinotApplication).container
 
         setContent {
-            // PERBAIKAN DI SINI: Masukin noteRepository biar SettingsViewModel bisa Backup/Restore
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = SettingsViewModel.provideFactory(
                     appContainer.settingsRepository, 
@@ -70,6 +69,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val navController = rememberNavController()
@@ -77,7 +77,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val currentRoute = navBackStackEntry?.destination?.route
     val userName by settingsViewModel.userName.collectAsState()
 
-    // Logika anti-flicker
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(userName) {
         delay(100) 
@@ -89,7 +88,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         return
     }
 
-    // Interseptor Onboarding
     val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
     Scaffold(
@@ -130,66 +128,71 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController, 
-            startDestination = startDestination,
-            modifier = Modifier.padding(innerPadding),
-            enterTransition = { fadeIn(animationSpec = tween(0)) },
-            exitTransition = { fadeOut(animationSpec = tween(0)) },
-            popEnterTransition = { fadeIn(animationSpec = tween(0)) },
-            popExitTransition = { fadeOut(animationSpec = tween(0)) }
-        ) {
-            composable("onboarding") {
-                OnboardingScreen(
-                    onComplete = { name, key ->
-                        settingsViewModel.saveUserName(name)
-                        settingsViewModel.saveApiKey(key)
-                        navController.navigate("record") {
-                            popUpTo("onboarding") { inclusive = true }
+        // PERBAIKAN 2: Bungkus NavHost pake SharedTransitionLayout buat efek Morphing
+        SharedTransitionLayout {
+            NavHost(
+                navController = navController, 
+                startDestination = startDestination,
+                modifier = Modifier.padding(innerPadding),
+                enterTransition = { fadeIn(animationSpec = tween(0)) },
+                exitTransition = { fadeOut(animationSpec = tween(0)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(0)) },
+                popExitTransition = { fadeOut(animationSpec = tween(0)) }
+            ) {
+                composable("onboarding") {
+                    OnboardingScreen(
+                        onComplete = { name, key ->
+                            settingsViewModel.saveUserName(name)
+                            settingsViewModel.saveApiKey(key)
+                            navController.navigate("record") {
+                                popUpTo("onboarding") { inclusive = true }
+                            }
                         }
-                    }
-                )
-            }
-            composable("record") {
-                val recordViewModel: RecordViewModel = viewModel(
-                    factory = RecordViewModel.provideFactory(
-                        appContainer.audioRecorderManager,
-                        appContainer.noteRepository
                     )
-                )
-                RecordScreen(
-                    viewModel = recordViewModel,
-                    userName = userName,
-                    onNavigateToResult = { id -> navController.navigate("result/$id") }
-                )
-            }
-            composable("history") {
-                val historyViewModel: HistoryViewModel = viewModel(
-                    factory = HistoryViewModel.provideFactory(appContainer.noteRepository)
-                )
-                HistoryScreen(
-                    viewModel = historyViewModel,
-                    onNoteClick = { id -> navController.navigate("result/$id") }
-                )
-            }
-            composable("settings") {
-                SettingsScreen(viewModel = settingsViewModel)
-            }
-            composable(
-                "result/{noteId}",
-                enterTransition = { scaleIn(initialScale = 0.85f, animationSpec = tween(300)) + fadeIn(tween(300)) },
-                exitTransition = { scaleOut(targetScale = 0.85f, animationSpec = tween(300)) + fadeOut(tween(300)) }
-            ) { backStackEntry ->
-                val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
-                val apiKey by settingsViewModel.apiKey.collectAsState()
-                
-                val resultViewModel: ResultViewModel = viewModel(
-                    factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, apiKey)
-                )
-                ResultScreen(
-                    viewModel = resultViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
+                }
+                composable("record") {
+                    val recordViewModel: RecordViewModel = viewModel(
+                        factory = RecordViewModel.provideFactory(
+                            appContainer.audioRecorderManager,
+                            appContainer.noteRepository
+                        )
+                    )
+                    RecordScreen(
+                        viewModel = recordViewModel,
+                        userName = userName,
+                        onNavigateToResult = { id -> navController.navigate("result/$id") }
+                    )
+                }
+                composable("history") {
+                    val historyViewModel: HistoryViewModel = viewModel(
+                        factory = HistoryViewModel.provideFactory(appContainer.noteRepository)
+                    )
+                    HistoryScreen(
+                        viewModel = historyViewModel,
+                        animatedVisibilityScope = this@composable, // Oper Scope
+                        sharedTransitionScope = this@SharedTransitionLayout, // Oper Scope
+                        onNoteClick = { id -> navController.navigate("result/$id") }
+                    )
+                }
+                composable("settings") {
+                    SettingsScreen(viewModel = settingsViewModel)
+                }
+                // Animasi scaleIn/scaleOut dicopot karena udah diganti Morphing beneran
+                composable("result/{noteId}") { backStackEntry ->
+                    val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
+                    val apiKey by settingsViewModel.apiKey.collectAsState()
+                    
+                    val resultViewModel: ResultViewModel = viewModel(
+                        factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, apiKey)
+                    )
+                    ResultScreen(
+                        viewModel = resultViewModel,
+                        noteId = noteId, // Oper ID buat Kunci Morphing
+                        animatedVisibilityScope = this@composable, // Oper Scope
+                        sharedTransitionScope = this@SharedTransitionLayout, // Oper Scope
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }
