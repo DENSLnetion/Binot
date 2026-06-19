@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -27,10 +30,12 @@ import com.example.viewmodel.HistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit
 ) {
     val notes by viewModel.filteredNotes.collectAsState()
@@ -121,32 +126,38 @@ fun HistoryScreen(
             ) {
                 items(notes, key = { it.id }) { note ->
                     val isSelected = selectedNotes.contains(note.id)
-                    NoteCard(
-                        note = note,
-                        isSelected = isSelected,
-                        onPinToggle = { 
-                            // PERBAIKAN: Fitur Quick Pin. Ga usah ditahan, langsung pin aja!
-                            viewModel.togglePinMultiple(setOf(note.id), !note.isPinned) 
-                        },
-                        onLongClick = {
-                            if (!selectionMode) {
-                                selectionMode = true
-                                selectedNotes = setOf(note.id)
-                            }
-                        },
-                        onClick = {
-                            if (selectionMode) {
-                                selectedNotes = if (isSelected) {
-                                    selectedNotes - note.id
-                                } else {
-                                    selectedNotes + note.id
+                    // Panggil fungsi Scope dari parent buat ngunci animasi
+                    with(sharedTransitionScope) {
+                        NoteCard(
+                            note = note,
+                            isSelected = isSelected,
+                            modifier = Modifier.sharedBounds(
+                                sharedContentState = rememberSharedContentState(key = "note-${note.id}"),
+                                animatedVisibilityScope = animatedVisibilityScope
+                            ),
+                            onPinToggle = { 
+                                viewModel.togglePinMultiple(setOf(note.id), !note.isPinned) 
+                            },
+                            onLongClick = {
+                                if (!selectionMode) {
+                                    selectionMode = true
+                                    selectedNotes = setOf(note.id)
                                 }
-                                if (selectedNotes.isEmpty()) selectionMode = false
-                            } else {
-                                onNoteClick(note.id)
+                            },
+                            onClick = {
+                                if (selectionMode) {
+                                    selectedNotes = if (isSelected) {
+                                        selectedNotes - note.id
+                                    } else {
+                                        selectedNotes + note.id
+                                    }
+                                    if (selectedNotes.isEmpty()) selectionMode = false
+                                } else {
+                                    onNoteClick(note.id)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -177,6 +188,7 @@ fun HistoryScreen(
 fun NoteCard(
     note: NoteEntity, 
     isSelected: Boolean, 
+    modifier: Modifier = Modifier, // Modifier buat nangkep SharedElement
     onPinToggle: () -> Unit,
     onLongClick: () -> Unit, 
     onClick: () -> Unit
@@ -191,7 +203,7 @@ fun NoteCard(
                              else MaterialTheme.colorScheme.surfaceVariant
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-        modifier = Modifier
+        modifier = modifier // Inject kunci Morphing ke sini
             .fillMaxWidth()
             .height(height)
             .combinedClickable(
@@ -226,7 +238,6 @@ fun NoteCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
-                // PERBAIKAN: Quick Pin Icon. Langsung bisa dipencet di luar mode seleksi!
                 IconButton(
                     onClick = onPinToggle,
                     modifier = Modifier.size(24.dp)
@@ -242,5 +253,4 @@ fun NoteCard(
         }
     }
 }
-
 
