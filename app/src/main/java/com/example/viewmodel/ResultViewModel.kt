@@ -57,8 +57,6 @@ class ResultViewModel(
             val fetchedNote = noteRepository.getNoteById(noteId)
             _note.value = fetchedNote
             
-            // LOGIKA JENIUS: Kalo catatan ini baru di-import (Audio ada tapi rawText kosong),
-            // Otomatis jalanin transkrip tanpa user harus mencet apa-apa!
             if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
                 transcribeImportedAudio()
             }
@@ -68,6 +66,18 @@ class ResultViewModel(
     fun updateTitle(newTitle: String) {
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(title = newTitle, timestamp = System.currentTimeMillis())
+        _note.value = updatedNote
+        viewModelScope.launch {
+            noteRepository.update(updatedNote)
+        }
+    }
+
+    // LOGIKA BARU: Balikin ke Teks Mentah Asli, nol rupiah cost API!
+    fun restoreRawText() {
+        val currentNote = _note.value ?: return
+        if (currentNote.summary == null) return
+        
+        val updatedNote = currentNote.copy(summary = null, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
         viewModelScope.launch {
             noteRepository.update(updatedNote)
@@ -149,7 +159,6 @@ class ResultViewModel(
         }
     }
 
-    // MESIN TRANSKRIP AUDIO LANGSUNG KE GEMINI 2.5 FLASH
     private fun transcribeImportedAudio() {
         val currentNote = _note.value ?: return
         val audioPath = currentNote.audioPath ?: return
@@ -167,14 +176,11 @@ class ResultViewModel(
                 val file = File(audioPath)
                 if (!file.exists()) throw Exception("Audio file missing from cache.")
 
-                // Ubah file MP3 jadi sandi Base64
                 val bytes = file.readBytes()
                 val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
                 
-                // Gemini nerima mp3, m4a, dll pake tipe ini
                 val mimeType = "audio/mp3"
 
-                // Murni cuma ngetranskrip, TIDAK meringkas! Tetep ikutin aturan matematika.
                 val promptText = """
                     You are an expert audio transcriber. Transcribe the following audio precisely.
                     
@@ -187,7 +193,6 @@ class ResultViewModel(
                     2. DO NOT add conversational filler or AI pleasantries. Just output the text.
                 """.trimIndent()
 
-                // Request ke API pake inlineData Audio
                 val request = GenerateContentRequest(
                     contents = listOf(
                         Content(
@@ -226,7 +231,6 @@ class ResultViewModel(
         }
     }
 
-    // Fungsi Rapiin/Ringkas dari TEKS (Bukan Audio) tetep jalan seperti biasa!
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
         if (apiKey.isBlank()) {
