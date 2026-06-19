@@ -22,7 +22,6 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      # Langkah lu yang ini wajib dipertahanin biar Gradle ga nyariin file debug.keystore
       - name: Create debug keystore
         run: |
           keytool -genkeypair \
@@ -33,24 +32,22 @@ jobs:
             -keystore debug.keystore \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      # --- INI SELIPAN LOGIKA RILIS V1.0.0 ---
-      - name: Decode Keystore from Secrets
+      - name: Decode Keystore
         env:
           ENCODED_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo $ENCODED_KEYSTORE | base64 --decode > $GITHUB_WORKSPACE/my-upload-key.jks
+          echo "$ENCODED_KEYSTORE" | base64 --decode --ignore-garbage > $GITHUB_WORKSPACE/my-upload-key.jks
 
-      - name: Build Release with Gradle
+      - name: Build Release
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease
 
-      - name: Upload Artifact
+      - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: app/build/outputs/apk/release/app-release.apk
-
 
