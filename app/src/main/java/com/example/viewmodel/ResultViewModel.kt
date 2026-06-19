@@ -37,14 +37,14 @@ class ResultViewModel(
 
     private fun loadNote() {
         viewModelScope.launch {
-            // PERBAIKAN: Pas cuma dibuka, TIMESTAMP GA BERUBAH. Jadi posisinya tetep!
+            // PERBAIKAN: Mutlak 100% CUMA load data.
+            // Ga ada update timestamp di sini! Catatan ga akan loncat pas dibuka.
             _note.value = noteRepository.getNoteById(noteId)
         }
     }
 
     fun updateTitle(newTitle: String) {
         val currentNote = _note.value ?: return
-        // PERBAIKAN: Baru pas di-edit judulnya, timestamp diupdate biar naik ke atas
         val updatedNote = currentNote.copy(title = newTitle, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
         viewModelScope.launch {
@@ -64,13 +64,13 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
-                // PERBAIKAN PENTING: Larang keras penggunaan Backtick (`)
+                // PERBAIKAN: Larang keras Backtick (`). Haram hukumnya buat Gemini!
                 val prompt = """
                     You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                     
                     CRITICAL MATHEMATICAL RULES:
                     1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                    2. DO NOT use Markdown backticks (`), quotes, or code blocks for math formulas. Write them as plain normal text within the sentence.
+                    2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
                     
                     STRICT FORMATTING RULES:
                     1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
@@ -93,7 +93,6 @@ class ResultViewModel(
                 val summaryText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 
                 if (summaryText != null) {
-                    // PERBAIKAN: Kalau sukses diringkas, baru timestamp diupdate biar naik ke atas
                     val updatedNote = currentNote.copy(summary = summaryText, timestamp = System.currentTimeMillis())
                     _note.value = updatedNote
                     noteRepository.update(updatedNote)
