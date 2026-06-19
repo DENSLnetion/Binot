@@ -37,8 +37,7 @@ class ResultViewModel(
 
     private fun loadNote() {
         viewModelScope.launch {
-            // PERBAIKAN: Mutlak 100% CUMA load data.
-            // Ga ada update timestamp di sini! Catatan ga akan loncat pas dibuka.
+            // Murni cuma load data, ga nyentuh timestamp biar ga loncat
             _note.value = noteRepository.getNoteById(noteId)
         }
     }
@@ -52,7 +51,8 @@ class ResultViewModel(
         }
     }
 
-    fun summarizeText(language: String) {
+    // LOGIKA BARU: Nerima parameter mode "tidy" atau "summarize"
+    fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
         if (apiKey.isBlank()) {
             _error.value = "API Key not found. Please set it in Settings."
@@ -64,40 +64,64 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
-                // PERBAIKAN: Larang keras Backtick (`). Haram hukumnya buat Gemini!
-                val prompt = """
-                    You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
-                    
-                    CRITICAL MATHEMATICAL RULES:
-                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                    2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
-                    
-                    STRICT FORMATTING RULES:
-                    1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
-                    2. Create a comprehensive summary without losing key points.
-                    3. MUST use neat Markdown formatting:
-                       - Use '# ' for Main Title (H1).
-                       - Use '## ' for Subtitles (H2).
-                       - Use bullet points ('- ') for lists.
-                       - Provide empty lines between paragraphs.
-                    
-                    Raw Text:
-                    ${currentNote.rawText}
-                """.trimIndent()
+                // Cabang Logika Prompt AI yang Super Ketat
+                val prompt = if (mode == "tidy") {
+                    """
+                        You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
+                        
+                        CRITICAL MATHEMATICAL RULES:
+                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
+                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
+                        
+                        STRICT FORMATTING RULES:
+                        1. DO NOT summarize. Preserve every single detail, thought, and information from the raw transcript.
+                        2. ONLY fix grammatical errors, remove filler words (e.g., "umm", "uh", repetitions), and structure the text logically with proper punctuation.
+                        3. MUST use neat Markdown formatting:
+                           - Use '# ' for Main Title (H1).
+                           - Use '## ' for Subtitles (H2) if the topic shifts naturally.
+                           - Use bullet points ('- ') for lists if the speaker is listing items.
+                           - Provide empty lines between paragraphs for readability.
+                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the perfectly tidied up text.
+                        
+                        Raw Text:
+                        ${currentNote.rawText}
+                    """.trimIndent()
+                } else {
+                    """
+                        You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
+                        
+                        CRITICAL MATHEMATICAL RULES:
+                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
+                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
+                        
+                        STRICT FORMATTING RULES:
+                        1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
+                        2. Create a comprehensive summary without losing key points.
+                        3. MUST use neat Markdown formatting:
+                           - Use '# ' for Main Title (H1).
+                           - Use '## ' for Subtitles (H2).
+                           - Use bullet points ('- ') for lists.
+                           - Provide empty lines between paragraphs.
+                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the summarized text.
+                        
+                        Raw Text:
+                        ${currentNote.rawText}
+                    """.trimIndent()
+                }
                 
                 val request = GenerateContentRequest(
                     contents = listOf(Content(parts = listOf(Part(text = prompt))))
                 )
 
                 val response = RetrofitClient.service.generateContent(apiKey, request)
-                val summaryText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                val processedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 
-                if (summaryText != null) {
-                    val updatedNote = currentNote.copy(summary = summaryText, timestamp = System.currentTimeMillis())
+                if (processedText != null) {
+                    val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
                     _note.value = updatedNote
                     noteRepository.update(updatedNote)
                 } else {
-                    _error.value = "Failed to generate summary. Empty response."
+                    _error.value = "Failed to process text. Empty response from AI."
                 }
             } catch (e: HttpException) {
                 if (e.code() == 429) {
