@@ -29,6 +29,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _selectedLabel = MutableStateFlow<String?>(null)
     val selectedLabel: StateFlow<String?> = _selectedLabel.asStateFlow()
 
+    private val _sortMode = MutableStateFlow(0) // 0 = Terbaru, 1 = Terlama, 2 = A-Z
+    val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
+
     private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
     val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
@@ -47,24 +50,31 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredNotes: StateFlow<List<NoteEntity>> = combine(
-        repository.allNotes, _searchQuery, _selectedLabel
-    ) { notes, query, label ->
-        
+        repository.allNotes, _searchQuery, _selectedLabel, _sortMode
+    ) { notes, query, label, sort ->
+
         // WAJIB: Sembunyiin catatan kamus dari UI utama!
         val realNotes = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
-        
+
         val labelFilteredNotes = if (label == null) realNotes else realNotes.filter { note ->
             note.label?.split("|")?.map { it.trim() }?.contains(label) == true
         }
-        
-        if (query.isBlank()) {
+
+        val searchedNotes = if (query.isBlank()) {
             labelFilteredNotes
         } else {
-            labelFilteredNotes.filter { 
-                it.title.contains(query, ignoreCase = true) || 
-                it.rawText.contains(query, ignoreCase = true) || 
+            labelFilteredNotes.filter {
+                it.title.contains(query, ignoreCase = true) ||
+                it.rawText.contains(query, ignoreCase = true) ||
                 (it.summary?.contains(query, ignoreCase = true) == true)
             }
+        }
+
+        // Apply sort — pinned selalu di atas dalam grup masing-masing
+        when (sort) {
+            1 -> searchedNotes.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenBy { it.timestamp })
+            2 -> searchedNotes.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenBy { it.title.lowercase() })
+            else -> searchedNotes.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenByDescending { it.timestamp })
         }
     }.stateIn(
         scope = viewModelScope,
@@ -74,6 +84,10 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
     fun filterByLabel(label: String?) {
         _selectedLabel.value = label
+    }
+
+    fun setSortMode(mode: Int) {
+        _sortMode.value = mode
     }
 
     // LOGIKA BARU: Cuma bikin label ke buku tabungan, KAGA bikin catatan kosong!
