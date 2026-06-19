@@ -11,8 +11,9 @@ data class NoteEntity(
     val summary: String?,
     val timestamp: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
-    // LOGIKA BARU: Nyimpen alamat file audio aslinya di memori HP
-    val audioPath: String? = null
+    val audioPath: String? = null,
+    // LOGIKA BARU: Kolom buat nyimpen Label/Kategori catatan
+    val label: String? = null
 )
 
 
