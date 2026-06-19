@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,10 +28,13 @@ import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun ResultScreen(
     viewModel: ResultViewModel,
+    noteId: Int, // Terima ID buat Kunci Morphing
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    sharedTransitionScope: SharedTransitionScope,
     onNavigateBack: () -> Unit
 ) {
     val note by viewModel.note.collectAsState()
@@ -44,105 +50,110 @@ fun ResultScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    if (note != null) {
-                        BasicTextField(
-                            value = note!!.title,
-                            onValueChange = { viewModel.updateTitle(it) },
-                            textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showLanguageMenu = true }) {
-                            Icon(imageVector = Icons.Default.Translate, contentDescription = "Translate")
+    with(sharedTransitionScope) {
+        Scaffold(
+            // Terapkan kunci Morphing di parent terluar layar membaca
+            modifier = Modifier.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = "note-$noteId"),
+                animatedVisibilityScope = animatedVisibilityScope
+            ),
+            topBar = {
+                TopAppBar(
+                    title = { 
+                        if (note != null) {
+                            BasicTextField(
+                                value = note!!.title,
+                                onValueChange = { viewModel.updateTitle(it) },
+                                textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
-                        DropdownMenu(
-                            expanded = showLanguageMenu,
-                            onDismissRequest = { showLanguageMenu = false }
-                        ) {
-                            val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                            languages.forEach { lang ->
-                                DropdownMenuItem(
-                                    text = { Text("Summarize in $lang") },
-                                    onClick = {
-                                        viewModel.summarizeText(lang)
-                                        showLanguageMenu = false
-                                    }
-                                )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showLanguageMenu = true }) {
+                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Translate")
                             }
-                        }
-                    }
-                    IconButton(onClick = { showSidePanel = true }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        if (note == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            // AJAIB: Bungkus seluruh konten membaca pakai SelectionContainer
-            // Biar user bisa ngeblok dan copy teks layaknya aplikasi native
-            SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    if (isLoading) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            DropdownMenu(
+                                expanded = showLanguageMenu,
+                                onDismissRequest = { showLanguageMenu = false }
                             ) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    "AI is organizing your notes...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
+                                languages.forEach { lang ->
+                                    DropdownMenuItem(
+                                        text = { Text("Summarize in $lang") },
+                                        onClick = {
+                                            viewModel.summarizeText(lang)
+                                            showLanguageMenu = false
+                                        }
+                                    )
+                                }
                             }
                         }
+                        IconButton(onClick = { showSidePanel = true }) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                        }
                     }
+                )
+            }
+        ) { paddingValues ->
+            if (note == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (isLoading) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        "AI is organizing your notes & formulas...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
 
-                    if (error != null) {
-                        Text(
-                            text = error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                        if (error != null) {
+                            Text(
+                                text = error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
 
-                    if (!note!!.summary.isNullOrEmpty()) {
-                        MarkdownText(
-                            text = note!!.summary!!, 
-                            highlightQuery = searchHighlightQuery, 
-                            fontFamily = selectedFont,
-                            listState = listState,
-                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                        )
-                    } else if (!isLoading) {
-                        Text(
-                            text = "Raw Transcript:\n\n${note!!.rawText}",
-                            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                        )
+                        if (!note!!.summary.isNullOrEmpty()) {
+                            MarkdownText(
+                                text = note!!.summary!!, 
+                                highlightQuery = searchHighlightQuery, 
+                                fontFamily = selectedFont,
+                                listState = listState,
+                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                            )
+                        } else if (!isLoading) {
+                            Text(
+                                text = "Raw Transcript:\n\n${note!!.rawText}",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }
