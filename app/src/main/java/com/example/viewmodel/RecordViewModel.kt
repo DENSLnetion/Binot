@@ -32,19 +32,58 @@ class RecordViewModel(
     val recordingSeconds: StateFlow<Int> = _recordingSeconds.asStateFlow()
     private var timerJob: Job? = null
 
+    private val _isPaused = MutableStateFlow(false)
+    val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
-            // Abaikan file path karena kita ga nyimpen MP4
             audioRecorderManager.stopRecording()
             stopTimer()
+            _isPaused.value = false
         } else {
+            _isPaused.value = false
             audioRecorderManager.startRecording(isEmulator)
             startTimer()
         }
     }
 
+    fun pauseRecording() {
+        if (!isRecording.value || _isPaused.value) return
+        _isPaused.value = true
+        stopTimer()
+        // Jika AudioRecorderManager punya pauseRecording(), panggil di sini:
+        // audioRecorderManager.pauseRecording()
+    }
+
+    fun resumeRecording() {
+        if (!isRecording.value || !_isPaused.value) return
+        _isPaused.value = false
+        resumeTimer()
+        // Jika AudioRecorderManager punya resumeRecording(), panggil di sini:
+        // audioRecorderManager.resumeRecording()
+    }
+
+    // Dipanggil saat Stop ditekan dari keadaan paused (isRecording masih true, tapi timer berhenti)
+    fun stopFromPaused(isEmulator: Boolean) {
+        if (!_isPaused.value) return
+        audioRecorderManager.stopRecording()
+        _isPaused.value = false
+        // timer sudah berhenti sejak pause, tinggal reset
+        _recordingSeconds.value = 0
+    }
+
     private fun startTimer() {
         _recordingSeconds.value = 0
+        timerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _recordingSeconds.value += 1
+            }
+        }
+    }
+
+    private fun resumeTimer() {
+        timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
                 delay(1000)
@@ -58,12 +97,11 @@ class RecordViewModel(
         timerJob = null
     }
 
-    fun saveNote(onSaved: (Int) -> Unit) {
+    fun saveNote(onSaved: () -> Unit = {}) {
         val text = recognizedText.value.trim()
         if (text.isEmpty()) return
 
         viewModelScope.launch {
-            // Simpan dulu dengan title fallback, langsung navigasi
             val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
             val note = NoteEntity(
                 title = fallbackTitle,
@@ -73,9 +111,9 @@ class RecordViewModel(
                 audioPath = null
             )
             val id = repository.insert(note).toInt()
-            onSaved(id)
+            onSaved()
 
-            // Generate AI title di background, update setelah dapat hasil
+            // Generate AI title di background
             if (apiKey.isNotBlank()) {
                 launch(Dispatchers.IO) {
                     try {
@@ -99,7 +137,7 @@ class RecordViewModel(
                             }
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace() // Gagal generate title = fallback title tetap dipakai
+                        e.printStackTrace()
                     }
                 }
             }
@@ -110,6 +148,7 @@ class RecordViewModel(
         super.onCleared()
         audioRecorderManager.stopRecording()
         stopTimer()
+        _isPaused.value = false
     }
 
     companion object {
