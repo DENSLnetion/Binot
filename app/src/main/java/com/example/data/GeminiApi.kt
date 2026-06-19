@@ -5,6 +5,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
@@ -45,17 +46,17 @@ data class GeminiError(
     val message: String? = null
 )
 
-// --- GitHub API Models buat In-App Update ---
+// --- LOGIKA FIX: Bikin field nullable biar parser JSON kaga muntah kalau ada data kosong
 data class GithubRelease(
     val tag_name: String,
-    val name: String?,
-    val body: String?,
-    val html_url: String,
-    val assets: List<GithubAsset>?
+    val name: String? = null,
+    val body: String? = null,
+    val html_url: String? = null,
+    val assets: List<GithubAsset>? = null
 )
 
 data class GithubAsset(
-    val browser_download_url: String
+    val browser_download_url: String? = null
 )
 
 // --- Retrofit Setup ---
@@ -69,7 +70,8 @@ interface GeminiApiService {
 }
 
 interface GithubApiService {
-    // Pengecek Rilis Otomatis ke Repo Lu!
+    // FIX FATAL: GitHub wajib pake KTP (User-Agent) kalau kaga bakal di blokir (Error 403)
+    @Headers("User-Agent: BinotApp")
     @GET("repos/DENSLnetion/Binot/releases/latest")
     suspend fun getLatestRelease(): GithubRelease
 }
@@ -97,7 +99,6 @@ object RetrofitClient {
             .create(GeminiApiService::class.java)
     }
 
-    // Mesin GitHub Inspector
     val githubService: GithubApiService by lazy {
         Retrofit.Builder()
             .baseUrl(GITHUB_BASE_URL)
