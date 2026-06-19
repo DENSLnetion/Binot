@@ -164,7 +164,7 @@ class ResultViewModel(
         }
     }
 
-    // MESIN PENYEDOT YOUTUBE (NOL RUPIAH API COST)
+    // MESIN PENYEDOT YOUTUBE (VERSI KEBAL PELURU)
     private fun scrapeYouTubeTranscript(videoUrl: String) {
         val currentNote = _note.value ?: return
         _isLoading.value = true
@@ -172,38 +172,50 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. Nyamar jadi browser & Buka halaman YouTube
-                val connection = URL(videoUrl).openConnection() as HttpURLConnection
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                // 1. Jaring pengaman URL (Kalo user lupa ngetik https://)
+                var cleanUrl = videoUrl.trim()
+                if (!cleanUrl.startsWith("http")) {
+                    cleanUrl = "https://$cleanUrl"
+                }
+
+                // 2. Nyamar jadi browser & Buka halaman YouTube
+                val connection = URL(cleanUrl).openConnection() as HttpURLConnection
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
                 val html = connection.inputStream.bufferedReader().readText()
 
-                // 2. Gali kode rahasia "captionTracks" (List Subtitle)
+                // 3. Gali kode rahasia "captionTracks" (List Subtitle)
                 val captionRegex = "\"captionTracks\":\\[(.*?)\\]".toRegex()
-                val match = captionRegex.find(html) ?: throw Exception("No automatically generated or manual subtitles found for this video.")
+                val match = captionRegex.find(html) ?: throw Exception("No auto-generated or manual subtitles found for this video.")
                 val tracksJson = match.groupValues[1]
 
-                // 3. Ambil URL file XML subtitle (Ambil yang pertama/default)
+                // 4. Ambil URL file XML subtitle (Ambil yang pertama/default)
                 val baseUrlRegex = "\"baseUrl\":\"(.*?)\"".toRegex()
                 val baseUrls = baseUrlRegex.findAll(tracksJson).map { it.groupValues[1] }.toList()
-                val targetUrl = baseUrls.firstOrNull()?.replace("\\u0026", "&") ?: throw Exception("Subtitle URL not found.")
+                var targetUrl = baseUrls.firstOrNull() ?: throw Exception("Subtitle URL not found.")
 
-                // 4. Download file XML subtitle-nya
+                // BINGO FIX 1: Basmi semua karakter escape JSON yang bikin URL Parser Java muntah
+                targetUrl = targetUrl
+                    .replace("\\u0026", "&")
+                    .replace("\\/", "/")
+                    .replace("\\u003d", "=")
+
+                // 5. Download file XML subtitle-nya
                 val xmlConnection = URL(targetUrl).openConnection() as HttpURLConnection
                 val xml = xmlConnection.inputStream.bufferedReader().readText()
 
-                // 5. Bersihin Tag XML & Kode Waktu pake Regex ganas
-                val textRegex = "<text[^>]*>(.*?)</text>".toRegex()
+                // BINGO FIX 2: Tambahin (?s) DotAll biar Regex nembus enter/multi-line text
+                val textRegex = "(?s)<text[^>]*>(.*?)</text>".toRegex()
                 val rawTranscript = textRegex.findAll(xml).joinToString(" ") {
                     it.groupValues[1]
                         .replace("&#39;", "'")
                         .replace("&amp;", "&")
                         .replace("&quot;", "\"")
                         .replace("\n", " ")
-                }.replace(Regex("<[^>]*>"), "") // Basmi sisa-sisa HTML
+                }.replace(Regex("<[^>]*>"), "") // Basmi sisa-sisa HTML tag
 
                 if (rawTranscript.isBlank()) throw Exception("Extracted transcript is empty.")
 
-                // 6. Langsung lempar ke Database sebagai Raw Text (Tanpa kena biaya API Gemini!)
+                // 6. Langsung lempar ke Database sebagai Raw Text (Nol Rupiah API Cost!)
                 launch(Dispatchers.Main) {
                     val updatedNote = currentNote.copy(rawText = rawTranscript, timestamp = System.currentTimeMillis())
                     _note.value = updatedNote
