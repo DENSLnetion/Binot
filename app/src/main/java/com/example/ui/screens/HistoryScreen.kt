@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,6 +74,7 @@ fun HistoryScreen(
     
     val uniqueLabels by viewModel.uniqueLabels.collectAsState()
     val selectedLabel by viewModel.selectedLabel.collectAsState()
+    val sortMode by viewModel.sortMode.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
@@ -152,6 +154,21 @@ fun HistoryScreen(
                 }
                 
                 Spacer(Modifier.weight(1f))
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
+                listOf("Terbaru", "Terlama", "A–Z").forEachIndexed { index, label ->
+                    NavigationDrawerItem(
+                        label = { Text(label) },
+                        icon = { Icon(Icons.Default.Sort, contentDescription = null) },
+                        selected = sortMode == index,
+                        onClick = { viewModel.setSortMode(index) },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 NavigationDrawerItem(
                     label = { Text("Create New Label") },
                     icon = { Icon(Icons.Default.Add, null) },
@@ -236,9 +253,14 @@ fun HistoryScreen(
                                 with(sharedTransitionScope) {
                                     NoteCard(
                                         note = note, isSelected = isSelected,
+                                        selectedLabel = selectedLabel,
                                         modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
-                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } }
+                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
+                                        onLabelClick = { label ->
+                                            if (selectedLabel == label) viewModel.filterByLabel(null)
+                                            else viewModel.filterByLabel(label)
+                                        }
                                     )
                                 }
                             }
@@ -253,9 +275,14 @@ fun HistoryScreen(
                                 with(sharedTransitionScope) {
                                     NoteCard(
                                         note = note, isSelected = isSelected,
+                                        selectedLabel = selectedLabel,
                                         modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
-                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } }
+                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
+                                        onLabelClick = { label ->
+                                            if (selectedLabel == label) viewModel.filterByLabel(null)
+                                            else viewModel.filterByLabel(label)
+                                        }
                                     )
                                 }
                             }
@@ -415,11 +442,13 @@ fun MorphingSearchBar(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
-    note: NoteEntity, 
-    isSelected: Boolean, 
+    note: NoteEntity,
+    isSelected: Boolean,
+    selectedLabel: String?,
     modifier: Modifier = Modifier,
-    onLongClick: () -> Unit, 
-    onClick: () -> Unit
+    onLongClick: () -> Unit,
+    onClick: () -> Unit,
+    onLabelClick: (String) -> Unit
 ) {
     val minHeight = remember(note.id) { (140..220).random().dp }
     val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
@@ -428,7 +457,7 @@ fun NoteCard(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) 
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                              else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
@@ -442,15 +471,32 @@ fun NoteCard(
                 val labels = note.label.split("|").map { it.trim() }.filter { it.isNotBlank() }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     labels.forEach { label ->
+                        val isLabelActive = selectedLabel == label
                         Box(
                             modifier = Modifier
-                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f), RoundedCornerShape(50))
+                                .background(
+                                    if (isLabelActive) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+                                    RoundedCornerShape(50)
+                                )
+                                .clickable { onLabelClick(label) }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Label, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                                Icon(
+                                    Icons.Default.Label,
+                                    contentDescription = null,
+                                    tint = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(12.dp)
+                                )
                                 Spacer(Modifier.width(4.dp))
-                                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
