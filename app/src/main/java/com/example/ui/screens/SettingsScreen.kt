@@ -59,11 +59,9 @@ fun SettingsScreen(
         }
     }
 
-    // PERBAIKAN: Scaffold TANPA topBar sama sekali. Murni bersih.
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
-        // Ngitung jarak poni HP biar kartu ga ketutup jam/baterai
         val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
         Column(
@@ -74,8 +72,15 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Spacer buat jarak dari ujung atas HP
-            Spacer(modifier = Modifier.height(topInsets + 16.dp))
+            // PERBAIKAN: Padding atas disunat biar nempel rapi sama status bar
+            Spacer(modifier = Modifier.height(topInsets + 4.dp))
+
+            Text(
+                text = "Settings", 
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -229,7 +234,7 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                            Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("v1.1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Button(onClick = { 
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
@@ -243,3 +248,4 @@ fun SettingsScreen(
         }
     }
 }
+
