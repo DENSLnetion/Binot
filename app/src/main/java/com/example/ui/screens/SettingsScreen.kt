@@ -74,7 +74,6 @@ fun SettingsScreen(
                 .padding(bottom = innerPadding.calculateBottomPadding())
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
-            // Aesthetic Upgrade: Dirapetin dikit jaraknya (16dp dari 24dp)
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(modifier = Modifier.height(topInsets + 4.dp))
@@ -87,7 +86,6 @@ fun SettingsScreen(
             )
 
             Card(
-                // Aesthetic Upgrade: Background dibikin agak transparan/lembut, sudutnya 20dp
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                 shape = RoundedCornerShape(20.dp)
             ) {
@@ -167,7 +165,8 @@ fun SettingsScreen(
                             } else if (updateState == UpdateState.Available) {
                                 Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             } else if (updateState == UpdateState.Error) {
-                                Text("Failed to check update.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                // FIX: Nampilin pesan error yang sesungguhnya (Biar gampang di debug)
+                                Text("Failed: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
                                 Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
@@ -190,4 +189,3 @@ fun SettingsScreen(
         }
     }
 }
-
