@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
@@ -52,7 +53,6 @@ fun ResultScreen(
 
     with(sharedTransitionScope) {
         Scaffold(
-            // PERBAIKAN: ResizeMode ScaleToBounds bikin animasi Morphing ga nge-glitch waktu buka/tutup
             modifier = Modifier.sharedBounds(
                 sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                 animatedVisibilityScope = animatedVisibilityScope,
@@ -79,21 +79,41 @@ fun ResultScreen(
                     actions = {
                         Box {
                             IconButton(onClick = { showLanguageMenu = true }) {
-                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Translate")
+                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
                             }
                             DropdownMenu(
                                 expanded = showLanguageMenu,
                                 onDismissRequest = { showLanguageMenu = false }
                             ) {
                                 val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                                languages.forEach { lang ->
+                                languages.forEachIndexed { index, lang ->
+                                    // Header Bahasa
+                                    Text(
+                                        text = lang,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                    // Tombol Tidy Up (Merapihkan)
                                     DropdownMenuItem(
-                                        text = { Text("Summarize in $lang") },
+                                        text = { Text("✨ Tidy Up") },
                                         onClick = {
-                                            viewModel.summarizeText(lang)
+                                            viewModel.processText(lang, "tidy")
                                             showLanguageMenu = false
                                         }
                                     )
+                                    // Tombol Summarize (Meringkas)
+                                    DropdownMenuItem(
+                                        text = { Text("📝 Summarize") },
+                                        onClick = {
+                                            viewModel.processText(lang, "summarize")
+                                            showLanguageMenu = false
+                                        }
+                                    )
+                                    // Pemisah tiap bahasa biar rapi
+                                    if (index < languages.size - 1) {
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
                         }
@@ -123,7 +143,7 @@ fun ResultScreen(
                                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        "AI is organizing your notes & formulas...",
+                                        "AI is processing your text...",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
