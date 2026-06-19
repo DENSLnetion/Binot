@@ -39,8 +39,6 @@ class ResultViewModel(
         viewModelScope.launch {
             val fetchedNote = noteRepository.getNoteById(noteId)
             if (fetchedNote != null) {
-                // TRIK PINDAH KE ATAS HISTORY: 
-                // Tiap dibuka, timestamp catatan diubah jadi detik sekarang.
                 val updatedNote = fetchedNote.copy(timestamp = System.currentTimeMillis())
                 noteRepository.update(updatedNote)
                 _note.value = updatedNote
@@ -69,18 +67,23 @@ class ResultViewModel(
 
         viewModelScope.launch {
             try {
+                // PERBAIKAN 3: Prompt AI level mutlak buat ngebantai teks matematika mentah jadi Unicode Eksak.
                 val prompt = """
                     You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                     
-                    STRICT RULES:
+                    CRITICAL MATHEMATICAL RULES:
+                    If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
+                    Do NOT write equations in plain words. Arrange formulas neatly using standard Unicode spacing so it looks beautiful on a mobile screen.
+                    
+                    STRICT FORMATTING RULES:
                     1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
                     2. Create a comprehensive summary without losing key points.
                     3. MUST use neat Markdown formatting:
                        - Use '# ' for Main Title (H1).
                        - Use '## ' for Subtitles (H2).
-                       - Use bullet points ('- ') for items.
-                       - Provide empty lines between paragraphs and lists for readability.
-                    4. Do not use code blocks.
+                       - Use bullet points ('- ') for lists.
+                       - Provide empty lines between paragraphs.
+                    4. Do not use LaTeX formatting (no $$ or \[). Use native Unicode inline only.
                     
                     Raw Text:
                     ${currentNote.rawText}
@@ -128,5 +131,4 @@ class ResultViewModel(
             }
     }
 }
-
 
