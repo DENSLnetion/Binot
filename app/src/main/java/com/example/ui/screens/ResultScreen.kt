@@ -274,7 +274,7 @@ fun ResultScreen(
             confirmButton = {
                 Button(onClick = {
                     if (newLabelInput.isNotBlank()) {
-                        viewModel.updateLabel(newLabelInput.trim())
+                        viewModel.toggleLabel(newLabelInput.trim())
                         showNewLabelDialog = false
                         newLabelInput = ""
                     }
@@ -300,12 +300,13 @@ fun ResultScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     allLabels.filter { it.isNotBlank() }.forEach { label ->
-                        val isSelected = note!!.label == label
+                        val activeLabels = note!!.label?.split("|")?.map { it.trim() } ?: emptyList()
+                        val isSelected = activeLabels.contains(label)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
                                 .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .clickable { viewModel.updateLabel(if (isSelected) null else label) }
+                                .clickable { viewModel.toggleLabel(label) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
