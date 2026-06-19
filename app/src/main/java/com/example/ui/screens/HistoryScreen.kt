@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
@@ -74,7 +73,7 @@ fun HistoryScreen(
     val latestRelease by viewModel.latestRelease.collectAsState()
     
     val uniqueLabels by viewModel.uniqueLabels.collectAsState()
-    val selectedLabel by viewModel.selectedLabel.collectAsState()
+    val selectedLabels by viewModel.selectedLabels.collectAsState()
     val sortMode by viewModel.sortMode.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
@@ -147,13 +146,18 @@ fun HistoryScreen(
                     Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        val sortOptions = listOf("Terbaru", "Terlama", "A–Z")
-                        sortOptions.forEachIndexed { index, label ->
+                        val sortIcons = listOf(
+                            androidx.compose.material.icons.Icons.Default.NewReleases,      // Terbaru
+                            androidx.compose.material.icons.Icons.Default.Audiotrack,        // Terlama (reuse icon)
+                            androidx.compose.material.icons.Icons.Default.Label              // A-Z
+                        )
+                        val sortDescriptions = listOf("Terbaru", "Terlama", "A–Z")
+                        sortIcons.forEachIndexed { index, icon ->
                             SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortIcons.size),
                                 onClick = { viewModel.setSortMode(index) },
                                 selected = sortMode == index
-                            ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            ) { Icon(icon, contentDescription = sortDescriptions[index], modifier = Modifier.size(18.dp)) }
                         }
                     }
 
@@ -164,8 +168,8 @@ fun HistoryScreen(
 
                     NavigationDrawerItem(
                         label = { Text("All Notes") },
-                        selected = selectedLabel == null,
-                        onClick = { viewModel.filterByLabel(null); coroutineScope.launch { drawerState.close() } },
+                        selected = selectedLabels.isEmpty(),
+                        onClick = { viewModel.clearLabelFilter(); coroutineScope.launch { drawerState.close() } },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
@@ -173,20 +177,17 @@ fun HistoryScreen(
                         NavigationDrawerItem(
                             label = { Text(label) },
                             icon = { Icon(Icons.Default.Label, contentDescription = null) },
-                            badge = {
-                                IconButton(
-                                    onClick = {
+                            selected = label in selectedLabels,
+                            onClick = { viewModel.toggleLabelFilter(label) },
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .combinedClickable(
+                                    onClick = { viewModel.toggleLabelFilter(label) },
+                                    onLongClick = {
                                         labelBeingManaged = label
                                         renameLabelInput = label
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Label Settings", modifier = Modifier.size(18.dp))
-                                }
-                            },
-                            selected = selectedLabel == label,
-                            onClick = { viewModel.filterByLabel(label); coroutineScope.launch { drawerState.close() } },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    }
+                                )
                         )
                     }
 
@@ -254,7 +255,7 @@ fun HistoryScreen(
                 if (notes.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                         Text(
-                            text = if (searchQuery.isNotEmpty() || selectedLabel != null) "No results found." else "No notes yet.\nStart recording or import audio!",
+                            text = if (searchQuery.isNotEmpty() || selectedLabels.isNotEmpty()) "No results found." else "No notes yet.\nStart recording or import audio!",
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -277,14 +278,11 @@ fun HistoryScreen(
                                 with(sharedTransitionScope) {
                                     NoteCard(
                                         note = note, isSelected = isSelected,
-                                        selectedLabel = selectedLabel,
+                                        selectedLabels = selectedLabels,
                                         modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
-                                        onLabelClick = { label ->
-                                            if (selectedLabel == label) viewModel.filterByLabel(null)
-                                            else viewModel.filterByLabel(label)
-                                        }
+                                        onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
                                     )
                                 }
                             }
@@ -299,14 +297,11 @@ fun HistoryScreen(
                                 with(sharedTransitionScope) {
                                     NoteCard(
                                         note = note, isSelected = isSelected,
-                                        selectedLabel = selectedLabel,
+                                        selectedLabels = selectedLabels,
                                         modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
-                                        onLabelClick = { label ->
-                                            if (selectedLabel == label) viewModel.filterByLabel(null)
-                                            else viewModel.filterByLabel(label)
-                                        }
+                                        onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
                                     )
                                 }
                             }
@@ -558,7 +553,7 @@ fun MorphingSearchBar(
 fun NoteCard(
     note: NoteEntity,
     isSelected: Boolean,
-    selectedLabel: String?,
+    selectedLabels: Set<String>,
     modifier: Modifier = Modifier,
     onLongClick: () -> Unit,
     onClick: () -> Unit,
@@ -585,7 +580,7 @@ fun NoteCard(
                 val labels = note.label.split("|").map { it.trim() }.filter { it.isNotBlank() }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     labels.forEach { label ->
-                        val isLabelActive = selectedLabel == label
+                        val isLabelActive = label in selectedLabels
                         Box(
                             modifier = Modifier
                                 .background(
