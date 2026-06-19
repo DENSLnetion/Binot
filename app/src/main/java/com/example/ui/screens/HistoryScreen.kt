@@ -34,12 +34,13 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,6 +82,12 @@ fun HistoryScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
+
+    // State buat fitur kelola label (rename/delete)
+    var labelBeingManaged by remember { mutableStateOf<String?>(null) }
+    var showRenameLabelDialog by remember { mutableStateOf(false) }
+    var showDeleteLabelDialog by remember { mutableStateOf(false) }
+    var renameLabelInput by remember { mutableStateOf("") }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -131,51 +138,68 @@ fun HistoryScreen(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.width(280.dp)
             ) {
-                Spacer(Modifier.height(24.dp))
-                Text("Labels", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                
-                NavigationDrawerItem(
-                    label = { Text("All Notes") },
-                    selected = selectedLabel == null,
-                    onClick = { viewModel.filterByLabel(null); coroutineScope.launch { drawerState.close() } },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                uniqueLabels.forEach { label ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Spacer(Modifier.height(24.dp))
+                    Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        val sortOptions = listOf("Terbaru", "Terlama", "A–Z")
+                        sortOptions.forEachIndexed { index, label ->
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
+                                onClick = { viewModel.setSortMode(index) },
+                                selected = sortMode == index
+                            ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Text("Labels", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
                     NavigationDrawerItem(
-                        label = { Text(label) },
-                        icon = { Icon(Icons.Default.Label, contentDescription = null) },
-                        selected = selectedLabel == label,
-                        onClick = { viewModel.filterByLabel(label); coroutineScope.launch { drawerState.close() } },
+                        label = { Text("All Notes") },
+                        selected = selectedLabel == null,
+                        onClick = { viewModel.filterByLabel(null); coroutineScope.launch { drawerState.close() } },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
-                }
-                
-                Spacer(Modifier.weight(1f))
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    uniqueLabels.forEach { label ->
+                        NavigationDrawerItem(
+                            label = { Text(label) },
+                            icon = { Icon(Icons.Default.Label, contentDescription = null) },
+                            badge = {
+                                IconButton(
+                                    onClick = {
+                                        labelBeingManaged = label
+                                        renameLabelInput = label
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Label Settings", modifier = Modifier.size(18.dp))
+                                }
+                            },
+                            selected = selectedLabel == label,
+                            onClick = { viewModel.filterByLabel(label); coroutineScope.launch { drawerState.close() } },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
 
-                listOf("Terbaru", "Terlama", "A–Z").forEachIndexed { index, label ->
                     NavigationDrawerItem(
-                        label = { Text(label) },
-                        icon = { Icon(Icons.Default.Sort, contentDescription = null) },
-                        selected = sortMode == index,
-                        onClick = { viewModel.setSortMode(index) },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                        label = { Text("Create New Label") },
+                        icon = { Icon(Icons.Default.Add, null) },
+                        selected = false,
+                        onClick = { showNewLabelDialog = true; coroutineScope.launch { drawerState.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
-                }
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                NavigationDrawerItem(
-                    label = { Text("Create New Label") },
-                    icon = { Icon(Icons.Default.Add, null) },
-                    selected = false,
-                    onClick = { showNewLabelDialog = true; coroutineScope.launch { drawerState.close() } },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 24.dp)
-                )
+                    Spacer(Modifier.height(24.dp))
+                }
             }
         }
     ) {
@@ -317,6 +341,96 @@ fun HistoryScreen(
                 }) { Text("Create Label") }
             },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // Bottom sheet kecil pas titik tiga di label dipencet: pilihan Rename atau Delete
+    if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
+        ModalBottomSheet(
+            onDismissRequest = { labelBeingManaged = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
+                Text(
+                    text = labelBeingManaged ?: "",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showRenameLabelDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.width(16.dp))
+                    Text("Rename Label", color = MaterialTheme.colorScheme.onSurface)
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDeleteLabelDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(16.dp))
+                    Text("Delete Label", color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    if (showRenameLabelDialog && labelBeingManaged != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameLabelDialog = false; labelBeingManaged = null },
+            title = { Text("Rename Label") },
+            text = {
+                OutlinedTextField(
+                    value = renameLabelInput,
+                    onValueChange = { renameLabelInput = it },
+                    label = { Text("Label Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val oldLabel = labelBeingManaged
+                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
+                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                    }
+                    showRenameLabelDialog = false
+                    labelBeingManaged = null
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteLabelDialog && labelBeingManaged != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteLabelDialog = false; labelBeingManaged = null },
+            title = { Text("Delete Label") },
+            text = { Text("Label \"${labelBeingManaged}\" will be removed from all notes. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    labelBeingManaged?.let { viewModel.deleteLabel(it) }
+                    showDeleteLabelDialog = false
+                    labelBeingManaged = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+            }
         )
     }
 
