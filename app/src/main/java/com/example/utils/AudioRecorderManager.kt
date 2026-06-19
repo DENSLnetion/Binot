@@ -3,8 +3,6 @@ package com.example.utils
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
-import android.media.MediaRecorder
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -18,15 +16,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.random.Random
-import java.io.File
 import java.util.Locale
 
 class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
-    // LOGIKA BARU: Mesin Perekam Asli (Double Engine)
-    private var mediaRecorder: MediaRecorder? = null 
-    private var currentAudioPath: String? = null
+    // Engine MP4 resmi dibunuh dari sini biar ga bentrok
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -131,30 +126,13 @@ class AudioRecorderManager(private val context: Context) {
         _recognizedText.value = ""
         
         forceMuteAllBeeps()
-
-        // 1. ENGINE PERTAMA: Rekam suara asli ke file (MP4/AAC)
-        currentAudioPath = "${context.cacheDir.absolutePath}/Binot_Audio_${System.currentTimeMillis()}.mp4"
-        try {
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
-            mediaRecorder?.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setOutputFile(currentAudioPath)
-                prepare()
-                start()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            currentAudioPath = null // Kalo bentrok mic di HP kentang, relain aja
-        }
         
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
             startSimulatedRecording()
             return
         }
 
-        // 2. ENGINE KEDUA: Jalankan Speech-to-Text
+        // KEMBALI KE ENGINE TUNGGAL: Cuma nyalain SpeechRecognizer
         initSpeechRecognizer()
     }
 
@@ -228,27 +206,18 @@ class AudioRecorderManager(private val context: Context) {
         thread.start()
     }
 
-    // LOGIKA BARU: Stop ngasih kembalian berupa path audionya
+    // Ganti output stopRecording balik jadi null
     fun stopRecording(): String? {
         _isRecording.value = false
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
-        
-        try {
-            mediaRecorder?.stop()
-            mediaRecorder?.release()
-            mediaRecorder = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
 
         coroutineScope.launch {
             delay(600)
             restoreAllVolumes()
         }
         
-        return currentAudioPath
+        return null // Kaga ada audio yang disimpen
     }
 }
-
 
