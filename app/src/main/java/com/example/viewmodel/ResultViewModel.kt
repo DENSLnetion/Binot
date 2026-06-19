@@ -71,7 +71,8 @@ class ResultViewModel(
             val notes = noteRepository.getAllNotesSync()
             val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
-            val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.mapNotNull { it.label }
+            val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
+                .flatMap { it.label?.split("|")?.map { l -> l.trim() }?.filter { l -> l.isNotBlank() } ?: emptyList() }
             
             _allLabels.value = (customLabels + noteLabels).distinct().sorted()
         }
@@ -86,26 +87,37 @@ class ResultViewModel(
         }
     }
 
-    fun updateLabel(newLabel: String?) {
+    fun toggleLabel(label: String) {
         val currentNote = _note.value ?: return
-        val updatedNote = currentNote.copy(label = newLabel, timestamp = System.currentTimeMillis())
+        val currentLabels = currentNote.label
+            ?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() }?.toMutableList()
+            ?: mutableListOf()
+
+        if (currentLabels.contains(label)) {
+            currentLabels.remove(label)
+        } else {
+            currentLabels.add(label)
+        }
+
+        val newLabelString = if (currentLabels.isEmpty()) null else currentLabels.joinToString("|")
+        val updatedNote = currentNote.copy(label = newLabelString, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        
-        viewModelScope.launch(Dispatchers.IO) { 
-            noteRepository.update(updatedNote) 
-            
-            if (newLabel != null) {
+
+        viewModelScope.launch(Dispatchers.IO) {
+            noteRepository.update(updatedNote)
+
+            if (label.isNotBlank()) {
                 val notes = noteRepository.getAllNotesSync()
                 val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
                 if (sysNote != null) {
                     val labels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
-                    labels.add(newLabel)
+                    labels.add(label)
                     noteRepository.update(sysNote.copy(rawText = labels.joinToString("|")))
                 } else {
-                    noteRepository.insert(NoteEntity(title = "[[BINOT_SYSTEM_LABELS]]", rawText = newLabel, summary = null))
+                    noteRepository.insert(NoteEntity(title = "[[BINOT_SYSTEM_LABELS]]", rawText = label, summary = null))
                 }
             }
-            loadAllLabels() 
+            loadAllLabels()
         }
     }
 
