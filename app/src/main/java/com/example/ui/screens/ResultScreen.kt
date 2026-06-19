@@ -236,8 +236,7 @@ fun ResultScreen(
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Fallback Card: Tampil kalo Audio Path null (Live Dictation) ATAU kalo link YouTube (yt:)
-                if (note!!.audioPath == null || note!!.audioPath!!.startsWith("yt:")) {
+                if (note!!.audioPath == null) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                         shape = RoundedCornerShape(12.dp),
@@ -246,11 +245,8 @@ fun ResultScreen(
                         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.onSecondaryContainer)
                             Spacer(modifier = Modifier.width(12.dp))
-                            val fallbackMsg = if (note!!.audioPath?.startsWith("yt:") == true) 
-                                "Audio unavailable. This transcript was extracted directly from a YouTube video subtitle track." 
-                                else "Audio unavailable. This note was created via Live Dictation mode without saving audio files."
                             Text(
-                                text = fallbackMsg,
+                                text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
@@ -279,8 +275,7 @@ fun ResultScreen(
                         }
                     }
 
-                    // TAMPILKAN Audio Player HANYA JIKA ADA FILE MP3 (BUKAN YOUTUBE)
-                    if (note!!.audioPath != null && !note!!.audioPath!!.startsWith("yt:")) {
+                    if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
                         val playWidth by animateDpAsState(
                             targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
@@ -312,7 +307,9 @@ fun ResultScreen(
                                 )
                             }
                         }
-                        
+                    }
+
+                    if (note!!.audioPath != null) {
                         Box(
                             modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                                 exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4")
@@ -362,7 +359,7 @@ fun ResultScreen(
                     }
                 }
 
-                if (note!!.audioPath != null && !note!!.audioPath!!.startsWith("yt:")) {
+                if (note!!.audioPath != null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Slider(
                         value = playbackProgress,
@@ -468,4 +465,3 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
-
