@@ -3,6 +3,8 @@ package com.example.utils
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -16,11 +18,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+import java.io.File
 import java.util.Locale
 
 class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
+    // LOGIKA BARU: Mesin Perekam Asli (Double Engine)
+    private var mediaRecorder: MediaRecorder? = null 
+    private var currentAudioPath: String? = null
+
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     
@@ -33,7 +40,6 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
-    // Variabel penampung angka volume asli HP User
     private var originalMusicVolume = -1
     private var originalSystemVolume = -1
     private var originalRingVolume = -1
@@ -44,10 +50,8 @@ class AudioRecorderManager(private val context: Context) {
     private var originalRingerMode = -1
     private var originalHapticFeedbackStatus = -1
 
-    // ULTIMATE MUTE FINAL: Banting semua angka volume ke 0 Mutlak
     private fun forceMuteAllBeeps() {
         try {
-            // 1. Simpan semua volume dan mode asli HANYA kalau belum disimpen
             if (originalMusicVolume == -1) {
                 originalMusicVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 originalSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
@@ -55,14 +59,11 @@ class AudioRecorderManager(private val context: Context) {
                 originalNotificationVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
                 originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
                 originalVoiceCallVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
-                
                 originalRingerMode = audioManager.ringerMode
             }
 
-            // 2. Coba paksa HP masuk mode Silent (dibungkus try-catch karena beberapa OS butuh izin DND)
             try { audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT } catch (e: Exception) {}
 
-            // 3. Banting angka volume ke 0 mutlak! (Pake try-catch per baris biar kalau 1 gagal, yang lain tetep 0)
             try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0) } catch (e: Exception) {}
@@ -70,7 +71,6 @@ class AudioRecorderManager(private val context: Context) {
             try { audioManager.setStreamVolume(AudioManager.STREAM_ALARM, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, 0, 0) } catch (e: Exception) {}
 
-            // 4. Matikan Haptic Feedback (suara sentuhan UI)
             try {
                 originalHapticFeedbackStatus = Settings.System.getInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 1)
                 Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, 0)
@@ -81,16 +81,13 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
-    // Balikin ke angka aslinya
     private fun restoreAllVolumes() {
         try {
-            // Kembalikan Ringer Mode dulu
             if (originalRingerMode != -1) {
                 try { audioManager.ringerMode = originalRingerMode } catch (e: Exception) {}
                 originalRingerMode = -1
             }
 
-            // Kembalikan semua angka volume
             if (originalMusicVolume != -1) {
                 try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalMusicVolume, 0) } catch (e: Exception) {}
                 originalMusicVolume = -1
@@ -116,7 +113,6 @@ class AudioRecorderManager(private val context: Context) {
                 originalVoiceCallVolume = -1
             }
 
-            // Kembalikan status Haptic Feedback
             if (originalHapticFeedbackStatus != -1) {
                 try {
                     Settings.System.putInt(context.contentResolver, Settings.System.SOUND_EFFECTS_ENABLED, originalHapticFeedbackStatus)
@@ -134,14 +130,31 @@ class AudioRecorderManager(private val context: Context) {
         _isRecording.value = true
         _recognizedText.value = ""
         
-        // Heningkan SEMUANYA saat awal rekam
         forceMuteAllBeeps()
+
+        // 1. ENGINE PERTAMA: Rekam suara asli ke file (MP4/AAC)
+        currentAudioPath = "${context.cacheDir.absolutePath}/Binot_Audio_${System.currentTimeMillis()}.mp4"
+        try {
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+            mediaRecorder?.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(currentAudioPath)
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            currentAudioPath = null // Kalo bentrok mic di HP kentang, relain aja
+        }
         
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
             startSimulatedRecording()
             return
         }
 
+        // 2. ENGINE KEDUA: Jalankan Speech-to-Text
         initSpeechRecognizer()
     }
 
@@ -215,15 +228,26 @@ class AudioRecorderManager(private val context: Context) {
         thread.start()
     }
 
-    fun stopRecording() {
+    // LOGIKA BARU: Stop ngasih kembalian berupa path audionya
+    fun stopRecording(): String? {
         _isRecording.value = false
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
         
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+            mediaRecorder = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         coroutineScope.launch {
             delay(600)
             restoreAllVolumes()
         }
+        
+        return currentAudioPath
     }
 }
 
