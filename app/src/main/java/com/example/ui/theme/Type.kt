@@ -6,10 +6,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Ini versi fallback (sementara). 
-// Kalo lu udah upload google_sans_flex.ttf ke folder res/font/, 
-// baru lu ganti FontFamily.SansSerif di bawah jadi font custom lu.
-
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = FontFamily.Serif,
