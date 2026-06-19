@@ -26,23 +26,33 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // STATE BARU: Buat nyimpen label yang lagi di-filter
     private val _selectedLabel = MutableStateFlow<String?>(null)
     val selectedLabel: StateFlow<String?> = _selectedLabel.asStateFlow()
 
     private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
     val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
-    // Mesin penyedot Label Otomatis dari Database
+    // LOGIKA HACKER: Mesin Penyedot Label Mandiri
     val uniqueLabels: StateFlow<List<String>> = repository.allNotes.map { notes ->
-        notes.mapNotNull { it.label }.distinct().sorted()
+        // 1. Cari catatan kamus sembunyi
+        val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+        // 2. Ekstrak label mandiri dari rawText-nya
+        val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+        // 3. Ekstrak label dari catatan-catatan asli
+        val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.mapNotNull { it.label }
+        
+        // 4. Gabungin semuanya tanpa duplikat
+        (customLabels + noteLabels).distinct().sorted()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Logika Filter Ganda: Filter by Label DULU, baru Filter by Search Query
     val filteredNotes: StateFlow<List<NoteEntity>> = combine(
         repository.allNotes, _searchQuery, _selectedLabel
     ) { notes, query, label ->
-        val labelFilteredNotes = if (label == null) notes else notes.filter { it.label == label }
+        
+        // WAJIB: Sembunyiin catatan kamus dari UI utama!
+        val realNotes = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
+        
+        val labelFilteredNotes = if (label == null) realNotes else realNotes.filter { it.label == label }
         
         if (query.isBlank()) {
             labelFilteredNotes
@@ -63,12 +73,26 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _selectedLabel.value = label
     }
 
-    // Fungsi bikin catatan kosong instan buat diikat ke label baru
-    fun createNoteWithLabel(label: String, onResult: (Int) -> Unit) {
+    // LOGIKA BARU: Cuma bikin label ke buku tabungan, KAGA bikin catatan kosong!
+    fun createIndependentLabel(label: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val note = NoteEntity(title = "New Note", rawText = "", summary = null, label = label)
-            val id = repository.insert(note).toInt()
-            launch(Dispatchers.Main) { onResult(id) }
+            val notes = repository.getAllNotesSync()
+            val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+            
+            if (sysNote != null) {
+                // Tambahin ke kamus yang udah ada
+                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
+                existingLabels.add(label)
+                repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+            } else {
+                // Bikin kamus baru kalau belum ada
+                val newSysNote = NoteEntity(
+                    title = "[[BINOT_SYSTEM_LABELS]]", 
+                    rawText = label, 
+                    summary = null
+                )
+                repository.insert(newSysNote)
+            }
         }
     }
 
