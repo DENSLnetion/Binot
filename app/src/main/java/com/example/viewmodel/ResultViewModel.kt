@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.Candidate
 import com.example.data.Content
 import com.example.data.GenerateContentRequest
+import com.example.data.InlineData
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
 import com.example.data.Part
@@ -38,7 +39,6 @@ class ResultViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // LOGIKA AUDIO PLAYER
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
     
@@ -54,7 +54,14 @@ class ResultViewModel(
 
     private fun loadNote() {
         viewModelScope.launch {
-            _note.value = noteRepository.getNoteById(noteId)
+            val fetchedNote = noteRepository.getNoteById(noteId)
+            _note.value = fetchedNote
+            
+            // LOGIKA JENIUS: Kalo catatan ini baru di-import (Audio ada tapi rawText kosong),
+            // Otomatis jalanin transkrip tanpa user harus mencet apa-apa!
+            if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
+                transcribeImportedAudio()
+            }
         }
     }
 
@@ -67,7 +74,6 @@ class ResultViewModel(
         }
     }
 
-    // Fungsi Mutakhir Pemutar Audio Asli
     fun toggleAudio() {
         val path = _note.value?.audioPath ?: return
         val file = File(path)
@@ -121,7 +127,6 @@ class ResultViewModel(
         }
     }
 
-    // Fungsi Export File MP3/MP4 ke direktori luar
     fun exportAudio(context: Context, uri: Uri, onResult: (String) -> Unit) {
         val path = _note.value?.audioPath
         if (path == null || !File(path).exists()) {
@@ -144,6 +149,84 @@ class ResultViewModel(
         }
     }
 
+    // MESIN TRANSKRIP AUDIO LANGSUNG KE GEMINI 2.5 FLASH
+    private fun transcribeImportedAudio() {
+        val currentNote = _note.value ?: return
+        val audioPath = currentNote.audioPath ?: return
+
+        if (apiKey.isBlank()) {
+            _error.value = "API Key not found. Cannot transcribe audio."
+            return
+        }
+
+        _isLoading.value = true
+        _error.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = File(audioPath)
+                if (!file.exists()) throw Exception("Audio file missing from cache.")
+
+                // Ubah file MP3 jadi sandi Base64
+                val bytes = file.readBytes()
+                val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                
+                // Gemini nerima mp3, m4a, dll pake tipe ini
+                val mimeType = "audio/mp3"
+
+                // Murni cuma ngetranskrip, TIDAK meringkas! Tetep ikutin aturan matematika.
+                val promptText = """
+                    You are an expert audio transcriber. Transcribe the following audio precisely.
+                    
+                    CRITICAL MATHEMATICAL RULES:
+                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √). 
+                    2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
+                    
+                    STRICT FORMATTING RULES:
+                    1. DO NOT summarize. Output the exact raw transcript word-for-word.
+                    2. DO NOT add conversational filler or AI pleasantries. Just output the text.
+                """.trimIndent()
+
+                // Request ke API pake inlineData Audio
+                val request = GenerateContentRequest(
+                    contents = listOf(
+                        Content(
+                            parts = listOf(
+                                Part(text = promptText),
+                                Part(inlineData = InlineData(mimeType = mimeType, data = base64Audio))
+                            )
+                        )
+                    )
+                )
+
+                val response = RetrofitClient.service.generateContent(apiKey, request)
+                val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+
+                launch(Dispatchers.Main) {
+                    if (transcript != null) {
+                        val updatedNote = currentNote.copy(rawText = transcript.trim(), timestamp = System.currentTimeMillis())
+                        _note.value = updatedNote
+                        noteRepository.update(updatedNote)
+                    } else {
+                        _error.value = "Failed to transcribe audio. Empty response from Gemini."
+                    }
+                    _isLoading.value = false
+                }
+            } catch (e: HttpException) {
+                launch(Dispatchers.Main) {
+                    _error.value = if (e.code() == 429) "API Key limit exhausted." else "HTTP Error: ${e.code()}"
+                    _isLoading.value = false
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    _error.value = "Transcription error: ${e.message}"
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
+    // Fungsi Rapiin/Ringkas dari TEKS (Bukan Audio) tetep jalan seperti biasa!
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
         if (apiKey.isBlank()) {
@@ -249,5 +332,4 @@ class ResultViewModel(
             }
     }
 }
-
 
