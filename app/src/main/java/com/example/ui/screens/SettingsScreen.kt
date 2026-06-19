@@ -37,7 +37,6 @@ fun SettingsScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-
     val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
     val exportLauncher = rememberLauncherForActivityResult(
@@ -60,29 +59,23 @@ fun SettingsScreen(
         }
     }
 
+    // PERBAIKAN: Scaffold TANPA topBar sama sekali. Murni bersih.
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-        
-    ) { paddingValues ->
-        
-        val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    ) { innerPadding ->
+        // Ngitung jarak poni HP biar kartu ga ketutup jam/baterai
+        val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(top = topPadding + 16.dp, start = 16.dp, end = 16.dp) // Padding dinamis
-                .verticalScroll(rememberScrollState()), 
+                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            
-            
-            Text(
-                text = "Settings", 
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            // Spacer buat jarak dari ujung atas HP
+            Spacer(modifier = Modifier.height(topInsets + 16.dp))
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -236,7 +229,7 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                            Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("v1.1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Button(onClick = { 
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
@@ -245,9 +238,8 @@ fun SettingsScreen(
                     }
                 }
             }
+
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
-
-
