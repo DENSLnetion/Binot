@@ -66,7 +66,6 @@ class ResultViewModel(
         }
     }
 
-    // LOGIKA HACKER: Bongkar kamus label biar bisa ditampilin di panel
     private fun loadAllLabels() {
         viewModelScope.launch(Dispatchers.IO) {
             val notes = noteRepository.getAllNotesSync()
@@ -91,11 +90,10 @@ class ResultViewModel(
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(label = newLabel, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
+        
         viewModelScope.launch(Dispatchers.IO) { 
             noteRepository.update(updatedNote) 
             
-            // Jaga-jaga: kalau labelnya baru dibikin langsung dari ResultScreen,
-            // Simpen juga ke kamus biar kaga mati kalau catatannya dihapus
             if (newLabel != null) {
                 val notes = noteRepository.getAllNotesSync()
                 val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
@@ -114,8 +112,10 @@ class ResultViewModel(
     fun restoreRawText() {
         val currentNote = _note.value ?: return
         if (currentNote.summary == null) return
+        
         val updatedNote = currentNote.copy(summary = null, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
+        
         viewModelScope.launch { 
             noteRepository.update(updatedNote) 
         }
@@ -184,7 +184,9 @@ class ResultViewModel(
             try {
                 val sourceFile = File(path)
                 context.contentResolver.openOutputStream(uri)?.use { output ->
-                    sourceFile.inputStream().use { input -> input.copyTo(output) }
+                    sourceFile.inputStream().use { input -> 
+                        input.copyTo(output) 
+                    }
                 }
                 launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
             } catch (e: Exception) { 
@@ -198,7 +200,7 @@ class ResultViewModel(
         val audioPath = currentNote.audioPath ?: return
         
         if (apiKey.isBlank()) { 
-            _error.value = "API Key not found. Cannot transcribe audio."
+            _error.value = "AI processing requires an API Key. Please set your Gemini API Key in the Settings."
             return 
         }
         
@@ -242,18 +244,25 @@ class ResultViewModel(
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
                     } else { 
-                        _error.value = "Failed to transcribe audio. Empty response from Gemini." 
+                        _error.value = "AI failed to process the transcript. The server response was empty." 
                     }
                     _isLoading.value = false
                 }
             } catch (e: HttpException) { 
                 launch(Dispatchers.Main) { 
-                    _error.value = if (e.code() == 429) "API Key limit exhausted. Please wait or use a different key." else "HTTP Error: ${e.code()}"
+                    _error.value = when (e.code()) {
+                        400 -> "Bad Request (400). The audio format or data is unrecognized."
+                        401 -> "Invalid API Key (401). Please check your Gemini API Key in the Settings."
+                        403 -> "Access Denied (403). Your API Key does not have permission for this model."
+                        429 -> "API Rate Limit Exceeded (429). Please wait a moment or use a different API Key."
+                        500 -> "Gemini Server Error (500). Please try again later."
+                        else -> "HTTP Error: ${e.code()} - Please check your connection or API Key."
+                    }
                     _isLoading.value = false 
                 }
             } catch (e: Exception) { 
                 launch(Dispatchers.Main) { 
-                    _error.value = "Transcription error: ${e.message}"
+                    _error.value = "Processing failed: ${e.message}"
                     _isLoading.value = false 
                 } 
             }
@@ -264,14 +273,14 @@ class ResultViewModel(
         val currentNote = _note.value ?: return
         
         if (apiKey.isBlank()) { 
-            _error.value = "API Key not found. Please set it in Settings."
+            _error.value = "AI processing requires an API Key. Please set your Gemini API Key in the Settings."
             return 
         }
         
         _isLoading.value = true
         _error.value = null
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val prompt = if (mode == "tidy") {
                     """
@@ -311,23 +320,39 @@ class ResultViewModel(
                     """.trimIndent()
                 }
                 
-                val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = prompt)))))
+                val request = GenerateContentRequest(
+                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                )
                 val response = RetrofitClient.service.generateContent(apiKey, request)
                 val processedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 
-                if (processedText != null) {
-                    val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
-                    _note.value = updatedNote
-                    noteRepository.update(updatedNote)
-                } else { 
-                    _error.value = "Failed to process text. Empty response from AI." 
+                launch(Dispatchers.Main) {
+                    if (processedText != null) {
+                        val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
+                        _note.value = updatedNote
+                        noteRepository.update(updatedNote)
+                    } else { 
+                        _error.value = "AI failed to process the text. The server response was empty." 
+                    }
+                    _isLoading.value = false
                 }
             } catch (e: HttpException) { 
-                _error.value = if (e.code() == 429) "API Key limit exhausted. Please wait or use a different key." else "HTTP Error: ${e.code()} - ${e.message()}"
+                launch(Dispatchers.Main) {
+                    _error.value = when (e.code()) {
+                        400 -> "Bad Request (400). The text format is unrecognized."
+                        401 -> "Invalid API Key (401). Please check your Gemini API Key in the Settings."
+                        403 -> "Access Denied (403). Your API Key does not have permission for this model."
+                        429 -> "API Rate Limit Exceeded (429). Please wait a moment or use a different API Key."
+                        500 -> "Gemini Server Error (500). Please try again later."
+                        else -> "HTTP Error: ${e.code()} - Please check your connection or API Key."
+                    }
+                    _isLoading.value = false
+                }
             } catch (e: Exception) { 
-                _error.value = "An error occurred: ${e.message}"
-            } finally { 
-                _isLoading.value = false 
+                launch(Dispatchers.Main) {
+                    _error.value = "Processing failed: ${e.message}"
+                    _isLoading.value = false
+                }
             }
         }
     }
@@ -340,12 +365,14 @@ class ResultViewModel(
     }
 
     companion object {
-        fun provideFactory(noteId: Int, repository: NoteRepository, apiKey: String): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST") 
-            override fun <T : ViewModel> create(modelClass: Class<T>): T { 
-                return ResultViewModel(noteId, repository, apiKey) as T 
+        fun provideFactory(noteId: Int, repository: NoteRepository, apiKey: String): ViewModelProvider.Factory = 
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST") 
+                override fun <T : ViewModel> create(modelClass: Class<T>): T { 
+                    return ResultViewModel(noteId, repository, apiKey) as T 
+                }
             }
-        }
     }
 }
+
 
