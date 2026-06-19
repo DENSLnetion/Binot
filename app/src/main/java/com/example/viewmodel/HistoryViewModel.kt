@@ -113,6 +113,72 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
+    // Ganti nama label di semua note yang make + di kamus system label
+    fun renameLabel(oldLabel: String, newLabel: String) {
+        if (oldLabel.isBlank() || newLabel.isBlank() || oldLabel == newLabel) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val notes = repository.getAllNotesSync()
+
+            // Update tiap note yang punya label lama
+            notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
+                val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                if (labels.contains(oldLabel)) {
+                    val updatedLabels = labels.map { if (it == oldLabel) newLabel else it }.distinct()
+                    repository.update(note.copy(label = updatedLabels.joinToString("|")))
+                }
+            }
+
+            // Update kamus system label
+            val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+            if (sysNote != null) {
+                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
+                existingLabels.remove(oldLabel)
+                existingLabels.add(newLabel)
+                repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+            }
+
+            // Kalau lagi difilter pakai label lama, pindahin filter ke label baru
+            if (_selectedLabel.value == oldLabel) {
+                _selectedLabel.value = newLabel
+            }
+        }
+    }
+
+    // Hapus label dari semua note yang make + dari kamus system label
+    fun deleteLabel(label: String) {
+        if (label.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val notes = repository.getAllNotesSync()
+
+            // Lepas label dari tiap note yang punya
+            notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
+                val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                if (labels.contains(label)) {
+                    val updatedLabels = labels.filter { it != label }
+                    val newLabelString = if (updatedLabels.isEmpty()) null else updatedLabels.joinToString("|")
+                    repository.update(note.copy(label = newLabelString))
+                }
+            }
+
+            // Hapus dari kamus system label
+            val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
+            if (sysNote != null) {
+                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
+                existingLabels.remove(label)
+                if (existingLabels.isEmpty()) {
+                    repository.deleteById(sysNote.id)
+                } else {
+                    repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+                }
+            }
+
+            // Kalau lagi difilter pakai label yang dihapus, balikin ke All Notes
+            if (_selectedLabel.value == label) {
+                _selectedLabel.value = null
+            }
+        }
+    }
+
     fun checkForAppUpdate(currentVersion: String) {
         if (_latestRelease.value != null) return 
         viewModelScope.launch(Dispatchers.IO) {
