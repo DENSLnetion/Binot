@@ -130,8 +130,10 @@ class SettingsViewModel(
             try {
                 val release = RetrofitClient.githubService.getLatestRelease()
                 
+                // PERBAIKAN FATAL: Simpen dulu nama versinya dari server apapun yang terjadi
+                _latestVersionStr.value = release.tag_name
+                
                 if (isVersionGreater(release.tag_name, currentVersion)) {
-                    _latestVersionStr.value = release.tag_name
                     apkDownloadUrl = release.assets?.firstOrNull()?.browser_download_url
                     
                     if (apkDownloadUrl != null) {
@@ -141,7 +143,7 @@ class SettingsViewModel(
                     }
                 } else {
                     delay(500)
-                    _updateState.value = UpdateState.Idle // Berarti udah Up To Date
+                    _updateState.value = UpdateState.Idle // UI sekarang bakal nampilin "App is up to date."
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -242,4 +244,3 @@ class SettingsViewModel(
             }
     }
 }
-
