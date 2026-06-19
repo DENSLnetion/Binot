@@ -1,5 +1,8 @@
+```kotlin
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,8 +22,10 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -28,6 +33,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,6 +63,8 @@ fun HistoryScreen(
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    
+    val latestRelease by viewModel.latestRelease.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
@@ -75,6 +83,18 @@ fun HistoryScreen(
     val gridState = rememberLazyStaggeredGridState()
     val isFabExpanded by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 } }
 
+    // DETEKSI VERSI ASLI HP (Otomatis baca dari build.gradle)
+    val currentVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) { "1.0.0" }
+    }
+
+    // Trigger Pengecek Update Otomatis saat Layar Dibuka
+    LaunchedEffect(Unit) {
+        viewModel.checkForAppUpdate(currentVersion)
+    }
+
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             viewModel.importAudio(context, it) { newNoteId ->
@@ -83,22 +103,20 @@ fun HistoryScreen(
         }
     }
 
-    // LOGIKA HARDWARE BACK BUTTON: Atur Kelakuan Keyboard & Search Bar
     BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode) {
         if (selectionMode) {
             selectionMode = false
             selectedNotes = emptySet()
         } else if (isSearchFocused) {
-            focusManager.clearFocus() // Pencet pertama: Nutup Keyboard
+            focusManager.clearFocus() 
         } else {
-            viewModel.updateSearchQuery("") // Pencet kedua: Bersihin teks & nguncupin kapsul
+            viewModel.updateSearchQuery("") 
         }
     }
 
     Scaffold(
         topBar = {
             if (selectionMode) {
-                // LOGIKA FULLSCREEN HEADER: Paksa background narik sampe status bar
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
@@ -130,7 +148,7 @@ fun HistoryScreen(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent, // Biar ngikutin Surface di atas
+                            containerColor = Color.Transparent, 
                             titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -257,6 +275,61 @@ fun HistoryScreen(
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
+
+    if (latestRelease != null) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.dismissUpdateNotification() },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.NewReleases, contentDescription = "Update", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Update Baru Tersedia!", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Versi ${latestRelease!!.tag_name} sudah siap diunduh.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(16.dp)) {
+                    Text(
+                        text = latestRelease!!.body ?: "Pembaruan performa dan fitur baru.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Button(
+                    onClick = { 
+                        val apkUrl = latestRelease!!.assets?.firstOrNull()?.browser_download_url ?: latestRelease!!.html_url
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)))
+                        viewModel.dismissUpdateNotification()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("Download Update (APK)")
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedButton(
+                    onClick = { 
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(latestRelease!!.html_url)))
+                        viewModel.dismissUpdateNotification()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("View on GitHub")
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -267,10 +340,13 @@ fun MorphingSearchBar(
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit
 ) {
-    // LOGIKA FULLSCREEN SEARCH: Background melar ke atas nutupin status bar
+    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "tMargin")
+    
+    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
         modifier = Modifier
@@ -279,12 +355,11 @@ fun MorphingSearchBar(
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            // Kalo lagi full, pasang window insets biar teks ga ketutup jam
             .let { if (isFocused) it.windowInsetsPadding(WindowInsets.statusBars) else it }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp, start = 20.dp, end = 20.dp)
+            modifier = Modifier.padding(top = contentTopPadding, bottom = 16.dp, start = 20.dp, end = 20.dp)
         ) {
             Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
@@ -356,7 +431,7 @@ fun NoteCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = displayText!!,
+                text = displayText,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
@@ -372,4 +447,5 @@ fun NoteCard(
         }
     }
 }
+
 
