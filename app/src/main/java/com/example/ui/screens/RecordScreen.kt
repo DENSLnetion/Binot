@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,15 +40,17 @@ import java.util.Calendar
 @Composable
 fun RecordScreen(
     viewModel: RecordViewModel,
-    userName: String,
-    onNavigateToResult: (Int) -> Unit
+    userName: String
 ) {
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
+    val isPaused by viewModel.isPaused.collectAsState()
     val amplitude by viewModel.amplitude.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
     var hasPermission by remember {
@@ -77,9 +80,14 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(innerPadding)
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -96,13 +104,21 @@ fun RecordScreen(
             
             Surface(
                 shape = CircleShape,
-                color = if (isRecording) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                color = when {
+                    isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+                    isRecording -> MaterialTheme.colorScheme.errorContainer
+                    else -> MaterialTheme.colorScheme.secondaryContainer
+                },
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 Text(
-                    text = timeString,
+                    text = if (isPaused) "⏸ $timeString" else timeString,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isRecording) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = when {
+                        isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
+                        isRecording -> MaterialTheme.colorScheme.onErrorContainer
+                        else -> MaterialTheme.colorScheme.onSecondaryContainer
+                    },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
@@ -142,28 +158,30 @@ fun RecordScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Split morphing: saat recording → membelah jadi Pause + Stop
-        // Saat idle → satu tombol Record panjang di tengah
-        val isSplit = isRecording
+        // isSplit = true selama recording ATAU paused (tombol udah membelah, belum balik)
+        val isSplit = isRecording || isPaused
 
-        // Lebar total area tombol
         val totalAreaWidth = 280.dp
 
-        // Animasi lebar masing-masing tombol
-        val recordButtonWidth by animateDpAsState(
+        val leftButtonWidth by animateDpAsState(
             targetValue = if (isSplit) 120.dp else totalAreaWidth,
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "recordWidth"
+            label = "leftWidth"
         )
-        val secondButtonWidth by animateDpAsState(
+        val rightButtonWidth by animateDpAsState(
             targetValue = if (isSplit) 120.dp else 0.dp,
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "secondWidth"
+            label = "rightWidth"
         )
-        val secondButtonAlpha by animateFloatAsState(
+        val rightButtonAlpha by animateFloatAsState(
             targetValue = if (isSplit) 1f else 0f,
             animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            label = "secondAlpha"
+            label = "rightAlpha"
+        )
+        val gapWidth by animateDpAsState(
+            targetValue = if (isSplit) 16.dp else 0.dp,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "gap"
         )
 
         Box(
@@ -173,44 +191,48 @@ fun RecordScreen(
             contentAlignment = Alignment.Center
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(if (isSplit) 16.dp else 0.dp),
+                horizontalArrangement = Arrangement.spacedBy(gapWidth),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.wrapContentWidth()
             ) {
-                // Tombol kiri: saat idle = Record (full width), saat recording = Pause
-                var isPausePressed by remember { mutableStateOf(false) }
-                val pauseWidthPress by animateDpAsState(
-                    targetValue = if (isPausePressed) recordButtonWidth + 8.dp else recordButtonWidth,
+                // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
+                var isLeftPressed by remember { mutableStateOf(false) }
+                val leftPressExtra by animateDpAsState(
+                    targetValue = if (isLeftPressed) 8.dp else 0.dp,
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                    label = "pausePress"
+                    label = "leftPress"
                 )
 
                 Box(
                     modifier = Modifier
-                        .width(pauseWidthPress)
+                        .width(leftButtonWidth + leftPressExtra)
                         .height(80.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isSplit) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.primary
+                            when {
+                                isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
+                                isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
+                                else                 -> MaterialTheme.colorScheme.primary
+                            }
                         )
-                        .pointerInput(isSplit) {
+                        .pointerInput(isSplit, isPaused) {
                             detectTapGestures(
                                 onPress = {
-                                    isPausePressed = true
+                                    isLeftPressed = true
                                     tryAwaitRelease()
-                                    isPausePressed = false
-                                    if (isSplit) {
-                                        // Pause: belum ada fungsi pause, bisa di-extend nanti
-                                        // Untuk sekarang pause = stop tapi tanpa save (stub)
-                                    } else {
-                                        // Tombol Record diklik saat idle → mulai recording
-                                        if (!hasPermission) {
-                                            launcher.launch(Manifest.permission.RECORD_AUDIO)
-                                        } else {
-                                            val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                            viewModel.toggleRecording(isEmulator)
+                                    isLeftPressed = false
+                                    when {
+                                        !isSplit -> {
+                                            // Mulai recording
+                                            if (!hasPermission) {
+                                                launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                            } else {
+                                                val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                viewModel.toggleRecording(isEmulator)
+                                            }
                                         }
+                                        isPaused -> viewModel.resumeRecording()
+                                        else     -> viewModel.pauseRecording()
                                     }
                                 }
                             )
@@ -219,9 +241,21 @@ fun RecordScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (isSplit) Icons.Default.Pause else Icons.Default.Mic,
-                            contentDescription = if (isSplit) "Pause" else "Record",
-                            tint = if (isSplit) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary,
+                            imageVector = when {
+                                isSplit && isPaused -> Icons.Default.PlayArrow
+                                isSplit            -> Icons.Default.Pause
+                                else               -> Icons.Default.Mic
+                            },
+                            contentDescription = when {
+                                isSplit && isPaused -> "Resume"
+                                isSplit            -> "Pause"
+                                else               -> "Record"
+                            },
+                            tint = when {
+                                isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                else                 -> MaterialTheme.colorScheme.onPrimary
+                            },
                             modifier = Modifier.size(32.dp)
                         )
                         if (!isSplit) {
@@ -235,20 +269,20 @@ fun RecordScreen(
                     }
                 }
 
-                // Tombol kanan: Stop (hanya muncul saat recording)
-                if (secondButtonWidth > 0.dp) {
+                // Tombol KANAN: Stop — hanya tampil saat split
+                if (rightButtonWidth > 0.dp) {
                     var isStopPressed by remember { mutableStateOf(false) }
-                    val stopWidthPress by animateDpAsState(
-                        targetValue = if (isStopPressed) secondButtonWidth + 8.dp else secondButtonWidth,
+                    val stopPressExtra by animateDpAsState(
+                        targetValue = if (isStopPressed) 8.dp else 0.dp,
                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
                         label = "stopPress"
                     )
 
                     Box(
                         modifier = Modifier
-                            .width(stopWidthPress)
+                            .width(rightButtonWidth + stopPressExtra)
                             .height(80.dp)
-                            .alpha(secondButtonAlpha)
+                            .alpha(rightButtonAlpha)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.tertiary)
                             .pointerInput(Unit) {
@@ -258,30 +292,37 @@ fun RecordScreen(
                                         tryAwaitRelease()
                                         isStopPressed = false
                                         val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                        viewModel.toggleRecording(isEmulator)
-                                        viewModel.saveNote { expectedId ->
-                                            onNavigateToResult(expectedId)
+                                        // Stop recording (juga reset isPaused di ViewModel)
+                                        if (isRecording) viewModel.toggleRecording(isEmulator)
+                                        else viewModel.stopFromPaused(isEmulator)
+                                        // Simpan + snackbar, tidak navigate
+                                        viewModel.saveNote {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    message = "Note saved",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                            }
                                         }
                                     }
                                 )
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "Stop",
-                                tint = MaterialTheme.colorScheme.onTertiary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "Stop",
+                            tint = MaterialTheme.colorScheme.onTertiary,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-    }
+    } // end Column
+    } // end Scaffold
 
     if (showLiveTextSheet) {
         ModalBottomSheet(
