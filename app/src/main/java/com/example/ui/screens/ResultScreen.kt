@@ -94,17 +94,17 @@ fun ResultScreen(
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                     )
-                                    // Tombol Tidy Up (Merapihkan)
+                                    // Tombol Tidy Up (Merapihkan) - Emoji ditebas
                                     DropdownMenuItem(
-                                        text = { Text("✨ Tidy Up") },
+                                        text = { Text("Tidy Up") },
                                         onClick = {
                                             viewModel.processText(lang, "tidy")
                                             showLanguageMenu = false
                                         }
                                     )
-                                    // Tombol Summarize (Meringkas)
+                                    // Tombol Summarize (Meringkas) - Emoji ditebas
                                     DropdownMenuItem(
-                                        text = { Text("📝 Summarize") },
+                                        text = { Text("Summarize") },
                                         onClick = {
                                             viewModel.processText(lang, "summarize")
                                             showLanguageMenu = false
@@ -261,4 +261,5 @@ fun ResultScreen(
         }
     }
 }
+
 
