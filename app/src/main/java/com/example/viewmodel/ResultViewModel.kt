@@ -57,7 +57,6 @@ class ResultViewModel(
             val fetchedNote = noteRepository.getNoteById(noteId)
             _note.value = fetchedNote
             
-            // Trigger otomatis transkrip file import MP3 murni
             if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
                 transcribeImportedAudio()
             }
