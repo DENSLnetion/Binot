@@ -128,7 +128,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             }
         }
     ) { innerPadding ->
-        // PERBAIKAN 2: Bungkus NavHost pake SharedTransitionLayout buat efek Morphing
         SharedTransitionLayout {
             NavHost(
                 navController = navController, 
@@ -169,15 +168,14 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     HistoryScreen(
                         viewModel = historyViewModel,
-                        animatedVisibilityScope = this@composable, // Oper Scope
-                        sharedTransitionScope = this@SharedTransitionLayout, // Oper Scope
+                        animatedVisibilityScope = this@composable,
+                        sharedTransitionScope = this@SharedTransitionLayout,
                         onNoteClick = { id -> navController.navigate("result/$id") }
                     )
                 }
                 composable("settings") {
                     SettingsScreen(viewModel = settingsViewModel)
                 }
-                // Animasi scaleIn/scaleOut dicopot karena udah diganti Morphing beneran
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                     val apiKey by settingsViewModel.apiKey.collectAsState()
@@ -187,9 +185,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     ResultScreen(
                         viewModel = resultViewModel,
-                        noteId = noteId, // Oper ID buat Kunci Morphing
-                        animatedVisibilityScope = this@composable, // Oper Scope
-                        sharedTransitionScope = this@SharedTransitionLayout, // Oper Scope
+                        noteId = noteId,
+                        animatedVisibilityScope = this@composable,
+                        sharedTransitionScope = this@SharedTransitionLayout,
                         onNavigateBack = { navController.popBackStack() }
                     )
                 }
@@ -197,5 +195,4 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
-
 
