@@ -155,11 +155,18 @@ class SettingsViewModel(
                 }
             } catch (e: HttpException) {
                 e.printStackTrace()
-                _latestVersionStr.value = "HTTP Error: ${e.code()}" 
+                // FIX FATAL UX: Bikin pesannya elegan biar lu dan user kaga panik
+                if (e.code() == 403) {
+                    _latestVersionStr.value = "Server Limit (Coba lagi 1 jam)" 
+                } else if (e.code() == 404) {
+                    _latestVersionStr.value = "Belum Ada Rilis Tersedia"
+                } else {
+                    _latestVersionStr.value = "HTTP Error: ${e.code()}" 
+                }
                 _updateState.value = UpdateState.Error
             } catch (e: Exception) {
                 e.printStackTrace()
-                _latestVersionStr.value = "Network Error: ${e.message}"
+                _latestVersionStr.value = "Network Error (Periksa Internet)"
                 _updateState.value = UpdateState.Error
             }
         }
@@ -262,3 +269,5 @@ class SettingsViewModel(
             }
     }
 }
+
+
