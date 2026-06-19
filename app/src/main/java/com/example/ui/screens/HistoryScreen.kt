@@ -5,8 +5,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -15,6 +19,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -27,8 +32,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +62,10 @@ fun HistoryScreen(
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    // State untuk Animasi Morphing Search Bar
+    var isSearchFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
     val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
         notes.find { it.id == id }?.isPinned == true 
     }
@@ -60,34 +73,21 @@ fun HistoryScreen(
     val pinnedNotes = notes.filter { it.isPinned }
     val unpinnedNotes = notes.filter { !it.isPinned }
 
-    // State buat nangkep scroll (buat animasi Kapsul Morphing)
     val gridState = rememberLazyStaggeredGridState()
     val isFabExpanded by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 } }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             viewModel.importAudio(context, it) { newNoteId ->
-                onNoteClick(newNoteId) // Buka ResultScreen otomatis
+                onNoteClick(newNoteId)
             }
         }
     }
 
-    // Dibungkus Scaffold biar gampang naruh Floating Action Button di pojok
+    // PERBAIKAN FATAL: Memasukkan TopAppBar & Morphing Search Bar murni ke dalam slot `topBar` Scaffold
+    // Ini ngejamin warnanya "tumpah" nyundul area baterai dan jam HP secara native!
     Scaffold(
-        floatingActionButton = {
-            if (!selectionMode) {
-                ExtendedFloatingActionButton(
-                    onClick = { importLauncher.launch("audio/*") }, // Minta nyari file audio
-                    expanded = isFabExpanded,
-                    icon = { Icon(Icons.Default.Audiotrack, contentDescription = "Import Audio") },
-                    text = { Text("Import Audio") },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-        }
-    ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+        topBar = {
             if (selectionMode) {
                 TopAppBar(
                     title = { Text("${selectedNotes.size} Selected") },
@@ -104,7 +104,7 @@ fun HistoryScreen(
                             Icon(
                                 imageVector = Icons.Default.PushPin, 
                                 contentDescription = "Pin",
-                                tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         IconButton(onClick = { 
@@ -115,23 +115,37 @@ fun HistoryScreen(
                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                )
-            } else {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    placeholder = { Text("Search notes...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    shape = RoundedCornerShape(100),
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
+            } else {
+                MorphingSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { viewModel.updateSearchQuery(it) },
+                    isFocused = isSearchFocused,
+                    onFocusChange = { isSearchFocused = it },
+                    onClearFocus = { focusManager.clearFocus() }
+                )
             }
-            
+        },
+        floatingActionButton = {
+            if (!selectionMode) {
+                ExtendedFloatingActionButton(
+                    onClick = { importLauncher.launch("audio/*") },
+                    expanded = isFabExpanded,
+                    icon = { Icon(Icons.Default.Audiotrack, contentDescription = "Import Audio") },
+                    text = { Text("Import Audio") },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             if (notes.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                     Text(
@@ -144,7 +158,7 @@ fun HistoryScreen(
             } else {
                 LazyVerticalStaggeredGrid(
                     columns = StaggeredGridCells.Fixed(2),
-                    state = gridState, // Suntik state grid di sini biar tau kapan nge-scroll
+                    state = gridState,
                     modifier = Modifier.fillMaxSize().weight(1f).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalItemSpacing = 8.dp
@@ -208,7 +222,6 @@ fun HistoryScreen(
                             }
                         }
                     }
-                    // Spacer amanan biar kartu paling bawah kaga ketutup Kapsul Import
                     item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
                 }
             }
@@ -231,6 +244,67 @@ fun HistoryScreen(
     }
 }
 
+// KOMPONEN MUTAKHIR: Search Bar Morphing Material 3
+@Composable
+fun MorphingSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    isFocused: Boolean,
+    onFocusChange: (Boolean) -> Unit,
+    onClearFocus: () -> Unit
+) {
+    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    
+    val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
+    val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
+    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "tMargin")
+    
+    // Pas fokus, padding atasnya melar biar teks kaga ketutupan poni HP
+    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding)
+            .padding(top = topMargin, bottom = 8.dp)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = contentTopPadding, bottom = 16.dp, start = 20.dp, end = 20.dp)
+        ) {
+            Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(modifier = Modifier.weight(1f)) {
+                if (query.isEmpty()) {
+                    Text("Search notes...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { onFocusChange(it.isFocused) }
+                )
+            }
+            if (isFocused || query.isNotEmpty()) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable {
+                        onQueryChange("")
+                        onClearFocus()
+                    }
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NoteCard(
@@ -243,7 +317,6 @@ fun NoteCard(
     val minHeight = remember(note.id) { (140..220).random().dp }
     val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
     
-    // Logika Pintar: Kalau summary kosong, cek rawText. Kalau rawText juga kosong, berarti lagi nunggu Gemini
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary 
                       else if (note.rawText.isNotBlank()) note.rawText 
                       else "⏳ Waiting for AI transcription..."
