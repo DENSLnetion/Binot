@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -68,15 +69,21 @@ class SettingsViewModel(
     private val adapter = moshi.adapter<List<NoteEntity>>(type)
 
     fun saveUserName(name: String) {
-        viewModelScope.launch { settingsRepository.saveUserName(name) }
+        viewModelScope.launch {
+            settingsRepository.saveUserName(name)
+        }
     }
 
     fun saveApiKey(key: String) {
-        viewModelScope.launch { settingsRepository.saveGeminiApiKey(key) }
+        viewModelScope.launch {
+            settingsRepository.saveGeminiApiKey(key)
+        }
     }
 
     fun saveThemeMode(mode: Int) {
-        viewModelScope.launch { settingsRepository.saveThemeMode(mode) }
+        viewModelScope.launch {
+            settingsRepository.saveThemeMode(mode)
+        }
     }
 
     fun exportBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
@@ -130,7 +137,7 @@ class SettingsViewModel(
             try {
                 val release = RetrofitClient.githubService.getLatestRelease()
                 
-                // PERBAIKAN FATAL: Simpen dulu nama versinya dari server apapun yang terjadi
+                // Simpan versi terbarunya
                 _latestVersionStr.value = release.tag_name
                 
                 if (isVersionGreater(release.tag_name, currentVersion)) {
@@ -139,14 +146,20 @@ class SettingsViewModel(
                     if (apkDownloadUrl != null) {
                         _updateState.value = UpdateState.Available
                     } else {
+                        _latestVersionStr.value = "No APK File found in Release"
                         _updateState.value = UpdateState.Error
                     }
                 } else {
                     delay(500)
-                    _updateState.value = UpdateState.Idle // UI sekarang bakal nampilin "App is up to date."
+                    _updateState.value = UpdateState.Idle 
                 }
+            } catch (e: HttpException) {
+                e.printStackTrace()
+                _latestVersionStr.value = "HTTP Error: ${e.code()}" 
+                _updateState.value = UpdateState.Error
             } catch (e: Exception) {
                 e.printStackTrace()
+                _latestVersionStr.value = "Network Error: ${e.message}"
                 _updateState.value = UpdateState.Error
             }
         }
@@ -155,6 +168,7 @@ class SettingsViewModel(
     private fun isVersionGreater(latest: String, current: String): Boolean {
         val l = latest.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
         val c = current.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
+        
         for (i in 0 until maxOf(l.size, c.size)) {
             val lVal = l.getOrNull(i) ?: 0
             val cVal = c.getOrNull(i) ?: 0
@@ -184,6 +198,7 @@ class SettingsViewModel(
             while (isDownloading) {
                 val query = DownloadManager.Query().setFilterById(downloadId)
                 val cursor = downloadManager.query(query)
+                
                 if (cursor != null && cursor.moveToFirst()) {
                     val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
                     val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
@@ -199,9 +214,11 @@ class SettingsViewModel(
                             downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
                             _updateState.value = UpdateState.Downloaded
                             isDownloading = false
+                            
                             downloadedApkUri?.let { uri -> promptInstall(context, uri) }
                             
                         } else if (status == DownloadManager.STATUS_FAILED) {
+                            _latestVersionStr.value = "Download Failed by System"
                             _updateState.value = UpdateState.Error
                             isDownloading = false
                         } else {
@@ -227,6 +244,7 @@ class SettingsViewModel(
             context.startActivity(intent)
         } catch (e: Exception) {
             e.printStackTrace()
+            _latestVersionStr.value = "Installation Failed"
             _updateState.value = UpdateState.Error
         }
     }
