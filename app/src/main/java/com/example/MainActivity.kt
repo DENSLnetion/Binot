@@ -150,10 +150,12 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                 }
                 composable("record") {
+                    val apiKey by settingsViewModel.apiKey.collectAsState()
                     val recordViewModel: RecordViewModel = viewModel(
                         factory = RecordViewModel.provideFactory(
                             appContainer.audioRecorderManager,
-                            appContainer.noteRepository
+                            appContainer.noteRepository,
+                            apiKey
                         )
                     )
                     RecordScreen(
