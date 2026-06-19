@@ -39,7 +39,8 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         // 2. Ekstrak label mandiri dari rawText-nya
         val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
         // 3. Ekstrak label dari catatan-catatan asli
-        val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.mapNotNull { it.label }
+        val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
+            .flatMap { it.label?.split("|")?.map { l -> l.trim() }?.filter { l -> l.isNotBlank() } ?: emptyList() }
         
         // 4. Gabungin semuanya tanpa duplikat
         (customLabels + noteLabels).distinct().sorted()
@@ -52,7 +53,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         // WAJIB: Sembunyiin catatan kamus dari UI utama!
         val realNotes = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
         
-        val labelFilteredNotes = if (label == null) realNotes else realNotes.filter { it.label == label }
+        val labelFilteredNotes = if (label == null) realNotes else realNotes.filter { note ->
+            note.label?.split("|")?.map { it.trim() }?.contains(label) == true
+        }
         
         if (query.isBlank()) {
             labelFilteredNotes
