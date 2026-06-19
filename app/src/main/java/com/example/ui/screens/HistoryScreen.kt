@@ -71,7 +71,6 @@ fun HistoryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val latestRelease by viewModel.latestRelease.collectAsState()
     
-    // Labels States
     val uniqueLabels by viewModel.uniqueLabels.collectAsState()
     val selectedLabel by viewModel.selectedLabel.collectAsState()
 
@@ -121,7 +120,6 @@ fun HistoryScreen(
         }
     }
 
-    // LOGIKA SIDE PANEL (DRAWER)
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -166,7 +164,7 @@ fun HistoryScreen(
             topBar = {
                 if (selectionMode) {
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), // Aesthetic upgrade
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), 
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
                     ) {
                         TopAppBar(
@@ -282,11 +280,12 @@ fun HistoryScreen(
             confirmButton = {
                 Button(onClick = {
                     if (newLabelInput.isNotBlank()) {
-                        viewModel.createNoteWithLabel(newLabelInput.trim()) { newId -> onNoteClick(newId) }
+                        // PERBAIKAN: Cuma bikin label murni, KAGA buka catatan kosong!
+                        viewModel.createIndependentLabel(newLabelInput.trim())
                         showNewLabelDialog = false
                         newLabelInput = ""
                     }
-                }) { Text("Create & Open") }
+                }) { Text("Create Label") }
             },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
@@ -350,14 +349,13 @@ fun MorphingSearchBar(
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) // Aesthetic Upgrade
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) 
             .let { if (isFocused) it.windowInsetsPadding(WindowInsets.statusBars) else it }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
         ) {
-            // Ikon Menu (Garis Tiga) yg ngumpet kalo Search lagi aktif
             AnimatedVisibility(
                 visible = !isFocused,
                 enter = expandHorizontally(animationSpec = spring()),
@@ -405,11 +403,10 @@ fun NoteCard(
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            // Aesthetic Upgrade: Background transparan mewah
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) 
-                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
@@ -418,7 +415,6 @@ fun NoteCard(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // LOGIKA LABEL CAPSULE DI CARD
             if (!note.label.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
