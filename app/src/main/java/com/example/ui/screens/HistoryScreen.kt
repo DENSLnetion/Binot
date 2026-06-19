@@ -2,11 +2,17 @@ package com.example.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -18,21 +24,24 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -61,8 +70,11 @@ fun HistoryScreen(
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    // YouTube Dialog State
+    var showYouTubeDialog by remember { mutableStateOf(false) }
+    var youtubeLinkInput by remember { mutableStateOf("") }
 
-    // State untuk Animasi Morphing Search Bar
     var isSearchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
@@ -74,7 +86,6 @@ fun HistoryScreen(
     val unpinnedNotes = notes.filter { !it.isPinned }
 
     val gridState = rememberLazyStaggeredGridState()
-    val isFabExpanded by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 } }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
@@ -84,8 +95,6 @@ fun HistoryScreen(
         }
     }
 
-    // PERBAIKAN FATAL: Memasukkan TopAppBar & Morphing Search Bar murni ke dalam slot `topBar` Scaffold
-    // Ini ngejamin warnanya "tumpah" nyundul area baterai dan jam HP secara native!
     Scaffold(
         topBar = {
             if (selectionMode) {
@@ -134,14 +143,57 @@ fun HistoryScreen(
         },
         floatingActionButton = {
             if (!selectionMode) {
-                ExtendedFloatingActionButton(
-                    onClick = { importLauncher.launch("audio/*") },
-                    expanded = isFabExpanded,
-                    icon = { Icon(Icons.Default.Audiotrack, contentDescription = "Import Audio") },
-                    text = { Text("Import Audio") },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                // FAB BERANAK (Speed Dial Vertical Material 3)
+                var isFabMenuExpanded by remember { mutableStateOf(false) }
+                val fabRotation by animateFloatAsState(targetValue = if (isFabMenuExpanded) 45f else 0f, label = "fab_rot")
+
+                Column(horizontalAlignment = Alignment.End) {
+                    AnimatedVisibility(
+                        visible = isFabMenuExpanded,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { 50 }),
+                        exit = fadeOut() + slideOutVertically(targetOffsetY = { 50 })
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End, 
+                            verticalArrangement = Arrangement.spacedBy(16.dp), 
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        ) {
+                            // YouTube Kapsul (Lebih Pendek, Text Rata Kiri di Dalamnya)
+                            Row(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                                    .clickable { showYouTubeDialog = true; isFabMenuExpanded = false }
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Spacer(Modifier.width(12.dp))
+                                Text("YouTube Link", color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Audio Kapsul (Lebih Panjang, Text Rata Kiri di Dalamnya)
+                            Row(
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                    .clickable { importLauncher.launch("audio/*"); isFabMenuExpanded = false }
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Audiotrack, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Import Audio File", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    
+                    FloatingActionButton(
+                        onClick = { isFabMenuExpanded = !isFabMenuExpanded },
+                        containerColor = if (isFabMenuExpanded) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = if (isFabMenuExpanded) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.rotate(fabRotation))
+                    }
+                }
             }
         }
     ) { innerPadding ->
@@ -222,7 +274,7 @@ fun HistoryScreen(
                             }
                         }
                     }
-                    item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
+                    item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(180.dp)) }
                 }
             }
         }
@@ -242,9 +294,40 @@ fun HistoryScreen(
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
+
+    // POP UP YOUTUBE EXTRACTOR
+    if (showYouTubeDialog) {
+        AlertDialog(
+            onDismissRequest = { showYouTubeDialog = false },
+            title = { Text("YouTube Extractor") },
+            text = { 
+                Column {
+                    Text("Paste YouTube link to extract its auto-generated subtitles.", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = youtubeLinkInput,
+                        onValueChange = { youtubeLinkInput = it },
+                        label = { Text("https://youtu.be/...") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (youtubeLinkInput.isNotBlank()) {
+                        viewModel.importYouTubeLink(youtubeLinkInput) { newNoteId ->
+                            onNoteClick(newNoteId)
+                        }
+                        showYouTubeDialog = false
+                        youtubeLinkInput = ""
+                    }
+                }) { Text("Extract") }
+            },
+            dismissButton = { TextButton(onClick = { showYouTubeDialog = false }) { Text("Cancel") } }
+        )
+    }
 }
 
-// KOMPONEN MUTAKHIR: Search Bar Morphing Material 3
 @Composable
 fun MorphingSearchBar(
     query: String,
@@ -259,7 +342,6 @@ fun MorphingSearchBar(
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "tMargin")
     
-    // Pas fokus, padding atasnya melar biar teks kaga ketutupan poni HP
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 16.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
@@ -319,7 +401,7 @@ fun NoteCard(
     
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary 
                       else if (note.rawText.isNotBlank()) note.rawText 
-                      else "⏳ Waiting for AI transcription..."
+                      else "⏳ Waiting for AI extraction..."
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -343,7 +425,7 @@ fun NoteCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = displayText!!,
+                text = displayText,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
