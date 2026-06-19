@@ -234,7 +234,7 @@ fun SettingsScreen(
                     ) {
                         Column {
                             Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                            Text("v1.1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Button(onClick = { 
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
