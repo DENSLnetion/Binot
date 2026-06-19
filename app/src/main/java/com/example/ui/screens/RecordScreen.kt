@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -24,7 +23,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -145,17 +143,18 @@ fun RecordScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // PERBAIKAN: Animasi Scale (Mengecil/Membal) buat tombol View
+            // PERBAIKAN: Animasi Morphing (Melebar) buat tombol View
             var isViewPressed by remember { mutableStateOf(false) }
-            val viewScale by animateFloatAsState(
-                targetValue = if (isViewPressed) 0.85f else 1f,
+            val viewWidth by animateDpAsState(
+                targetValue = if (isViewPressed) 110.dp else 80.dp,
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                label = "viewScale"
+                label = "viewWidth"
             )
 
             Box(
                 modifier = Modifier
-                    .scale(viewScale)
+                    .width(viewWidth)
+                    .height(80.dp) // Samain tinggi sama Record
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondaryContainer)
                     .pointerInput(Unit) {
@@ -167,8 +166,7 @@ fun RecordScreen(
                                 showLiveTextSheet = true
                             }
                         )
-                    }
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
