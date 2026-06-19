@@ -7,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,22 +61,29 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
-            )
-        }
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        
     ) { paddingValues ->
+        
+        val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .padding(top = topPadding + 16.dp, start = 16.dp, end = 16.dp) // Padding dinamis
                 .verticalScroll(rememberScrollState()), 
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            
+            
+            Text(
+                text = "Settings", 
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = MaterialTheme.shapes.extraLarge
@@ -195,7 +201,6 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // PERBAIKAN: Tombol Backup Gepeng
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -204,7 +209,7 @@ fun SettingsScreen(
                         Text(
                             text = "Notes Backup", 
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f) // Biar teks ngalah ke kiri
+                            modifier = Modifier.weight(1f)
                         )
                         Row(horizontalArrangement = Arrangement.End) {
                             OutlinedButton(
@@ -234,16 +239,15 @@ fun SettingsScreen(
                             Text("v1.0.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Button(onClick = { 
-                            // PERBAIKAN: Link Rilis DENSLnetion
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot/releases/latest"))
                             context.startActivity(intent)
                         }) { Text("Check Update") }
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
+
 
