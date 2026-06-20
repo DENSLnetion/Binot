@@ -86,7 +86,7 @@ fun RecordScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
             Text(
