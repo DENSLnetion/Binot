@@ -32,10 +32,9 @@ private val LightColorScheme = lightColorScheme(
     onSecondaryContainer = Color(0xFF051F23),
     background = Color(0xFFFAFDFD),
     onBackground = Color(0xFF191C1D),
-    surface = Color(0xFFFAFDFD), // Warna Card/Kertas (Putih murni)
+    surface = Color(0xFFFAFDFD),
     onSurface = Color(0xFF191C1D),
-    // KUNCI: Diterangin jadi abu-abu super muda (sebelumnya 0xFFDBE4E6)
-    surfaceVariant = Color(0xFFF0F4F5), // Warna Latar Aplikasi/Kanvas
+    surfaceVariant = Color(0xFFDBE4E6),
     onSurfaceVariant = Color(0xFF3F484A)
 )
 
@@ -48,20 +47,18 @@ private val SlateDarkColorScheme = darkColorScheme(
     onSecondary = Color(0xFF1C3438),
     secondaryContainer = Color(0xFF334B4F),
     onSecondaryContainer = Color(0xFFCDE7EC),
-    background = Color(0xFF202324),
+    background = Color(0xFF202324), 
     onBackground = Color(0xFFE1E3E3),
-    surface = Color(0xFF202324), // Warna Card/Kertas (Hitam kalem)
+    surface = Color(0xFF202324),    
     onSurface = Color(0xFFE1E3E3),
-    // KUNCI: Digelapin jadi hitam keabu-abuan pekat (sebelumnya 0xFF3F484A)
-    surfaceVariant = Color(0xFF181C1D), // Warna Latar Aplikasi/Kanvas
+    surfaceVariant = Color(0xFF3F484A),
     onSurfaceVariant = Color(0xFFBFC8CA)
 )
 
 private val AmoledDarkColorScheme = SlateDarkColorScheme.copy(
     background = Color.Black,
-    surface = Color.Black, // Warna Card/Kertas (Hitam total)
-    // KUNCI: Lebih gelap lagi dari Slate Dark, nyaris hitam
-    surfaceVariant = Color(0xFF0C0E0E) // Warna Latar Aplikasi/Kanvas
+    surface = Color.Black,
+    surfaceVariant = Color(0xFF111414)
 )
 
 @Composable
@@ -80,6 +77,8 @@ fun BinotTheme(
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
+            // KEMBALI KE KODRAT: Biarkan Dynamic Color berkuasa 100% tanpa di-override hex.
+            // Sesuai wallpaper hijau lu, sistem bakal ngeracik palet hijaunya sendiri.
             if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         themeMode == 3 -> AmoledDarkColorScheme
@@ -87,7 +86,6 @@ fun BinotTheme(
         else -> LightColorScheme
     }
     
-    // Override Amoled manually even if dynamic color is on, to ensure pure black
     val finalColorScheme = if (themeMode == 3) {
         colorScheme.copy(
             background = Color.Black,
@@ -104,3 +102,4 @@ fun BinotTheme(
         content = content
     )
 }
+
