@@ -136,11 +136,12 @@ fun ResultScreen(
     // Pola yang dipakai Google Keep: container (shape kosong) morph duluan, konten
     // detail baru muncul SETELAH morph kelar. Di sini ditiru dengan showContent:
     // mulai false (Scaffold cuma nampilin shape+warna kosong via topBar minimal),
-    // baru jadi true sesaat setelah delay pendek — pas morph sudah hampir/benar2
-    // selesai — baru konten berat di-compose.
+    // baru jadi true sesaat setelah delay pendek. Delay sengaja dibikin SANGAT
+    // singkat (60ms, bukan 220ms) — cukup buat ngelewatin frame pertama yang
+    // paling berat (awal morph), tapi gak sampai kerasa kayak fade tersendiri.
     var showContent by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(220)
+        delay(60)
         showContent = true
     }
 
