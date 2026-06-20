@@ -100,7 +100,7 @@ Please ensure your code follows the existing architectural patterns (MVVM) and r
 
 ---
 
-##Support & Donation
+## Support & Donation
 
 Binot is an open-source project provided for free. If you find this application helpful for your daily productivity, study, or work, consider supporting the development. Your contribution helps maintain the repository and fuels future updates.
 
