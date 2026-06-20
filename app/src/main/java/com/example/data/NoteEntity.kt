@@ -12,7 +12,6 @@ data class NoteEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val isPinned: Boolean = false,
     val audioPath: String? = null,
-    // LOGIKA BARU: Kolom buat nyimpen Label/Kategori catatan
     val label: String? = null
 )
 
