@@ -5,9 +5,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -84,7 +87,8 @@ private fun BouncyOutlinedButton(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
     val userName by viewModel.userName.collectAsState()
@@ -120,124 +124,127 @@ fun SettingsScreen(
     ) { innerPadding ->
         val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding())
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Spacer(modifier = Modifier.height(topInsets + 4.dp))
-
-            Text(
-                text = "Settings", 
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp)
+        with(animatedVisibilityScope) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = innerPadding.calculateBottomPadding())
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState())
+                    // ANIMASI CHOREOGRAPHY: Seluruh elemen berbaris meluncur mulus dari bawah
+                    .animateEnterExit(enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Personalization", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, label = { Text("Your Name") }, modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(12.dp))
-                    BouncyButton(onClick = { viewModel.saveUserName(nameInput); coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } }, modifier = Modifier.align(Alignment.End)) {
-                        Text("Save Name")
-                    }
-                }
-            }
+                Spacer(modifier = Modifier.height(topInsets + 4.dp))
 
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Gemini API Key", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(value = keyInput, onValueChange = { keyInput = it }, label = { Text("Enter API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(12.dp))
-                    BouncyButton(onClick = { viewModel.saveApiKey(keyInput); coroutineScope.launch { snackbarHostState.showSnackbar("API Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) {
-                        Text("Save Key")
-                    }
-                }
-            }
+                Text(
+                    text = "Settings", 
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Appearance", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4), onClick = { viewModel.saveThemeMode(0) }, selected = themeMode == 0) { Text("Auto") }
-                        SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4), onClick = { viewModel.saveThemeMode(1) }, selected = themeMode == 1) { Text("Light") }
-                        SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4), onClick = { viewModel.saveThemeMode(2) }, selected = themeMode == 2) { Text("Dark") }
-                        SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4), onClick = { viewModel.saveThemeMode(3) }, selected = themeMode == 3) { Text("Amoled", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
-                    }
-                }
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Data & System", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Notes Backup", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.End) {
-                            BouncyOutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, modifier = Modifier.padding(end = 8.dp)) { Text("Restore") }
-                            BouncyButton(onClick = { exportLauncher.launch("Binot_Backup_${formatter.format(Date())}.json") }) { Text("Backup") }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Personalization", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, label = { Text("Your Name") }, modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(12.dp))
+                        BouncyButton(onClick = { viewModel.saveUserName(nameInput); coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } }, modifier = Modifier.align(Alignment.End)) {
+                            Text("Save Name")
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                            Text("v$currentVersion", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                            
-                            if (updateState == UpdateState.Downloading) {
-                                val animatedProgress by animateFloatAsState(targetValue = downloadProgress / 100f, label = "progress")
-                                Spacer(Modifier.height(8.dp))
-                                LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small), color = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.height(4.dp))
-                                Text("Downloading... $downloadProgress%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            } else if (updateState == UpdateState.Available) {
-                                Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            } else if (updateState == UpdateState.Error) {
-                                Text("Failed: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                            } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
-                                Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Gemini API Key", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(value = keyInput, onValueChange = { keyInput = it }, label = { Text("Enter API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(12.dp))
+                        BouncyButton(onClick = { viewModel.saveApiKey(keyInput); coroutineScope.launch { snackbarHostState.showSnackbar("API Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) {
+                            Text("Save Key")
+                        }
+                    }
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Appearance", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4), onClick = { viewModel.saveThemeMode(0) }, selected = themeMode == 0) { Text("Auto") }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4), onClick = { viewModel.saveThemeMode(1) }, selected = themeMode == 1) { Text("Light") }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4), onClick = { viewModel.saveThemeMode(2) }, selected = themeMode == 2) { Text("Dark") }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4), onClick = { viewModel.saveThemeMode(3) }, selected = themeMode == 3) { Text("Amoled", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
+                        }
+                    }
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("Data & System", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Notes Backup", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.End) {
+                                BouncyOutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, modifier = Modifier.padding(end = 8.dp)) { Text("Restore") }
+                                BouncyButton(onClick = { exportLauncher.launch("Binot_Backup_${formatter.format(Date())}.json") }) { Text("Backup") }
                             }
                         }
                         
-                        AnimatedContent(targetState = updateState, label = "update_btn") { state ->
-                            when (state) {
-                                UpdateState.Idle -> BouncyButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Text("Check Update") }
-                                UpdateState.Checking -> Button(onClick = {}, enabled = false) { CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) }
-                                UpdateState.Available -> BouncyButton(onClick = { viewModel.startDownload(context) }) { Text("Update App") }
-                                UpdateState.Downloading -> OutlinedButton(onClick = {}) { Text("Downloading") }
-                                UpdateState.Downloaded -> BouncyButton(onClick = { viewModel.promptInstall(context) }) { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Install") }
-                                UpdateState.Error -> BouncyOutlinedButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Icon(Icons.Default.Error, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Retry") }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text("App Version", style = MaterialTheme.typography.bodyLarge)
+                                Text("v$currentVersion", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                
+                                if (updateState == UpdateState.Downloading) {
+                                    val animatedProgress by animateFloatAsState(targetValue = downloadProgress / 100f, label = "progress")
+                                    Spacer(Modifier.height(8.dp))
+                                    LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small), color = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Downloading... $downloadProgress%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                } else if (updateState == UpdateState.Available) {
+                                    Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                } else if (updateState == UpdateState.Error) {
+                                    Text("Failed: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
+                                    Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            
+                            AnimatedContent(targetState = updateState, label = "update_btn") { state ->
+                                when (state) {
+                                    UpdateState.Idle -> BouncyButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Text("Check Update") }
+                                    UpdateState.Checking -> Button(onClick = {}, enabled = false) { CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) }
+                                    UpdateState.Available -> BouncyButton(onClick = { viewModel.startDownload(context) }) { Text("Update App") }
+                                    UpdateState.Downloading -> OutlinedButton(onClick = {}) { Text("Downloading") }
+                                    UpdateState.Downloaded -> BouncyButton(onClick = { viewModel.promptInstall(context) }) { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Install") }
+                                    UpdateState.Error -> BouncyOutlinedButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Icon(Icons.Default.Error, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Retry") }
+                                }
                             }
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(40.dp))
             }
-            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
-
