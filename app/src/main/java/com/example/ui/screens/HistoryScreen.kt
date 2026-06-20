@@ -87,7 +87,7 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
-    // State buat fitur kelola label (rename/delete)
+    // State fitur kelola label
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
     var showRenameLabelDialog by remember { mutableStateOf(false) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
@@ -152,7 +152,6 @@ fun HistoryScreen(
                     Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        // AccessTime = jam/terbaru, History = putar balik/terlama, SortByAlpha = A-Z
                         data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
@@ -399,7 +398,6 @@ fun HistoryScreen(
         )
     }
 
-    // Bottom sheet kecil pas titik tiga di label dipencet: pilihan Rename atau Delete
     if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
         ModalBottomSheet(
             onDismissRequest = { labelBeingManaged = null },
@@ -589,7 +587,6 @@ fun MorphingSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
-                // FIX FATAL: Pasang penahan tiang! Biar kaga ngempes pas tombol â˜° dibuang dari layar.
                 .defaultMinSize(minHeight = 48.dp) 
         ) {
             AnimatedVisibility(
@@ -637,9 +634,6 @@ fun NoteCard(
     onLabelClick: (String) -> Unit
 ) {
     val minHeight = remember(note.id) { (140..220).random().dp }
-    // SimpleDateFormat di-remember (bukan dibuat ulang tiap recomposition). Kecil,
-    // tapi card ini ikut numpang recompose berkali-kali selama shared transition
-    // morphing item lain di grid berjalan â€” akumulasi banyak instance jadi terasa.
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
 
