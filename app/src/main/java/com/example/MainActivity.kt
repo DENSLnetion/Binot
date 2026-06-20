@@ -43,6 +43,7 @@ import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.RecordScreen
 import com.example.ui.screens.ResultScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.TrashScreen
 import com.example.ui.theme.BinotTheme
 import com.example.viewmodel.HistoryViewModel
 import com.example.viewmodel.RecordViewModel
@@ -98,7 +99,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // KUNCI KANVAS: Pakai surfaceContainer. Latar belakang aplikasi bakal pas (tidak terlalu terang).
+        // KUNCI KANVAS UTAMA: Biar semua tab serasi pakai surfaceContainer
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
@@ -143,6 +144,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
+                // FIX TRANSISI: Balikin fadeIn/fadeOut biar ga patah waktu pindah tab/layar
                 enterTransition = { fadeIn(animationSpec = tween(300)) },
                 exitTransition = { fadeOut(animationSpec = tween(300)) },
                 popEnterTransition = { fadeIn(animationSpec = tween(300)) },
@@ -182,7 +184,18 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         viewModel = historyViewModel,
                         animatedVisibilityScope = this@composable,
                         sharedTransitionScope = this@SharedTransitionLayout,
-                        onNoteClick = { id -> navController.navigate("result/$id") }
+                        onNoteClick = { id -> navController.navigate("result/$id") },
+                        onTrashClick = { navController.navigate("trash") }
+                    )
+                }
+                // LAYAR TRASH BARU
+                composable("trash") {
+                    val historyViewModel: HistoryViewModel = viewModel(
+                        factory = HistoryViewModel.provideFactory(appContainer.noteRepository)
+                    )
+                    TrashScreen(
+                        viewModel = historyViewModel,
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
                 composable("settings") {
@@ -207,4 +220,5 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
+
 
