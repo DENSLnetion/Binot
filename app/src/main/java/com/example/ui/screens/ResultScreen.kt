@@ -13,7 +13,6 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -120,34 +119,27 @@ fun ResultScreen(
         }
     }
 
-    var showContent by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(60)
-        showContent = true
-    }
-
-    val closeNote: () -> Unit = {
-        showContent = false
-        onNavigateBack()
-    }
-
+    // Bebas dari kutukan hack delay 60ms. BackHandler bersih sesuai aslinya.
     BackHandler(enabled = true) {
         if (showSidePanel) {
             showSidePanel = false
         } else if (isTitleFocused) {
             focusManager.clearFocus()
         } else {
-            closeNote()
+            onNavigateBack()
         }
     }
 
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            // Ini kunci utamanya. Kita kasih tau Compose buat "Nge-Stretch layarnya sebagai 
+            // gambar tunggal" (ScaleToBounds) selama animasi berjalan.
             modifier = Modifier
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
-                    animatedVisibilityScope = animatedVisibilityScope
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
@@ -157,7 +149,7 @@ fun ResultScreen(
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = { 
-                        if (note != null && showContent) {
+                        if (note != null) {
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
@@ -168,55 +160,45 @@ fun ResultScreen(
                                     .fillMaxWidth()
                                     .onFocusChanged { isTitleFocused = it.isFocused }
                             )
-                        } else if (note != null) {
-                            Text(
-                                text = note!!.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = closeNote) {
+                        IconButton(onClick = onNavigateBack) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
-                        if (showContent) {
-                            Box {
-                                IconButton(onClick = { showLanguageMenu = true }) {
-                                    Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
-                                }
-                                DropdownMenu(
-                                    expanded = showLanguageMenu,
-                                    onDismissRequest = { showLanguageMenu = false }
-                                ) {
-                                    val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                                    languages.forEachIndexed { index, lang ->
-                                        Text(
-                                            text = lang,
-                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-                                        DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
-                                        DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
-                                        if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                    }
+                        Box {
+                            IconButton(onClick = { showLanguageMenu = true }) {
+                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
+                            }
+                            DropdownMenu(
+                                expanded = showLanguageMenu,
+                                onDismissRequest = { showLanguageMenu = false }
+                            ) {
+                                val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
+                                languages.forEachIndexed { index, lang ->
+                                    Text(
+                                        text = lang,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                    DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
+                                    DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
+                                    if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 }
                             }
-                            IconButton(onClick = { showSidePanel = true }) {
-                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
-                            }
+                        }
+                        IconButton(onClick = { showSidePanel = true }) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
                         }
                     },
                     scrollBehavior = scrollBehavior
                 )
             }
         ) { paddingValues ->
-            if (note == null || !showContent) {
+            if (note == null) {
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
@@ -316,6 +298,7 @@ fun ResultScreen(
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
+                // 1. SECTION: LABELS
                 Text("Labels", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
@@ -346,7 +329,7 @@ fun ResultScreen(
                             .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
                             .clickable { showNewLabelDialog = true }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
+                        ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
@@ -359,6 +342,7 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // 2. SECTION: FIND & FORMAT
                 Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
@@ -429,6 +413,7 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // 3. SECTION: EXPORT & MEDIA
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -471,6 +456,7 @@ fun ResultScreen(
 
                     if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
+                        // Nggak ada yg salah di button animasi, jadi dibiarkan pakai spring aslinya
                         val playWidth by animateDpAsState(
                             targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
                             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
