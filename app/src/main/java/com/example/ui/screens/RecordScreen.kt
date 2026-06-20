@@ -86,6 +86,13 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
+    // FIX: Scaffold terluar di MainActivity udah gak nelen inset status bar lagi
+    // (perlu buat search bar di HistoryScreen bisa nembus penuh pas fokus). History/
+    // Result/Settings udah masing-masing ngitung WindowInsets.statusBars sendiri,
+    // tapi RecordScreen ini belum pernah — makanya sapaan & timer nempel ke atas
+    // bgt sekarang. Tambahin topInsets di sini biar balik turun ke posisi semula.
+    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -93,7 +100,7 @@ fun RecordScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(topInsets + 40.dp))
 
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
             Text(
