@@ -87,7 +87,6 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
-    // State fitur kelola label
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
     var showRenameLabelDialog by remember { mutableStateOf(false) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
@@ -156,7 +155,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -338,7 +337,12 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
+                                        // Pake ScaleToBounds buat performa super mulus
+                                        modifier = Modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                                        ),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -357,7 +361,12 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
+                                        // Pake ScaleToBounds buat performa super mulus
+                                        modifier = Modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                                        ),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -635,7 +644,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { (140..220).random().dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -695,3 +704,4 @@ fun NoteCard(
         }
     }
 }
+
