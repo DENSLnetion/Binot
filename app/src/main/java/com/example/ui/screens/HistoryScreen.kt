@@ -25,8 +25,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-// KUNCI: Ini import yang bikin error tadi. Wajib ada buat Grid!
-import androidx.compose.foundation.lazy.staggeredgrid.animateItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -341,6 +339,8 @@ fun HistoryScreen(
                             items(pinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
+                                    // KUNCI PERBAIKAN: Lempar animateItem() langsung dari scope grid
+                                    modifier = Modifier.animateItem(),
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
@@ -366,6 +366,8 @@ fun HistoryScreen(
                             items(unpinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
+                                    // KUNCI PERBAIKAN: Lempar animateItem() langsung dari scope grid
+                                    modifier = Modifier.animateItem(),
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
@@ -580,6 +582,7 @@ fun HistoryScreen(
 @Composable
 fun DismissibleNoteCard(
     note: NoteEntity,
+    modifier: Modifier = Modifier, // Modifer ditangkap di sini
     isSelected: Boolean,
     selectedLabels: Set<String>,
     selectionMode: Boolean,
@@ -635,7 +638,7 @@ fun DismissibleNoteCard(
                 }
             }
         },
-        modifier = Modifier.animateItem() 
+        modifier = modifier // Dan diaplikasikan ke parent terluarnya di sini!
     ) {
         with(sharedTransitionScope) {
             NoteCard(
