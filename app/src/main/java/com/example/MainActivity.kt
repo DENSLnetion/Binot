@@ -92,23 +92,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
-    // SnackbarHostState dipindah ke level Scaffold TERLUAR (yang punya bottomBar).
-    // Sebelumnya RecordScreen punya Scaffold + SnackbarHost sendiri yang
-    // bersarang di dalam Scaffold ini — snackbar dari Scaffold dalam berisiko
-    // ke-render di area yang tertutup/terpotong oleh NavigationBar milik
-    // Scaffold luar, sehingga tidak pernah kelihatan sama sekali.
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
-        // FIX: Scaffold terluar ini defaultnya konsumsi inset status bar buat innerPadding
-        // yang dipasang ke NavHost — jadi tiap screen anak (Record/History/Settings/Result)
-        // udah nerima kanvas yang START-nya di bawah status bar, bukan di y=0 layar beneran.
-        // Padahal tiap screen anak udah ngitung WindowInsets.statusBars sendiri buat
-        // topInsets/topBar masing-masing. Konsumsi dobel ini yang bikin MorphingSearchBar
-        // di HistoryScreen gak pernah bisa "nembus" ke belakang status bar pas fokus —
-        // dia cuma nempel ke batas atas kanvas yang udah kepotong duluan.
-        // Dengan contentWindowInsets = 0, NavHost dapet kanvas FULL (0,0 sampe ujung layar),
-        // dan urusan inset sepenuhnya didelegasikan ke tiap screen.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
