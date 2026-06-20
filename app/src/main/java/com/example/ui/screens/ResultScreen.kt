@@ -126,20 +126,34 @@ fun ResultScreen(
         }
     }
 
+    // PENTING (fix lag/stuck saat buka-tutup catatan):
+    // sharedBounds() menghitung morph posisi/ukuran SETIAP FRAME selama transisi
+    // berjalan. Sebelumnya seluruh isi ResultScreen (TopAppBar dgn BasicTextField,
+    // MarkdownText/teks panjang, semua tombol export) langsung di-compose+layout
+    // BERSAMAAN dengan proses morphing itu — Compose jadi harus ngerjain dua kerjaan
+    // berat sekaligus per frame, makanya kerasa nge-stuck beberapa milidetik.
+    //
+    // Pola yang dipakai Google Keep: container (shape kosong) morph duluan, konten
+    // detail baru muncul SETELAH morph kelar. Di sini ditiru dengan showContent:
+    // mulai false (Scaffold cuma nampilin shape+warna kosong via topBar minimal),
+    // baru jadi true sesaat setelah delay pendek — pas morph sudah hampir/benar2
+    // selesai — baru konten berat di-compose.
+    var showContent by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(220)
+        showContent = true
+    }
+
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             modifier = Modifier
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    // boundsTransform eksplisit: morph cuma resize+move posisi (spring solid),
-                    // TANPA crossfade bawaan. Default sharedBounds tanpa ini bisa nampilin
-                    // sedikit fade antara dua surface pas transisi, makanya kerasa "burem".
-                    boundsTransform = { _, _ ->
-                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
-                    }
+                    animatedVisibilityScope = animatedVisibilityScope
+                    // resizeMode default (RemeasureToBounds) dipakai, BUKAN ScaleToBounds.
+                    // ScaleToBounds menambah transform scale di atas resize biasa — lebih
+                    // mahal dihitung tiap frame. RemeasureToBounds cukup untuk morph solid.
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
@@ -149,7 +163,7 @@ fun ResultScreen(
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = { 
-                        if (note != null) {
+                        if (note != null && showContent) {
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
@@ -160,6 +174,16 @@ fun ResultScreen(
                                     .fillMaxWidth()
                                     .onFocusChanged { isTitleFocused = it.isFocused }
                             )
+                        } else if (note != null) {
+                            // Placeholder ringan (cuma Text statis, tanpa BasicTextField/focus
+                            // listener) selama morph masih berjalan — jauh lebih murah di-layout.
+                            Text(
+                                text = note!!.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     },
                     navigationIcon = {
@@ -168,38 +192,42 @@ fun ResultScreen(
                         }
                     },
                     actions = {
-                        Box {
-                            IconButton(onClick = { showLanguageMenu = true }) {
-                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
-                            }
-                            DropdownMenu(
-                                expanded = showLanguageMenu,
-                                onDismissRequest = { showLanguageMenu = false }
-                            ) {
-                                val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                                languages.forEachIndexed { index, lang ->
-                                    Text(
-                                        text = lang,
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                    DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
-                                    DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
-                                    if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        if (showContent) {
+                            Box {
+                                IconButton(onClick = { showLanguageMenu = true }) {
+                                    Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
+                                }
+                                DropdownMenu(
+                                    expanded = showLanguageMenu,
+                                    onDismissRequest = { showLanguageMenu = false }
+                                ) {
+                                    val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
+                                    languages.forEachIndexed { index, lang ->
+                                        Text(
+                                            text = lang,
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
+                                        DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
+                                        if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
-                        }
-                        IconButton(onClick = { showSidePanel = true }) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                            IconButton(onClick = { showSidePanel = true }) {
+                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                            }
                         }
                     },
                     scrollBehavior = scrollBehavior
                 )
             }
         ) { paddingValues ->
-            if (note == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (note == null || !showContent) {
+                // Selama morph berjalan (showContent masih false), body cuma nampilin
+                // loading indicator ringan — TIDAK compose MarkdownText/raw text yang berat.
+                Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
