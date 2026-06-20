@@ -126,8 +126,6 @@ fun ResultScreen(
         showContent = true
     }
 
-    // FIX TRANSPARAN BUG: Matiin isi kontennya luan sebelum layar beneran hilang ke History,
-    // jadi yang ngkerut nutup itu murni layer shape kosong, bebas distorsi transparan.
     val closeNote: () -> Unit = {
         showContent = false
         onNavigateBack()
@@ -291,23 +289,51 @@ fun ResultScreen(
             onDismissRequest = { showNewLabelDialog = false },
             title = { Text("New Label") },
             text = { 
-                OutlinedTextField(value = newLabelInput, onValueChange = { newLabelInput = it }, label = { Text("Label Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) 
+                OutlinedTextField(
+                    value = newLabelInput, 
+                    onValueChange = { newLabelInput = it }, 
+                    label = { Text("Label Name") }, 
+                    singleLine = true, 
+                    modifier = Modifier.fillMaxWidth()
+                ) 
             },
-            confirmButton = { Button(onClick = { if (newLabelInput.isNotBlank()) { viewModel.toggleLabel(newLabelInput.trim()); showNewLabelDialog = false; newLabelInput = "" } }) { Text("Create & Assign") } },
+            confirmButton = {
+                Button(onClick = {
+                    if (newLabelInput.isNotBlank()) {
+                        viewModel.toggleLabel(newLabelInput.trim())
+                        showNewLabelDialog = false
+                        newLabelInput = ""
+                    }
+                }) { Text("Create & Assign") }
+            },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
     }
 
     if (showSidePanel && note != null) {
-        ModalBottomSheet(onDismissRequest = { showSidePanel = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+        ModalBottomSheet(
+            onDismissRequest = { showSidePanel = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp)
+            ) {
                 Text("Labels", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), 
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     allLabels.filter { it.isNotBlank() }.forEach { label ->
                         val activeLabels = note!!.label?.split("|")?.map { it.trim() } ?: emptyList()
                         val isSelected = activeLabels.contains(label)
-                        Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)).clickable { viewModel.toggleLabel(label) }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clickable { viewModel.toggleLabel(label) }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Label, null, tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -315,7 +341,14 @@ fun ResultScreen(
                             }
                         }
                     }
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)).clickable { showNewLabelDialog = true }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                            .clickable { showNewLabelDialog = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
@@ -330,19 +363,43 @@ fun ResultScreen(
 
                 Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(value = searchHighlightQuery, onValueChange = { searchHighlightQuery = it }, label = { Text("Find word in note...") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = searchHighlightQuery,
+                    onValueChange = { searchHighlightQuery = it },
+                    label = { Text("Find word in note...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 val textToSearch = note!!.summary ?: note!!.rawText
                 val lines = textToSearch.split("\n")
                 val searchResults = lines.mapIndexedNotNull { index, line ->
-                    if (searchHighlightQuery.isNotBlank() && line.contains(searchHighlightQuery, ignoreCase = true)) { index to line.trim() } else null
+                    if (searchHighlightQuery.isNotBlank() && line.contains(searchHighlightQuery, ignoreCase = true)) {
+                        index to line.trim()
+                    } else null
                 }
 
                 if (searchHighlightQuery.isNotBlank() && searchResults.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp)) {
                         items(searchResults) { (index, line) ->
-                            Text(text = line, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().clickable { coroutineScope.launch { temporaryHighlight = searchHighlightQuery; if (note!!.summary != null) { listState.animateScrollToItem(index) } else { rawTextScrollState.animateScrollTo(index * 60) }; showSidePanel = false; delay(4000); temporaryHighlight = "" } }.padding(vertical = 12.dp, horizontal = 8.dp))
+                            Text(
+                                text = line, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    coroutineScope.launch { 
+                                        temporaryHighlight = searchHighlightQuery
+                                        if (note!!.summary != null) {
+                                            listState.animateScrollToItem(index)
+                                        } else {
+                                            rawTextScrollState.animateScrollTo(index * 60)
+                                        }
+                                        showSidePanel = false
+                                        delay(4000)
+                                        temporaryHighlight = "" 
+                                    }
+                                }.padding(vertical = 12.dp, horizontal = 8.dp)
+                            )
                             HorizontalDivider()
                         }
                     }
@@ -351,10 +408,23 @@ fun ResultScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Reading Font", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
+                
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3), onClick = { selectedFont = FontFamily.SansSerif }, selected = selectedFont == FontFamily.SansSerif) { Text("Sans") }
-                    SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3), onClick = { selectedFont = FontFamily.Serif }, selected = selectedFont == FontFamily.Serif) { Text("Serif") }
-                    SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3), onClick = { selectedFont = FontFamily.Monospace }, selected = selectedFont == FontFamily.Monospace) { Text("Mono") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                        onClick = { selectedFont = FontFamily.SansSerif },
+                        selected = selectedFont == FontFamily.SansSerif
+                    ) { Text("Sans") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                        onClick = { selectedFont = FontFamily.Serif },
+                        selected = selectedFont == FontFamily.Serif
+                    ) { Text("Serif") }
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                        onClick = { selectedFont = FontFamily.Monospace },
+                        selected = selectedFont == FontFamily.Monospace
+                    ) { Text("Mono") }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -365,47 +435,112 @@ fun ResultScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (note!!.audioPath == null) {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
                         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.onSecondaryContainer)
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Text(
+                                text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
                     }
                 }
                 
-                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     if (note!!.summary != null) {
-                        BouncyCapsule(onClick = { viewModel.restoreRawText(); coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }; showSidePanel = false }, containerColor = MaterialTheme.colorScheme.errorContainer) {
+                        BouncyCapsule(
+                            onClick = {
+                                viewModel.restoreRawText()
+                                coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
+                                showSidePanel = false
+                            },
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ) {
                             Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                         }
                     }
+
                     if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
-                        val playWidth by animateDpAsState(targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "playWidth")
-                        Box(modifier = Modifier.width(playWidth).height(48.dp).clip(CircleShape).background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer).pointerInput(Unit) { detectTapGestures(onPress = { isPlayPressed = true; tryAwaitRelease(); isPlayPressed = false; viewModel.toggleAudio() }) }, contentAlignment = Alignment.Center) {
+                        val playWidth by animateDpAsState(
+                            targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                            label = "playWidth"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(playWidth).height(48.dp).clip(CircleShape)
+                                .background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onPress = {
+                                        isPlayPressed = true; tryAwaitRelease(); isPlayPressed = false
+                                        viewModel.toggleAudio()
+                                    })
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "Play/Pause", tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer)
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(if (isPlaying) "Pause" else "Play", color = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text(
+                                    if (isPlaying) "Pause" else "Play", 
+                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                             }
                         }
                     }
+
                     if (note!!.audioPath != null) {
-                        BouncyCapsule(onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") }, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+                        BouncyCapsule(
+                            onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
                             Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
-                    BouncyCapsule(onClick = { val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager; clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText)); coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }; showSidePanel = false }, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+
+                    BouncyCapsule(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
+                            coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
+                            showSidePanel = false
+                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Copy", color = MaterialTheme.colorScheme.onSurface)
                     }
-                    BouncyCapsule(onClick = { val sendIntent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}") }; context.startActivity(Intent.createChooser(sendIntent, "Share note via")); showSidePanel = false }, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
+
+                    BouncyCapsule(
+                        onClick = {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
+                            showSidePanel = false
+                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
                         Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Share", color = MaterialTheme.colorScheme.onSurface)
@@ -414,8 +549,13 @@ fun ResultScreen(
 
                 if (note!!.audioPath != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Slider(value = playbackProgress, onValueChange = { viewModel.seekAudio(it) }, modifier = Modifier.fillMaxWidth())
+                    Slider(
+                        value = playbackProgress,
+                        onValueChange = { viewModel.seekAudio(it) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
+
                 Spacer(modifier = Modifier.height(48.dp))
             }
         }
@@ -423,30 +563,93 @@ fun ResultScreen(
 }
 
 fun buildHighlightedString(text: String, query: String, highlightColor: Color, textColor: Color) = buildAnnotatedString {
-    if (query.isBlank()) { withStyle(SpanStyle(color = textColor)) { append(text) }; return@buildAnnotatedString }
+    if (query.isBlank()) {
+        withStyle(SpanStyle(color = textColor)) { append(text) }
+        return@buildAnnotatedString
+    }
+    
     var startIndex = 0
     val lowerText = text.lowercase()
     val lowerQuery = query.lowercase()
+    
     while (startIndex < text.length) {
         val index = lowerText.indexOf(lowerQuery, startIndex)
-        if (index == -1) { withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex)) }; break }
+        if (index == -1) {
+            withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex)) }
+            break
+        }
         withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex, index)) }
-        withStyle(SpanStyle(background = highlightColor, color = Color.Black)) { append(text.substring(index, index + query.length)) }
+        withStyle(SpanStyle(background = highlightColor, color = Color.Black)) {
+            append(text.substring(index, index + query.length))
+        }
         startIndex = index + query.length
     }
 }
 
 @Composable
-private fun BouncyCapsule(onClick: () -> Unit, containerColor: Color, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+private fun BouncyCapsule(
+    onClick: () -> Unit,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
     var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (isPressed) 0.90f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "capsuleScale")
-    Box(modifier = modifier.scale(scale).height(48.dp).clip(CircleShape).background(containerColor).pointerInput(Unit) { detectTapGestures(onPress = { isPressed = true; tryAwaitRelease(); isPressed = false; onClick() }) }.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) { Row(verticalAlignment = Alignment.CenterVertically, content = content) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "capsuleScale"
+    )
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .height(48.dp)
+            .clip(CircleShape)
+            .background(containerColor)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    isPressed = true
+                    tryAwaitRelease()
+                    isPressed = false
+                    onClick()
+                })
+            }
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, content = content)
+    }
 }
 
 @Composable
 private fun AiThinkingAnimation(color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "ai_thinking")
-    val heights = List(4) { index -> infiniteTransition.animateFloat(initialValue = 0.3f, targetValue = 1f, animationSpec = infiniteRepeatable(animation = tween(durationMillis = 400, delayMillis = index * 100, easing = LinearEasing), repeatMode = RepeatMode.Reverse), label = "height_$index") }
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(32.dp)) { heights.forEach { height -> Box(modifier = Modifier.width(8.dp).fillMaxHeight(height.value).clip(CircleShape).background(color)) } }
+    val heights = List(4) { index ->
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 400, delayMillis = index * 100, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "height_$index"
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.height(32.dp)
+    ) {
+        heights.forEach { height ->
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .fillMaxHeight(height.value)
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
+    }
 }
+
 
