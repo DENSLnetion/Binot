@@ -52,9 +52,6 @@ fun RecordScreen(
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
-    // Scope di level Composable utama (BUKAN di dalam Box tombol Stop yang kondisional),
-    // supaya coroutine showSnackbar tidak ikut ter-cancel ketika tombol Stop collapse
-    // (rightButtonWidth -> 0.dp) dan Box-nya hilang dari composition.
     val coroutineScope = rememberCoroutineScope()
 
     var showLiveTextSheet by remember { mutableStateOf(false) }
@@ -86,11 +83,6 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    // FIX: Scaffold terluar di MainActivity udah gak nelen inset status bar lagi
-    // (perlu buat search bar di HistoryScreen bisa nembus penuh pas fokus). History/
-    // Result/Settings udah masing-masing ngitung WindowInsets.statusBars sendiri,
-    // tapi RecordScreen ini belum pernah — makanya sapaan & timer nempel ke atas
-    // bgt sekarang. Tambahin topInsets di sini biar balik turun ke posisi semula.
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Column(
@@ -167,7 +159,7 @@ fun RecordScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // isSplit = true selama recording ATAU paused (tombol udah membelah, belum balik)
+        // isSplit 
         val isSplit = isRecording || isPaused
 
         val totalAreaWidth = 280.dp
@@ -178,29 +170,20 @@ fun RecordScreen(
                 .height(80.dp),
             contentAlignment = Alignment.Center
         ) {
-            // State tekan untuk kedua tombol dideklarasikan di sini (sebelum dipakai
-            // kedua Box) supaya masing-masing bisa menyusut saat tombol sebelahnya
-            // sedang ditekan-lama (morph simetris).
             var isLeftPressed by remember { mutableStateOf(false) }
             var isStopPressed by remember { mutableStateOf(false) }
 
-            // PENTING: target lebar dihitung sebagai SATU angka pasti per kondisi
-            // (bukan menjumlahkan beberapa animateDpAsState independen). Spring di
-            // Compose punya velocity/posisi sendiri-sendiri — menjumlah beberapa
-            // animasi independen dalam satu rumus width bikin hasilnya goyang/patah
-            // karena masing-masing overshoot & settle di waktu yang sedikit beda.
-            // Dengan satu target pasti -> satu animateDpAsState, geraknya pasti mulus.
             val leftTargetWidth = when {
-                isStopPressed && isSplit -> 88.dp   // nyusut dikit pas Stop ditekan
-                isLeftPressed && isSplit -> 152.dp  // morph dikit pas split lagi ditekan
-                isLeftPressed            -> totalAreaWidth + 56.dp // morph manjang pas idle ditekan
+                isStopPressed && isSplit -> 88.dp 
+                isLeftPressed && isSplit -> 152.dp  
+                isLeftPressed            -> totalAreaWidth + 56.dp 
                 isSplit                  -> 120.dp
                 else                     -> totalAreaWidth
             }
             val rightTargetWidth = when {
                 !isSplit                  -> 0.dp
-                isStopPressed              -> 152.dp // morph dikit pas Stop ditekan
-                isLeftPressed               -> 88.dp  // nyusut dikit pas tombol kiri ditekan
+                isStopPressed              -> 152.dp 
+                isLeftPressed               -> 88.dp  
                 else                        -> 120.dp
             }
             val gapTarget = if (isSplit) 16.dp else 0.dp
@@ -225,7 +208,6 @@ fun RecordScreen(
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
                 label = "gap"
             )
-            // Icon sedikit membesar pas ditekan, biar morphing kerasa "hidup"
             val leftIconScale by animateFloatAsState(
                 targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
                 animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
@@ -237,7 +219,6 @@ fun RecordScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.wrapContentWidth()
             ) {
-                // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
                 Box(
                     modifier = Modifier
                         .width(leftButtonWidth)
@@ -258,7 +239,6 @@ fun RecordScreen(
                                     isLeftPressed = false
                                     when {
                                         !isSplit -> {
-                                            // Mulai recording
                                             if (!hasPermission) {
                                                 launcher.launch(Manifest.permission.RECORD_AUDIO)
                                             } else {
@@ -306,7 +286,6 @@ fun RecordScreen(
                     }
                 }
 
-                // Tombol KANAN: Stop — hanya tampil saat split
                 if (rightButtonWidth > 0.dp) {
                     Box(
                         modifier = Modifier
@@ -322,11 +301,6 @@ fun RecordScreen(
                                         tryAwaitRelease()
                                         isStopPressed = false
 
-                                        // PENTING: hentikan recording SEKETIKA dulu (tanpa nunggu apa pun)
-                                        // supaya isRecording/isSplit langsung berubah dan animasi morph
-                                        // tombol mulai jalan mulus, persis di momen jari dilepas.
-                                        // saveNote() (yang ada delay(300) + insert DB) dijalankan terpisah
-                                        // di coroutine sendiri, gak ngeblock animasi.
                                         viewModel.stopRecordingInstant()
 
                                         coroutineScope.launch {
