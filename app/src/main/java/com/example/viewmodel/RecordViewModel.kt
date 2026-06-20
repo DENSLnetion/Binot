@@ -40,7 +40,12 @@ class RecordViewModel(
     private val _noteSaved = MutableStateFlow(false)
     val noteSaved: StateFlow<Boolean> = _noteSaved.asStateFlow()
 
+    // Event flag: true = saveNote dipanggil tapi tidak ada teks untuk disimpan
+    private val _saveFailed = MutableStateFlow(false)
+    val saveFailed: StateFlow<Boolean> = _saveFailed.asStateFlow()
+
     fun consumeNoteSaved() { _noteSaved.value = false }
+    fun consumeSaveFailed() { _saveFailed.value = false }
 
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
@@ -103,10 +108,18 @@ class RecordViewModel(
     }
 
     fun saveNote() {
-        val text = recognizedText.value.trim()
-        if (text.isEmpty()) return
-
         viewModelScope.launch {
+            // Beri jeda singkat: onResults() dari SpeechRecognizer kadang baru
+            // masuk sesaat setelah stopListening() dipanggil (async), supaya
+            // teks terakhir yang diucapkan user tidak hilang/diabaikan.
+            delay(300)
+
+            val text = recognizedText.value.trim()
+            if (text.isEmpty()) {
+                _saveFailed.value = true
+                return@launch
+            }
+
             val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
             val note = NoteEntity(
                 title = fallbackTitle,
