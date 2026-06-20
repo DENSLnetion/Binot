@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.lazy.staggeredgrid.animateItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -315,7 +314,6 @@ fun HistoryScreen(
                         )
                     }
                 } else {
-                    // ANIMASI CHOREOGRAPHY 2: Search Bar Mekar
                     with(animatedVisibilityScope) {
                         MorphingSearchBar(
                             query = searchQuery,
@@ -345,7 +343,6 @@ fun HistoryScreen(
                             modifier = Modifier
                                 .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
-                                // ANIMASI CHOREOGRAPHY 3: FAB Pop-In
                                 .then(with(animatedVisibilityScope) { Modifier.animateEnterExit(enter = scaleIn(initialScale = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))) })
                         )
                     }
@@ -363,7 +360,6 @@ fun HistoryScreen(
                         )
                     }
                 } else {
-                    // ANIMASI CHOREOGRAPHY 4: Grid meluncur dari bawah
                     with(animatedVisibilityScope) {
                         LazyVerticalStaggeredGrid(
                             columns = StaggeredGridCells.Fixed(2),
@@ -384,6 +380,7 @@ fun HistoryScreen(
                                     Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
                                 }
                                 items(pinnedNotes, key = { it.id }) { note ->
+                                    // KUNCI: Modifier.animateItem() diletakkan TANPA import bodong di atas
                                     DismissibleNoteCard(
                                         note = note,
                                         modifier = Modifier.animateItem(),
@@ -713,7 +710,7 @@ fun MorphingSearchBar(
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit,
     onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier // Parameter modifier ditambahin biar bisa nyuntik animasi dari parent
+    modifier: Modifier = Modifier 
 ) {
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
@@ -722,7 +719,6 @@ fun MorphingSearchBar(
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
-        // modifier dari parameter masuk ke paling luar
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
