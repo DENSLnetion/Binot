@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -77,6 +78,7 @@ fun HistoryScreen(
     
     val uniqueLabels by viewModel.uniqueLabels.collectAsState()
     val selectedLabels by viewModel.selectedLabels.collectAsState()
+    val isMultiSelectLabelMode by viewModel.isMultiSelectLabelMode.collectAsState()
     val sortMode by viewModel.sortMode.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
@@ -90,6 +92,7 @@ fun HistoryScreen(
     var showRenameLabelDialog by remember { mutableStateOf(false) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var renameLabelInput by remember { mutableStateOf("") }
+    var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -168,25 +171,63 @@ fun HistoryScreen(
                     Spacer(Modifier.height(16.dp))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    Text("Labels", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            "Labels",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isMultiSelectLabelMode && selectedLabels.isNotEmpty()) {
+                            IconButton(onClick = { showDeleteMultipleLabelsDialog = true }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Selected Labels", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        IconButton(onClick = { viewModel.setMultiSelectLabelMode(!isMultiSelectLabelMode) }) {
+                            Icon(
+                                Icons.Default.Checklist,
+                                contentDescription = "Toggle Multi-Select",
+                                tint = if (isMultiSelectLabelMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
                     NavigationDrawerItem(
                         label = { Text("All Notes") },
                         selected = selectedLabels.isEmpty(),
-                        onClick = { viewModel.clearLabelFilter(); coroutineScope.launch { drawerState.close() } },
+                        onClick = {
+                            viewModel.clearLabelFilter()
+                            if (!isMultiSelectLabelMode) coroutineScope.launch { drawerState.close() }
+                        },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
                     uniqueLabels.forEach { label ->
                         NavigationDrawerItem(
                             label = { Text(label) },
-                            icon = { Icon(Icons.Default.Label, contentDescription = null) },
+                            icon = {
+                                if (isMultiSelectLabelMode) {
+                                    Checkbox(
+                                        checked = label in selectedLabels,
+                                        onCheckedChange = { viewModel.toggleLabelFilter(label) }
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Label, contentDescription = null)
+                                }
+                            },
                             selected = label in selectedLabels,
-                            onClick = { viewModel.toggleLabelFilter(label) },
+                            onClick = {},
                             modifier = Modifier
                                 .padding(horizontal = 12.dp, vertical = 4.dp)
                                 .combinedClickable(
-                                    onClick = { viewModel.toggleLabelFilter(label) },
+                                    onClick = {
+                                        viewModel.toggleLabelFilter(label)
+                                        if (!isMultiSelectLabelMode) coroutineScope.launch { drawerState.close() }
+                                    },
                                     onLongClick = {
                                         labelBeingManaged = label
                                         renameLabelInput = label
@@ -429,6 +470,23 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteMultipleLabelsDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteMultipleLabelsDialog = false },
+            title = { Text("Delete Labels") },
+            text = { Text("${selectedLabels.size} label${if (selectedLabels.size > 1) "s" else ""} will be removed from all notes. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMultipleLabels(selectedLabels)
+                    showDeleteMultipleLabelsDialog = false
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") }
             }
         )
     }
