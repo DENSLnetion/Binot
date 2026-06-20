@@ -120,20 +120,31 @@ fun ResultScreen(
         }
     }
 
+    var showContent by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(60)
+        showContent = true
+    }
+
+    val closeNote: () -> Unit = {
+        showContent = false
+        onNavigateBack()
+    }
+
     BackHandler(enabled = true) {
         if (showSidePanel) {
             showSidePanel = false
         } else if (isTitleFocused) {
             focusManager.clearFocus()
         } else {
-            onNavigateBack()
+            closeNote()
         }
     }
 
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            // KUNCI: Balikin background jadi surface (kertas murni)
+            // KUNCI KERTAS: Mempertahankan warna surface agar sama persis kayak NoteCard
             containerColor = MaterialTheme.colorScheme.surface, 
             modifier = Modifier
                 .sharedBounds(
@@ -145,12 +156,11 @@ fun ResultScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        // Ini juga dibalikin jadi surface biar satu kesatuan
                         containerColor = MaterialTheme.colorScheme.surface,
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = { 
-                        if (note != null) {
+                        if (note != null && showContent) {
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
@@ -161,45 +171,55 @@ fun ResultScreen(
                                     .fillMaxWidth()
                                     .onFocusChanged { isTitleFocused = it.isFocused }
                             )
+                        } else if (note != null) {
+                            Text(
+                                text = note!!.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
+                        IconButton(onClick = closeNote) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
-                        Box {
-                            IconButton(onClick = { showLanguageMenu = true }) {
-                                Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
-                            }
-                            DropdownMenu(
-                                expanded = showLanguageMenu,
-                                onDismissRequest = { showLanguageMenu = false }
-                            ) {
-                                val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                                languages.forEachIndexed { index, lang ->
-                                    Text(
-                                        text = lang,
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
-                                    DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
-                                    DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
-                                    if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        if (showContent) {
+                            Box {
+                                IconButton(onClick = { showLanguageMenu = true }) {
+                                    Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
+                                }
+                                DropdownMenu(
+                                    expanded = showLanguageMenu,
+                                    onDismissRequest = { showLanguageMenu = false }
+                                ) {
+                                    val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
+                                    languages.forEachIndexed { index, lang ->
+                                        Text(
+                                            text = lang,
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
+                                        DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
+                                        if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    }
                                 }
                             }
-                        }
-                        IconButton(onClick = { showSidePanel = true }) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                            IconButton(onClick = { showSidePanel = true }) {
+                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                            }
                         }
                     },
                     scrollBehavior = scrollBehavior
                 )
             }
         ) { paddingValues ->
-            if (note == null) {
+            if (note == null || !showContent) {
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
@@ -299,7 +319,6 @@ fun ResultScreen(
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
-                // 1. SECTION: LABELS
                 Text("Labels", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
@@ -343,7 +362,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. SECTION: FIND & FORMAT
                 Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
@@ -414,7 +432,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 3. SECTION: EXPORT & MEDIA
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -492,8 +509,8 @@ fun ResultScreen(
                     if (note!!.audioPath != null) {
                         BouncyCapsule(
                             onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
-                            // KUNCI: Ubah jadi surfaceVariant biar kontras sama background layarnya
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant 
+                            // Kapsul tombolnya pakai surfaceContainerHigh agar kontras dengan layar yang putih/hitam polos
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh 
                         ) {
                             Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -508,7 +525,7 @@ fun ResultScreen(
                             coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
                             showSidePanel = false
                         },
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant 
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh 
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -524,7 +541,7 @@ fun ResultScreen(
                             context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
                             showSidePanel = false
                         },
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant 
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh 
                     ) {
                         Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -636,5 +653,4 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
-
 
