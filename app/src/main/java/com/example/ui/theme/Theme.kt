@@ -32,9 +32,10 @@ private val LightColorScheme = lightColorScheme(
     onSecondaryContainer = Color(0xFF051F23),
     background = Color(0xFFFAFDFD),
     onBackground = Color(0xFF191C1D),
-    surface = Color(0xFFFAFDFD),
+    surface = Color(0xFFFAFDFD), // Warna Card/Kertas (Putih murni)
     onSurface = Color(0xFF191C1D),
-    surfaceVariant = Color(0xFFDBE4E6),
+    // KUNCI: Diterangin jadi abu-abu super muda (sebelumnya 0xFFDBE4E6)
+    surfaceVariant = Color(0xFFF0F4F5), // Warna Latar Aplikasi/Kanvas
     onSurfaceVariant = Color(0xFF3F484A)
 )
 
@@ -47,18 +48,20 @@ private val SlateDarkColorScheme = darkColorScheme(
     onSecondary = Color(0xFF1C3438),
     secondaryContainer = Color(0xFF334B4F),
     onSecondaryContainer = Color(0xFFCDE7EC),
-    background = Color(0xFF202324), // Lighter dark (less black)
+    background = Color(0xFF202324),
     onBackground = Color(0xFFE1E3E3),
-    surface = Color(0xFF202324),    // Lighter surface
+    surface = Color(0xFF202324), // Warna Card/Kertas (Hitam kalem)
     onSurface = Color(0xFFE1E3E3),
-    surfaceVariant = Color(0xFF3F484A),
+    // KUNCI: Digelapin jadi hitam keabu-abuan pekat (sebelumnya 0xFF3F484A)
+    surfaceVariant = Color(0xFF181C1D), // Warna Latar Aplikasi/Kanvas
     onSurfaceVariant = Color(0xFFBFC8CA)
 )
 
 private val AmoledDarkColorScheme = SlateDarkColorScheme.copy(
     background = Color.Black,
-    surface = Color.Black,
-    surfaceVariant = Color(0xFF111414)
+    surface = Color.Black, // Warna Card/Kertas (Hitam total)
+    // KUNCI: Lebih gelap lagi dari Slate Dark, nyaris hitam
+    surfaceVariant = Color(0xFF0C0E0E) // Warna Latar Aplikasi/Kanvas
 )
 
 @Composable
