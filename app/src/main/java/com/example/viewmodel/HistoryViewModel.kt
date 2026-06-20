@@ -38,6 +38,10 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
     val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
+    // StateFlow buat layar Trash
+    val trashedNotes: StateFlow<List<NoteEntity>> = repository.trashedNotes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val uniqueLabels: StateFlow<List<String>> = repository.allNotes.map { notes ->
         val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
         val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
@@ -227,18 +231,20 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _recentlyDeleted = MutableStateFlow<List<NoteEntity>>(emptyList())
     val recentlyDeleted: StateFlow<List<NoteEntity>> = _recentlyDeleted.asStateFlow()
 
+    // TRASH LOGIC: Soft Delete -> pindah ke tong sampah (isTrashed = true)
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
-            val notesToDelete = ids.mapNotNull { repository.getNoteById(it) }
-            _recentlyDeleted.value = notesToDelete
-            ids.forEach { repository.deleteById(it) }
+            val notesToTrash = ids.mapNotNull { repository.getNoteById(it) }
+            _recentlyDeleted.value = notesToTrash
+            notesToTrash.forEach { repository.update(it.copy(isTrashed = true, isPinned = false)) }
         }
     }
 
+    // TRASH LOGIC: Kembalikan dari undo snackbar
     fun undoDelete() {
         viewModelScope.launch {
             _recentlyDeleted.value.forEach { note ->
-                repository.insert(note)
+                repository.update(note.copy(isTrashed = false))
             }
             _recentlyDeleted.value = emptyList()
         }
@@ -246,6 +252,28 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
     fun clearRecentlyDeleted() {
         _recentlyDeleted.value = emptyList()
+    }
+
+    // TRASH LOGIC: Fitur buat layar Trash
+    fun restoreMultipleFromTrash(ids: Set<Int>) {
+        viewModelScope.launch {
+            ids.forEach { id ->
+                val note = repository.getNoteById(id)
+                if (note != null) repository.update(note.copy(isTrashed = false))
+            }
+        }
+    }
+
+    fun deletePermanentlyMultiple(ids: Set<Int>) {
+        viewModelScope.launch {
+            ids.forEach { repository.deleteById(it) }
+        }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            repository.emptyTrash()
+        }
     }
 
     fun cloneMultiple(ids: Set<Int>) {
@@ -299,3 +327,4 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
+
