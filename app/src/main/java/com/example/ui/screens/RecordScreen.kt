@@ -322,4 +322,31 @@ fun RecordScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+
+    if (showLiveTextSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLiveTextSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Live Transcription",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(48.dp))
+            }
+        }
+    }
 }
