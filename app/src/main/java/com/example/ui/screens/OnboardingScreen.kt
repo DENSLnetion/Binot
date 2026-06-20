@@ -24,7 +24,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-// FILE BARU: Layar perkenalan buat user yang baru pertama kali buka aplikasi
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
@@ -61,7 +60,7 @@ fun OnboardingScreen(
                     }
                 }
 
-                // Tombol Next Kapsul Mulus
+                // Tombol Next 
                 Button(
                     onClick = {
                         if (pagerState.currentPage < 2) {
@@ -69,7 +68,6 @@ fun OnboardingScreen(
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                             }
                         } else {
-                            // Selesai, lempar data ke MainActivity buat disimpen
                             onComplete(nameInput.trim(), apiKeyInput.trim())
                         }
                     },
