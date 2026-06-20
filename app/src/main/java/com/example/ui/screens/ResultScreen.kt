@@ -133,7 +133,13 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                    // boundsTransform eksplisit: morph cuma resize+move posisi (spring solid),
+                    // TANPA crossfade bawaan. Default sharedBounds tanpa ini bisa nampilin
+                    // sedikit fade antara dua surface pas transisi, makanya kerasa "burem".
+                    boundsTransform = { _, _ ->
+                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+                    }
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
