@@ -120,36 +120,12 @@ fun ResultScreen(
         }
     }
 
-    // PENTING (fix lag/stuck saat buka-tutup catatan):
-    // sharedBounds() menghitung morph posisi/ukuran SETIAP FRAME selama transisi
-    // berjalan. Sebelumnya seluruh isi ResultScreen (TopAppBar dgn BasicTextField,
-    // MarkdownText/teks panjang, semua tombol export) langsung di-compose+layout
-    // BERSAMAAN dengan proses morphing itu â€” Compose jadi harus ngerjain dua kerjaan
-    // berat sekaligus per frame, makanya kerasa nge-stuck beberapa milidetik.
-    //
-    // Pola yang dipakai Google Keep: container (shape kosong) morph duluan, konten
-    // detail baru muncul SETELAH morph kelar. Di sini ditiru dengan showContent:
-    // mulai false (Scaffold cuma nampilin shape+warna kosong via topBar minimal),
-    // baru jadi true sesaat setelah delay pendek. Delay sengaja dibikin SANGAT
-    // singkat (60ms, bukan 220ms) â€” cukup buat ngelewatin frame pertama yang
-    // paling berat (awal morph), tapi gak sampai kerasa kayak fade tersendiri.
     var showContent by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(60)
         showContent = true
     }
 
-    // FIX (animasi tutup catatan transparan sejenak):
-    // Sebelumnya BackHandler cuma aktif kalau isTitleFocused/showSidePanel â€” back-press
-    // normal jatuh ke NavController bawaan, yang langsung motong komposisi screen ini
-    // SAAT showContent masih true. Karena itu, saat sharedBounds menyusut balik ke
-    // card, seluruh konten berat (SelectionContainer, MarkdownText, dst) masih nyoba
-    // re-layout di tengah resize cepat â€” itu yang kelihatan kayak "transparan sejenak".
-    // Animasi BUKA gak kena masalah ini karena ada jeda 60ms showContent=false dulu
-    // (cuma nampilin placeholder kosong solid) sebelum konten berat muncul.
-    // Sekarang BackHandler selalu aktif dan flip showContent=false LEBIH DULU sebelum
-    // memicu navigasi balik â€” jadi pas animasi shrink berjalan, yang keliatan cuma
-    // placeholder solid (AiThinkingAnimation), persis simetris dengan animasi buka.
     val closeNote: () -> Unit = {
         showContent = false
         onNavigateBack()
@@ -172,9 +148,6 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope
-                    // resizeMode default (RemeasureToBounds) dipakai, BUKAN ScaleToBounds.
-                    // ScaleToBounds menambah transform scale di atas resize biasa â€” lebih
-                    // mahal dihitung tiap frame. RemeasureToBounds cukup untuk morph solid.
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
@@ -196,8 +169,6 @@ fun ResultScreen(
                                     .onFocusChanged { isTitleFocused = it.isFocused }
                             )
                         } else if (note != null) {
-                            // Placeholder ringan (cuma Text statis, tanpa BasicTextField/focus
-                            // listener) selama morph masih berjalan â€” jauh lebih murah di-layout.
                             Text(
                                 text = note!!.title,
                                 style = MaterialTheme.typography.titleLarge,
@@ -246,8 +217,6 @@ fun ResultScreen(
             }
         ) { paddingValues ->
             if (note == null || !showContent) {
-                // Selama morph berjalan (showContent masih false), body cuma nampilin
-                // loading indicator ringan â€” TIDAK compose MarkdownText/raw text yang berat.
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
@@ -347,7 +316,6 @@ fun ResultScreen(
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
-                // 1. SECTION: LABELS
                 Text("Labels", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
@@ -391,7 +359,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. SECTION: FIND & FORMAT (Dipindah ke atas sini)
                 Text("Find & Format", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
@@ -462,7 +429,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 3. SECTION: EXPORT & MEDIA (Dipindah ke bawah sini)
                 Text("Export & Media", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -594,7 +560,6 @@ fun ResultScreen(
     }
 }
 
-// MESIN HIGHLIGHTER BUAT TEKS MENTAH
 fun buildHighlightedString(text: String, query: String, highlightColor: Color, textColor: Color) = buildAnnotatedString {
     if (query.isBlank()) {
         withStyle(SpanStyle(color = textColor)) { append(text) }
@@ -619,9 +584,6 @@ fun buildHighlightedString(text: String, query: String, highlightColor: Color, t
     }
 }
 
-// Capsule button dengan animasi tekan ala tombol Record di RecordScreen: mengkerut
-// pas ditekan, balik lagi pas dilepas, pakai spring bouncy yang sama persis biar
-// "rasanya" konsisten di seluruh app (dipakai di tombol Restore/Save Audio/Copy/Share).
 @Composable
 private fun BouncyCapsule(
     onClick: () -> Unit,
