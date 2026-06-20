@@ -207,22 +207,17 @@ fun HistoryScreen(
                     )
 
                     uniqueLabels.forEach { label ->
-                        NavigationDrawerItem(
-                            label = { Text(label) },
-                            icon = {
-                                if (isMultiSelectLabelMode) {
-                                    Checkbox(
-                                        checked = label in selectedLabels,
-                                        onCheckedChange = { viewModel.toggleLabelFilter(label) }
-                                    )
-                                } else {
-                                    Icon(Icons.Default.Label, contentDescription = null)
-                                }
-                            },
-                            selected = label in selectedLabels,
-                            onClick = {},
+                        val isLabelSelected = label in selectedLabels
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(
+                                    if (isLabelSelected) MaterialTheme.colorScheme.secondaryContainer
+                                    else Color.Transparent
+                                )
                                 .combinedClickable(
                                     onClick = {
                                         viewModel.toggleLabelFilter(label)
@@ -233,7 +228,27 @@ fun HistoryScreen(
                                         renameLabelInput = label
                                     }
                                 )
-                        )
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            if (isMultiSelectLabelMode) {
+                                Checkbox(
+                                    checked = isLabelSelected,
+                                    onCheckedChange = { viewModel.toggleLabelFilter(label) }
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Label,
+                                    contentDescription = null,
+                                    tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                label,
+                                color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
 
                     NavigationDrawerItem(
