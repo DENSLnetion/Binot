@@ -35,6 +35,15 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
+    // True saat mic benar-benar dihentikan sementara (pause).
+    // Dipakai supaya listener/thread simulasi tidak auto-restart selama pause.
+    @Volatile
+    private var isPaused = false
+
+    // Flag mode simulasi terakhir, dipakai resumeRecording() untuk tahu
+    // harus nyalain SpeechRecognizer lagi atau lanjut simulasi.
+    private var lastIsEmulator = false
+
     private var originalMusicVolume = -1
     private var originalSystemVolume = -1
     private var originalRingVolume = -1
@@ -124,6 +133,8 @@ class AudioRecorderManager(private val context: Context) {
         
         _isRecording.value = true
         _recognizedText.value = ""
+        isPaused = false
+        lastIsEmulator = isEmulator
         
         forceMuteAllBeeps()
         
@@ -136,6 +147,36 @@ class AudioRecorderManager(private val context: Context) {
         initSpeechRecognizer()
     }
 
+    /**
+     * Pause sungguhan: mic dimatikan (stopListening / hentikan thread simulasi),
+     * amplitude dipaksa 0, teks yang sudah terkumpul tetap dipertahankan.
+     * Beda dengan stopRecording(): volume device TIDAK direstore di sini,
+     * karena recording dianggap masih "berlangsung" (cuma ditahan sementara).
+     */
+    fun pauseRecording() {
+        if (!_isRecording.value || isPaused) return
+        isPaused = true
+        speechRecognizer?.stopListening()
+        _amplitude.value = 0f
+    }
+
+    /**
+     * Resume dari pause: nyalain ulang mic. Untuk SpeechRecognizer, instance lama
+     * di-destroy lalu dibuat baru (tidak ada API resume native di Android),
+     * teks baru akan di-append ke recognizedText yang sudah ada.
+     * Untuk mode simulasi, thread loop baru dijalankan lagi.
+     */
+    fun resumeRecording() {
+        if (!_isRecording.value || !isPaused) return
+        isPaused = false
+
+        if (lastIsEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
+            startSimulatedRecording()
+        } else {
+            initSpeechRecognizer()
+        }
+    }
+
     private fun initSpeechRecognizer() {
         try {
             speechRecognizer?.destroy()
@@ -144,19 +185,20 @@ class AudioRecorderManager(private val context: Context) {
                     override fun onReadyForSpeech(params: Bundle?) {}
                     override fun onBeginningOfSpeech() {}
                     override fun onRmsChanged(rmsdB: Float) {
-                        if (_isRecording.value) _amplitude.value = (rmsdB / 10f).coerceIn(0f, 1f)
+                        if (_isRecording.value && !isPaused) _amplitude.value = (rmsdB / 10f).coerceIn(0f, 1f)
                     }
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {
                         _amplitude.value = 0f
                     }
                     override fun onError(error: Int) {
-                        if (_isRecording.value) {
+                        if (_isRecording.value && !isPaused) {
                             initSpeechRecognizer()
-                        } else {
+                        } else if (!_isRecording.value) {
                             _amplitude.value = 0f
                             restoreAllVolumes()
                         }
+                        // Kalau isPaused == true: diam saja, jangan restart, jangan restore volume.
                     }
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -164,7 +206,7 @@ class AudioRecorderManager(private val context: Context) {
                             val current = _recognizedText.value
                             _recognizedText.value = current + (if (current.isNotEmpty()) "\n" else "") + matches[0]
                         }
-                        if (_isRecording.value) {
+                        if (_isRecording.value && !isPaused) {
                             initSpeechRecognizer()
                         }
                     }
@@ -192,7 +234,7 @@ class AudioRecorderManager(private val context: Context) {
             val phrases = listOf("Ini adalah simulasi.", "Binot merekam.")
             var phraseIndex = 0
             
-            while (_isRecording.value) {
+            while (_isRecording.value && !isPaused) {
                 _amplitude.value = Random.nextFloat()
                 Thread.sleep(200)
                 if (Random.nextInt(10) > 7 && phraseIndex < phrases.size) {
@@ -209,6 +251,7 @@ class AudioRecorderManager(private val context: Context) {
     // Ganti output stopRecording balik jadi null
     fun stopRecording(): String? {
         _isRecording.value = false
+        isPaused = false
         speechRecognizer?.stopListening()
         _amplitude.value = 0f
 
