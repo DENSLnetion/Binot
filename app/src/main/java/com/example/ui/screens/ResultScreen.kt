@@ -1,4 +1,3 @@
-```kotlin
 package com.example.ui.screens
 
 import android.content.ClipData
@@ -640,5 +639,3 @@ private fun AiThinkingAnimation(color: Color) {
     }
 }
 
-
-```
