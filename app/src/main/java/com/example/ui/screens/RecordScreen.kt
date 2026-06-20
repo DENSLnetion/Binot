@@ -319,9 +319,14 @@ fun RecordScreen(
                                         isStopPressed = false
                                         val wasRecording = isRecording
                                         val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                        // Simpan dulu SELAGI recognizer masih hidup / teks masih fresh,
-                                        // baru hentikan mic. Urutan lama (stop dulu baru save) berisiko
-                                        // kepotong race dengan callback async SpeechRecognizer.
+                                        // Toast langsung di titik sentuh, tanpa lewat StateFlow/
+                                        // LaunchedEffect/Scaffold sama sekali. Ini sengaja paling
+                                        // primitif supaya tidak ada lapisan yang bisa "menelan" event.
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Note saved",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
                                         viewModel.saveNote()
                                         if (wasRecording) viewModel.toggleRecording(isEmulator)
                                         else viewModel.stopFromPaused(isEmulator)
