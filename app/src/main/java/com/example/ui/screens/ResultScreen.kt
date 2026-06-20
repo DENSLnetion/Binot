@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
@@ -171,7 +173,16 @@ fun ResultScreen(
             modifier = Modifier
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
-                    animatedVisibilityScope = animatedVisibilityScope
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    // FIX (card kelihatan transparan sejenak pas nutup catatan):
+                    // sharedBounds() defaultnya enter=fadeIn()/exit=fadeOut() DI ATAS
+                    // morph ukuran/posisi — jadi pas box ini menyusut balik ke ukuran
+                    // NoteCard, alpha-nya JUGA turun ke 0 bersamaan. Selagi alpha turun,
+                    // NoteCard asli yang lebih kecil di baliknya udah keliatan tembus,
+                    // makanya nge-blend jadi dobel teks transparan. Morph ukuran aja udah
+                    // cukup buat kesan transisinya — fade tambahan ini yang dimatiin.
+                    enter = EnterTransition.None,
+                    exit = ExitTransition.None
                     // resizeMode default (RemeasureToBounds) dipakai, BUKAN ScaleToBounds.
                     // ScaleToBounds menambah transform scale di atas resize biasa — lebih
                     // mahal dihitung tiap frame. RemeasureToBounds cukup untuk morph solid.
