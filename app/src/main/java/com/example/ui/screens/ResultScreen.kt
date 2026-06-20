@@ -133,8 +133,8 @@ fun ResultScreen(
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            // KUNCI 2: Set background layar detailnya sama persis kayak warna card
-            containerColor = MaterialTheme.colorScheme.surfaceVariant, 
+            // KUNCI: Balikin background jadi surface (kertas murni)
+            containerColor = MaterialTheme.colorScheme.surface, 
             modifier = Modifier
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
@@ -145,9 +145,9 @@ fun ResultScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        // Ini juga disamain biar bagian atas layar gak belang pas animasi
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        // Ini juga dibalikin jadi surface biar satu kesatuan
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = { 
                         if (note != null) {
@@ -492,8 +492,8 @@ fun ResultScreen(
                     if (note!!.audioPath != null) {
                         BouncyCapsule(
                             onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
-                            // KUNCI 3: Diubah ke surface biar kapsul kelihatan di background surfaceVariant
-                            containerColor = MaterialTheme.colorScheme.surface 
+                            // KUNCI: Ubah jadi surfaceVariant biar kontras sama background layarnya
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant 
                         ) {
                             Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -508,8 +508,7 @@ fun ResultScreen(
                             coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
                             showSidePanel = false
                         },
-                        // Diubah ke surface
-                        containerColor = MaterialTheme.colorScheme.surface 
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant 
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -525,8 +524,7 @@ fun ResultScreen(
                             context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
                             showSidePanel = false
                         },
-                        // Diubah ke surface
-                        containerColor = MaterialTheme.colorScheme.surface 
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant 
                     ) {
                         Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -638,4 +636,5 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
+
 
