@@ -6,8 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -139,14 +140,12 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                // Transisi cross-fade NavHost dimatikan total (None, bukan tween(0)).
-                // Crossfade ganda di atas sharedBounds morphing menambah beban render
-                // tiap frame transisi tanpa manfaat visual — None membiarkan sharedBounds
-                // jadi satu-satunya yang mengatur animasi perpindahan, lebih ringan & solid.
-                enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None }
+                // Kita nyalakan transisi fadeIn/fadeOut biar latar layar gak snapping,
+                // tapi durasinya dibikin selaras dengan SharedElement.
+                enterTransition = { fadeIn(animationSpec = tween(300)) },
+                exitTransition = { fadeOut(animationSpec = tween(300)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                popExitTransition = { fadeOut(animationSpec = tween(300)) }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
@@ -207,4 +206,3 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
-
