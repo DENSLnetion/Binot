@@ -6,9 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -99,7 +98,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // KUNCI KANVAS UTAMA: Biar semua tab serasi pakai surfaceContainer
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
@@ -144,11 +142,10 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                // FIX TRANSISI: Balikin fadeIn/fadeOut biar ga patah waktu pindah tab/layar
-                enterTransition = { fadeIn(animationSpec = tween(300)) },
-                exitTransition = { fadeOut(animationSpec = tween(300)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
-                popExitTransition = { fadeOut(animationSpec = tween(300)) }
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
@@ -188,7 +185,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         onTrashClick = { navController.navigate("trash") }
                     )
                 }
-                // LAYAR TRASH BARU
                 composable("trash") {
                     val historyViewModel: HistoryViewModel = viewModel(
                         factory = HistoryViewModel.provideFactory(appContainer.noteRepository)
