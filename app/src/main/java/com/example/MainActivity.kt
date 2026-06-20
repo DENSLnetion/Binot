@@ -142,14 +142,10 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                // Transisi cross-fade NavHost DIMATIKAN total (bukan cuma durasi 0).
-                // Sebelumnya pakai fadeIn/fadeOut(tween(0)) — meski durasinya 0ms,
-                // Compose Navigation tetap menjalankan crossfade antara screen lama
-                // & baru selama proses sharedBounds morphing masih berjalan (yang
-                // punya durasi sendiri), sehingga kedua layer numpuk dan keduanya
-                // berubah alpha bareng -> kelihatan transparan/burem pas buka-tutup
-                // catatan. Dengan None, cuma sharedBounds yang mengatur transisi visual,
-                // hasilnya solid tanpa fade.
+                // Transisi cross-fade NavHost dimatikan total (None, bukan tween(0)).
+                // Crossfade ganda di atas sharedBounds morphing menambah beban render
+                // tiap frame transisi tanpa manfaat visual — None membiarkan sharedBounds
+                // jadi satu-satunya yang mengatur animasi perpindahan, lebih ringan & solid.
                 enterTransition = { EnterTransition.None },
                 exitTransition = { ExitTransition.None },
                 popEnterTransition = { EnterTransition.None },
