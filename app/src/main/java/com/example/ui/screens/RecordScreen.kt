@@ -188,7 +188,7 @@ fun RecordScreen(
 
         Box(
             modifier = Modifier
-                .width(totalAreaWidth)
+                .widthIn(min = totalAreaWidth)
                 .height(80.dp),
             contentAlignment = Alignment.Center
         ) {
