@@ -48,10 +48,6 @@ class RecordViewModel(
         }
     }
 
-    // Versi instan dari toggleRecording untuk kasus Stop: cuma matiin recorder + timer,
-    // TANPA nunggu apa pun. Dipanggil duluan dari UI sebelum saveNote(), supaya state
-    // isRecording berubah seketika dan animasi morph tombol langsung jalan mulus,
-    // gak nunggu insert DB / delay(300) di saveNote().
     fun stopRecordingInstant() {
         audioRecorderManager.stopRecording()
         stopTimer()
@@ -73,12 +69,10 @@ class RecordViewModel(
         audioRecorderManager.resumeRecording()
     }
 
-    // Dipanggil saat Stop ditekan dari keadaan paused (isRecording masih true, tapi timer berhenti)
     fun stopFromPaused(isEmulator: Boolean) {
         if (!_isPaused.value) return
         audioRecorderManager.stopRecording()
         _isPaused.value = false
-        // timer sudah berhenti sejak pause, tinggal reset
         _recordingSeconds.value = 0
     }
 
@@ -107,16 +101,7 @@ class RecordViewModel(
         timerJob = null
     }
 
-    /**
-     * Simpan note. Return true kalau berhasil tersimpan, false kalau teks kosong
-     * (tidak ada apa-apa untuk disimpan). Caller (UI) yang menampilkan feedback,
-     * supaya feedback selalu sinkron dengan hasil nyata operasi ini — tidak lagi
-     * lewat StateFlow/LaunchedEffect terpisah yang berisiko tidak ter-collect.
-     */
     suspend fun saveNote(): Boolean {
-        // Beri jeda singkat: onResults() dari SpeechRecognizer kadang baru
-        // masuk sesaat setelah stopListening() dipanggil (async), supaya
-        // teks terakhir yang diucapkan user tidak hilang/diabaikan.
         delay(300)
 
         val text = recognizedText.value.trim()
@@ -134,7 +119,6 @@ class RecordViewModel(
         )
         val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
 
-        // Generate AI title di background (fire-and-forget, tidak ditunggu caller)
         if (apiKey.isNotBlank()) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
@@ -187,4 +171,3 @@ class RecordViewModel(
             }
     }
 }
-
