@@ -131,7 +131,6 @@ fun SettingsScreen(
                     .padding(bottom = innerPadding.calculateBottomPadding())
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState())
-                    // ANIMASI CHOREOGRAPHY: Seluruh elemen berbaris meluncur mulus dari bawah
                     .animateEnterExit(enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
