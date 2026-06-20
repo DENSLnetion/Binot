@@ -36,21 +36,6 @@ class RecordViewModel(
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
-    // Event hasil saveNote(), dikirim sebagai token (counter) bukan Boolean,
-    // supaya setiap kejadian PASTI ter-collect oleh LaunchedEffect di UI
-    // walau dua event beruntun punya "isi" yang sama (Boolean true->true
-    // tidak memicu re-trigger LaunchedEffect, counter selalu unik).
-    sealed class SaveEvent {
-        object Idle : SaveEvent()
-        data class Saved(val token: Long) : SaveEvent()
-        data class Failed(val token: Long) : SaveEvent()
-    }
-
-    private val _saveEvent = MutableStateFlow<SaveEvent>(SaveEvent.Idle)
-    val saveEvent: StateFlow<SaveEvent> = _saveEvent.asStateFlow()
-
-    fun consumeSaveEvent() { _saveEvent.value = SaveEvent.Idle }
-
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
             audioRecorderManager.stopRecording()
@@ -111,59 +96,63 @@ class RecordViewModel(
         timerJob = null
     }
 
-    fun saveNote() {
-        viewModelScope.launch {
-            // Beri jeda singkat: onResults() dari SpeechRecognizer kadang baru
-            // masuk sesaat setelah stopListening() dipanggil (async), supaya
-            // teks terakhir yang diucapkan user tidak hilang/diabaikan.
-            delay(300)
+    /**
+     * Simpan note. Return true kalau berhasil tersimpan, false kalau teks kosong
+     * (tidak ada apa-apa untuk disimpan). Caller (UI) yang menampilkan feedback,
+     * supaya feedback selalu sinkron dengan hasil nyata operasi ini — tidak lagi
+     * lewat StateFlow/LaunchedEffect terpisah yang berisiko tidak ter-collect.
+     */
+    suspend fun saveNote(): Boolean {
+        // Beri jeda singkat: onResults() dari SpeechRecognizer kadang baru
+        // masuk sesaat setelah stopListening() dipanggil (async), supaya
+        // teks terakhir yang diucapkan user tidak hilang/diabaikan.
+        delay(300)
 
-            val text = recognizedText.value.trim()
-            if (text.isEmpty()) {
-                _saveEvent.value = SaveEvent.Failed(System.nanoTime())
-                return@launch
-            }
+        val text = recognizedText.value.trim()
+        if (text.isEmpty()) {
+            return false
+        }
 
-            val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
-            val note = NoteEntity(
-                title = fallbackTitle,
-                rawText = text,
-                summary = null,
-                isPinned = false,
-                audioPath = null
-            )
-            val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
-            _saveEvent.value = SaveEvent.Saved(System.nanoTime())
+        val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
+        val note = NoteEntity(
+            title = fallbackTitle,
+            rawText = text,
+            summary = null,
+            isPinned = false,
+            audioPath = null
+        )
+        val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
 
-            // Generate AI title di background
-            if (apiKey.isNotBlank()) {
-                launch(Dispatchers.IO) {
-                    try {
-                        val prompt = """
-                            Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
-                            RULES:
-                            - Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
-                            - Maksimal 5 kata, padat dan informatif.
-                            - Gunakan bahasa yang sama dengan teks input.
-                            Teks: ${text.take(500)}
-                        """.trimIndent()
-                        val request = GenerateContentRequest(
-                            contents = listOf(Content(parts = listOf(Part(text = prompt))))
-                        )
-                        val response = RetrofitClient.service.generateContent(apiKey, request)
-                        val aiTitle = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-                        if (!aiTitle.isNullOrBlank()) {
-                            val savedNote = repository.getNoteById(id)
-                            if (savedNote != null) {
-                                repository.update(savedNote.copy(title = aiTitle))
-                            }
+        // Generate AI title di background (fire-and-forget, tidak ditunggu caller)
+        if (apiKey.isNotBlank()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val prompt = """
+                        Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
+                        RULES:
+                        - Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
+                        - Maksimal 5 kata, padat dan informatif.
+                        - Gunakan bahasa yang sama dengan teks input.
+                        Teks: ${text.take(500)}
+                    """.trimIndent()
+                    val request = GenerateContentRequest(
+                        contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                    )
+                    val response = RetrofitClient.service.generateContent(apiKey, request)
+                    val aiTitle = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                    if (!aiTitle.isNullOrBlank()) {
+                        val savedNote = repository.getNoteById(id)
+                        if (savedNote != null) {
+                            repository.update(savedNote.copy(title = aiTitle))
                         }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
+
+        return true
     }
 
     override fun onCleared() {
