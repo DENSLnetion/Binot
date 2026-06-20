@@ -113,3 +113,4 @@ Binot is an open-source project provided for free. If you find this application 
 License
 
 Distributed under the MIT License. See "LICENSE" for more information.
+
