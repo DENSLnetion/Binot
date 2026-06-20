@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -196,16 +198,22 @@ fun RecordScreen(
                 var isLeftPressed by remember { mutableStateOf(false) }
                 var isStopPressed by remember { mutableStateOf(false) }
 
-                // Idle: morph lebih panjang (efek "tekan lama" murni visual, tap biasa tetap jalan).
-                // Split: morph lebih jauh lagi, dan tombol di sebelahnya ikut menyusut.
+                // Idle: morph lebih panjang & kerasa (efek "tekan/tahan" murni visual, tap biasa tetap jalan).
+                // Diperbesar supaya morphing-nya intuitif kayak transisi ke Pause, bukan cuma geser dikit.
                 val leftPressExtra by animateDpAsState(
                     targetValue = when {
                         isLeftPressed && isSplit -> 32.dp
-                        isLeftPressed            -> 20.dp
+                        isLeftPressed            -> 56.dp
                         else                     -> 0.dp
                     },
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
                     label = "leftPress"
+                )
+                // Icon sedikit membesar pas ditekan, biar morphing kerasa "hidup" bukan cuma lebar Box-nya doang
+                val leftIconScale by animateFloatAsState(
+                    targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                    label = "leftIconScale"
                 )
                 val stopPressExtra by animateDpAsState(
                     targetValue = if (isStopPressed) 32.dp else 0.dp,
@@ -267,7 +275,9 @@ fun RecordScreen(
                                 isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
                                 else                 -> MaterialTheme.colorScheme.onPrimary
                             },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier
+                                .size(32.dp)
+                                .scale(leftIconScale)
                         )
                         if (!isSplit) {
                             Spacer(modifier = Modifier.width(12.dp))
@@ -282,6 +292,7 @@ fun RecordScreen(
 
                 // Tombol KANAN: Stop — hanya tampil saat split
                 if (rightButtonWidth > 0.dp) {
+                    val coroutineScope = rememberCoroutineScope()
                     Box(
                         modifier = Modifier
                             .width((rightButtonWidth - leftPressExtra + stopPressExtra).coerceAtLeast(64.dp))
@@ -295,19 +306,21 @@ fun RecordScreen(
                                         isStopPressed = true
                                         tryAwaitRelease()
                                         isStopPressed = false
-                                        val wasRecording = isRecording
-                                        val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                        // saveNote() suspend dipanggil langsung di sini (PointerInputScope
-                                        // sudah coroutine), hasilnya ditunggu, baru Toast ditembak sesuai
-                                        // hasil NYATA — tanpa StateFlow/LaunchedEffect/Scaffold di tengah.
-                                        val saved = viewModel.saveNote()
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            if (saved) "Note saved" else "No text to save",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                        if (wasRecording) viewModel.toggleRecording(isEmulator)
-                                        else viewModel.stopFromPaused(isEmulator)
+
+                                        // PENTING: hentikan recording SEKETIKA dulu (tanpa nunggu apa pun)
+                                        // supaya isRecording/isSplit langsung berubah dan animasi morph
+                                        // tombol mulai jalan mulus, persis di momen jari dilepas.
+                                        // saveNote() (yang ada delay(300) + insert DB) dijalankan terpisah
+                                        // di coroutine sendiri, gak ngeblock animasi.
+                                        viewModel.stopRecordingInstant()
+
+                                        coroutineScope.launch {
+                                            val saved = viewModel.saveNote()
+                                            snackbarHostState.showSnackbar(
+                                                message = if (saved) "Note saved" else "No text to save",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
                                     }
                                 )
                             },
