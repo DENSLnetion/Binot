@@ -160,8 +160,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     RecordScreen(
                         viewModel = recordViewModel,
-                        userName = userName,
-                        onNavigateToResult = { id -> navController.navigate("result/$id") }
+                        userName = userName
                     )
                 }
                 composable("history") {
