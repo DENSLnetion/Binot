@@ -25,6 +25,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+// KUNCI: Ini import yang bikin error tadi. Wajib ada buat Grid!
+import androidx.compose.foundation.lazy.staggeredgrid.animateItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -308,7 +310,6 @@ fun HistoryScreen(
                             text = { Text("Import Audio") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            // FIX 1: Memaksa layer FAB selalu di atas shared overlay animasi!
                             modifier = Modifier.renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                         )
                     }
@@ -575,7 +576,6 @@ fun HistoryScreen(
     }
 }
 
-// FIX 4: Komponen NoteCard Dibungkus SwipeToDismissBox
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun DismissibleNoteCard(
@@ -595,7 +595,6 @@ fun DismissibleNoteCard(
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
-                // Eksekusi hapus & trigger undo snackbar
                 viewModel.deleteMultiple(setOf(note.id))
                 coroutineScope.launch {
                     val result = snackbarHostState.showSnackbar(
@@ -616,7 +615,6 @@ fun DismissibleNoteCard(
 
     SwipeToDismissBox(
         state = dismissState,
-        // Disable swipe saat selection mode berjalan biar user ga salah usap
         enableDismissFromStartToEnd = !selectionMode,
         enableDismissFromEndToStart = !selectionMode,
         backgroundContent = {
@@ -637,7 +635,6 @@ fun DismissibleNoteCard(
                 }
             }
         },
-        // FIX 3: animateItem() mencegah card lompat-lompat pindah kolom ngaco pas di grid
         modifier = Modifier.animateItem() 
     ) {
         with(sharedTransitionScope) {
@@ -733,7 +730,6 @@ fun NoteCard(
     onClick: () -> Unit,
     onLabelClick: (String) -> Unit
 ) {
-    // FIX 2: Tinggi deterministik berbasis ID. Scroll secepat apapun card kaga bakal ganti ukuran/ngambang!
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
