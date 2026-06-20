@@ -263,11 +263,13 @@ fun HistoryScreen(
         }
     ) {
         Scaffold(
+            // KUNCI: Layar Tab History ikut jadi surfaceVariant biar gabung sama background MainActivity
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 if (selectionMode) {
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), 
+                        color = MaterialTheme.colorScheme.primaryContainer, // Diubah biar nyolok pas select
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
                     ) {
                         TopAppBar(
@@ -588,7 +590,8 @@ fun MorphingSearchBar(
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) 
+            // KUNCI: Biar match sama card kertas, warnanya diganti ke surface
+            .background(MaterialTheme.colorScheme.surface) 
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -647,9 +650,9 @@ fun NoteCard(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            // KUNCI 1: Buang atribut copy(alpha = ...) biar warnanya murni solid
+            // KUNCI: Berubah jadi surface (kertas murni), nyaru 100% sama background detailnya nanti
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                             else MaterialTheme.colorScheme.surfaceVariant
+                             else MaterialTheme.colorScheme.surface
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
