@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
@@ -44,11 +45,13 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -60,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
 import com.example.viewmodel.HistoryViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -70,7 +74,8 @@ fun HistoryScreen(
     viewModel: HistoryViewModel,
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
-    onNoteClick: (Int) -> Unit
+    onNoteClick: (Int) -> Unit,
+    onTrashClick: () -> Unit // Navigasi ke Trash
 ) {
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
@@ -95,10 +100,11 @@ fun HistoryScreen(
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
-
     var isSearchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    
+    // FIX SNACKBAR: Scope nempel sama HistoryScreen
     val coroutineScope = rememberCoroutineScope()
 
     val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
@@ -230,23 +236,12 @@ fun HistoryScreen(
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {
                             if (isMultiSelectLabelMode) {
-                                Checkbox(
-                                    checked = isLabelSelected,
-                                    onCheckedChange = { viewModel.toggleLabelFilter(label) }
-                                )
+                                Checkbox(checked = isLabelSelected, onCheckedChange = { viewModel.toggleLabelFilter(label) })
                             } else {
-                                Icon(
-                                    Icons.Default.Label,
-                                    contentDescription = null,
-                                    tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Icon(Icons.Default.Label, contentDescription = null, tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text(
-                                label,
-                                color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                            Text(label, color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
                         }
                     }
 
@@ -255,6 +250,21 @@ fun HistoryScreen(
                         icon = { Icon(Icons.Default.Add, null) },
                         selected = false,
                         onClick = { showNewLabelDialog = true; coroutineScope.launch { drawerState.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // TOMBOL TRASH DI SIDE PANEL
+                    NavigationDrawerItem(
+                        label = { Text("Trash", color = MaterialTheme.colorScheme.error) },
+                        icon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                        selected = false,
+                        onClick = { 
+                            coroutineScope.launch { drawerState.close() }
+                            onTrashClick() 
+                        },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
@@ -308,7 +318,10 @@ fun HistoryScreen(
                             text = { Text("Import Audio") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
+                            // FIX FAB FLASH: Z-index Dewa + ngilang otomatis pas transisi
+                            modifier = Modifier
+                                .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
+                                .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
                         )
                     }
                 }
@@ -339,14 +352,14 @@ fun HistoryScreen(
                             items(pinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
-                                    // KUNCI PERBAIKAN: Lempar animateItem() langsung dari scope grid
-                                    modifier = Modifier.animateItem(),
+                                    modifier = Modifier.animateItem(), // FIX NGAMBANG/PINDAH KOLOM
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope,
                                     viewModel = viewModel,
+                                    parentScope = coroutineScope,
                                     snackbarHostState = snackbarHostState,
                                     onSelect = { 
                                         if (selectionMode) { 
@@ -366,14 +379,14 @@ fun HistoryScreen(
                             items(unpinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
-                                    // KUNCI PERBAIKAN: Lempar animateItem() langsung dari scope grid
-                                    modifier = Modifier.animateItem(),
+                                    modifier = Modifier.animateItem(), // FIX NGAMBANG/PINDAH KOLOM
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope,
                                     viewModel = viewModel,
+                                    parentScope = coroutineScope,
                                     snackbarHostState = snackbarHostState,
                                     onSelect = { 
                                         if (selectionMode) { 
@@ -397,60 +410,24 @@ fun HistoryScreen(
             onDismissRequest = { showNewLabelDialog = false },
             title = { Text("Create New Label") },
             text = { 
-                OutlinedTextField(
-                    value = newLabelInput, 
-                    onValueChange = { newLabelInput = it }, 
-                    label = { Text("Label Name") }, 
-                    singleLine = true, 
-                    modifier = Modifier.fillMaxWidth()
-                ) 
+                OutlinedTextField(value = newLabelInput, onValueChange = { newLabelInput = it }, label = { Text("Label Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) 
             },
-            confirmButton = {
-                Button(onClick = {
-                    if (newLabelInput.isNotBlank()) {
-                        viewModel.createIndependentLabel(newLabelInput.trim())
-                        showNewLabelDialog = false
-                        newLabelInput = ""
-                    }
-                }) { Text("Create Label") }
-            },
+            confirmButton = { Button(onClick = { if (newLabelInput.isNotBlank()) { viewModel.createIndependentLabel(newLabelInput.trim()); showNewLabelDialog = false; newLabelInput = "" } }) { Text("Create Label") } },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
     }
 
     if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { labelBeingManaged = null },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
+        ModalBottomSheet(onDismissRequest = { labelBeingManaged = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
-                Text(
-                    text = labelBeingManaged ?: "",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Text(text = labelBeingManaged ?: "", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showRenameLabelDialog = true }
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showRenameLabelDialog = true }.padding(horizontal = 16.dp, vertical = 16.dp)) {
                     Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.width(16.dp))
                     Text("Rename Label", color = MaterialTheme.colorScheme.onSurface)
                 }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDeleteLabelDialog = true }
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showDeleteLabelDialog = true }.padding(horizontal = 16.dp, vertical = 16.dp)) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(16.dp))
                     Text("Delete Label", color = MaterialTheme.colorScheme.error)
@@ -464,28 +441,9 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { showRenameLabelDialog = false; labelBeingManaged = null },
             title = { Text("Rename Label") },
-            text = {
-                OutlinedTextField(
-                    value = renameLabelInput,
-                    onValueChange = { renameLabelInput = it },
-                    label = { Text("Label Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val oldLabel = labelBeingManaged
-                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
-                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
-                    }
-                    showRenameLabelDialog = false
-                    labelBeingManaged = null
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
-            }
+            text = { OutlinedTextField(value = renameLabelInput, onValueChange = { renameLabelInput = it }, label = { Text("Label Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { Button(onClick = { val oldLabel = labelBeingManaged; if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) { viewModel.renameLabel(oldLabel, renameLabelInput.trim()) }; showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") } }
         )
     }
 
@@ -494,16 +452,8 @@ fun HistoryScreen(
             onDismissRequest = { showDeleteLabelDialog = false; labelBeingManaged = null },
             title = { Text("Delete Label") },
             text = { Text("Label \"${labelBeingManaged}\" will be removed from all notes. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    labelBeingManaged?.let { viewModel.deleteLabel(it) }
-                    showDeleteLabelDialog = false
-                    labelBeingManaged = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
-            }
+            confirmButton = { TextButton(onClick = { labelBeingManaged?.let { viewModel.deleteLabel(it) }; showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") } }
         )
     }
 
@@ -512,15 +462,8 @@ fun HistoryScreen(
             onDismissRequest = { showDeleteMultipleLabelsDialog = false },
             title = { Text("Delete Labels") },
             text = { Text("${selectedLabels.size} label${if (selectedLabels.size > 1) "s" else ""} will be removed from all notes. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteMultipleLabels(selectedLabels)
-                    showDeleteMultipleLabelsDialog = false
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") }
-            }
+            confirmButton = { TextButton(onClick = { viewModel.deleteMultipleLabels(selectedLabels); showDeleteMultipleLabelsDialog = false }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") } }
         )
     }
 
@@ -538,15 +481,11 @@ fun HistoryScreen(
                     selectedNotes = emptySet()
                     coroutineScope.launch {
                         val result = snackbarHostState.showSnackbar(
-                            message = "${idsToDelete.size} note${if (idsToDelete.size > 1) "s" else ""} deleted",
+                            message = "${idsToDelete.size} note${if (idsToDelete.size > 1) "s" else ""} moved to Trash",
                             actionLabel = "Undo",
                             duration = SnackbarDuration.Short
                         )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            viewModel.undoDelete()
-                        } else {
-                            viewModel.clearRecentlyDeleted()
-                        }
+                        if (result == SnackbarResult.ActionPerformed) { viewModel.undoDelete() } else { viewModel.clearRecentlyDeleted() }
                     }
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -582,26 +521,25 @@ fun HistoryScreen(
 @Composable
 fun DismissibleNoteCard(
     note: NoteEntity,
-    modifier: Modifier = Modifier, // Modifer ditangkap di sini
+    modifier: Modifier = Modifier,
     isSelected: Boolean,
     selectedLabels: Set<String>,
     selectionMode: Boolean,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     viewModel: HistoryViewModel,
+    parentScope: CoroutineScope, 
     snackbarHostState: SnackbarHostState,
     onSelect: () -> Unit,
     onLongSelect: () -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
                 viewModel.deleteMultiple(setOf(note.id))
-                coroutineScope.launch {
+                parentScope.launch {
                     val result = snackbarHostState.showSnackbar(
-                        message = "1 note deleted",
+                        message = "Note moved to Trash",
                         actionLabel = "Undo",
                         duration = SnackbarDuration.Short
                     )
@@ -638,7 +576,7 @@ fun DismissibleNoteCard(
                 }
             }
         },
-        modifier = modifier // Dan diaplikasikan ke parent terluarnya di sini!
+        modifier = modifier
     ) {
         with(sharedTransitionScope) {
             NoteCard(
@@ -668,10 +606,8 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit
 ) {
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
-    
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
@@ -689,26 +625,18 @@ fun MorphingSearchBar(
                 .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
                 .defaultMinSize(minHeight = 48.dp) 
         ) {
-            AnimatedVisibility(
-                visible = !isFocused,
-                enter = expandHorizontally(animationSpec = spring()),
-                exit = shrinkHorizontally(animationSpec = spring())
-            ) {
+            AnimatedVisibility(visible = !isFocused, enter = expandHorizontally(animationSpec = spring()), exit = shrinkHorizontally(animationSpec = spring())) {
                 IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            
             Spacer(modifier = Modifier.width(if (isFocused) 12.dp else 4.dp))
             Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
-            
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) { Text("Search notes...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
                 BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
+                    value = query, onValueChange = onQueryChange,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), singleLine = true,
                     modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) }
                 )
             }
@@ -733,6 +661,7 @@ fun NoteCard(
     onClick: () -> Unit,
     onLabelClick: (String) -> Unit
 ) {
+    // FIX TINGGI NGAMBANG: Lock ukuran pakai note.id, jadi di-scroll secepat apapun bentuknya abadi
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
@@ -740,8 +669,7 @@ fun NoteCard(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                             else MaterialTheme.colorScheme.surface
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
@@ -757,29 +685,14 @@ fun NoteCard(
                         val isLabelActive = label in selectedLabels
                         Box(
                             modifier = Modifier
-                                .background(
-                                    if (isLabelActive) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-                                    RoundedCornerShape(50)
-                                )
+                                .background(if (isLabelActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f), RoundedCornerShape(50))
                                 .clickable { onLabelClick(label) }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Label,
-                                    contentDescription = null,
-                                    tint = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.size(12.dp)
-                                )
+                                Icon(Icons.Default.Label, null, tint = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Text(label, style = MaterialTheme.typography.labelSmall, color = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -795,4 +708,5 @@ fun NoteCard(
         }
     }
 }
+
 
