@@ -27,6 +27,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -453,98 +454,108 @@ fun ResultScreen(
                     }
                 }
                 
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (note!!.summary != null) {
+                        item {
+                            BouncyCapsule(
+                                onClick = {
+                                    viewModel.restoreRawText()
+                                    coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
+                                    showSidePanel = false
+                                },
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (note!!.audioPath != null) {
+                        item {
+                            val playInteractionSource = remember { MutableInteractionSource() }
+                            val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+                            val playWidth by animateDpAsState(
+                                targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                                label = "playWidth"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .width(playWidth).height(48.dp).clip(CircleShape)
+                                    .background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
+                                    .clickable(
+                                        interactionSource = playInteractionSource,
+                                        indication = null,
+                                        onClick = { viewModel.toggleAudio() }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = "Play/Pause",
+                                        tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        if (isPlaying) "Pause" else "Play", 
+                                        color = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (note!!.audioPath != null) {
+                        item {
+                            BouncyCapsule(
+                                onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+
+                    item {
                         BouncyCapsule(
                             onClick = {
-                                viewModel.restoreRawText()
-                                coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
+                                coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
                                 showSidePanel = false
                             },
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    if (note!!.audioPath != null) {
-                        val playInteractionSource = remember { MutableInteractionSource() }
-                        val isPlayPressed by playInteractionSource.collectIsPressedAsState()
-                        val playWidth by animateDpAsState(
-                            targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                            label = "playWidth"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(playWidth).height(48.dp).clip(CircleShape)
-                                .background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
-                                .clickable(
-                                    interactionSource = playInteractionSource,
-                                    indication = null,
-                                    onClick = { viewModel.toggleAudio() }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = "Play/Pause",
-                                    tint = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    if (isPlaying) "Pause" else "Play", 
-                                    color = if (isPlaying) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    if (note!!.audioPath != null) {
-                        BouncyCapsule(
-                            onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
+                            Text("Copy", color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
 
-                    BouncyCapsule(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
-                            coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
-                            showSidePanel = false
-                        },
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Copy", color = MaterialTheme.colorScheme.onSurface)
-                    }
-
-                    BouncyCapsule(
-                        onClick = {
-                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
-                            showSidePanel = false
-                        },
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share", color = MaterialTheme.colorScheme.onSurface)
+                    item {
+                        BouncyCapsule(
+                            onClick = {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
+                                showSidePanel = false
+                            },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Share", color = MaterialTheme.colorScheme.onSurface)
+                        }
                     }
                 }
 
