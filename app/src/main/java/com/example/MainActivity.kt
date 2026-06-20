@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -90,7 +92,15 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
+    // SnackbarHostState dipindah ke level Scaffold TERLUAR (yang punya bottomBar).
+    // Sebelumnya RecordScreen punya Scaffold + SnackbarHost sendiri yang
+    // bersarang di dalam Scaffold ini — snackbar dari Scaffold dalam berisiko
+    // ke-render di area yang tertutup/terpotong oleh NavigationBar milik
+    // Scaffold luar, sehingga tidak pernah kelihatan sama sekali.
+    val snackbarHostState = remember { SnackbarHostState() }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
                 NavigationBar {
@@ -160,7 +170,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     RecordScreen(
                         viewModel = recordViewModel,
-                        userName = userName
+                        userName = userName,
+                        snackbarHostState = snackbarHostState
                     )
                 }
                 composable("history") {
