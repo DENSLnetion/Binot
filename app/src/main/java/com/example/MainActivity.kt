@@ -6,9 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -143,10 +142,18 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                enterTransition = { fadeIn(animationSpec = tween(0)) },
-                exitTransition = { fadeOut(animationSpec = tween(0)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(0)) },
-                popExitTransition = { fadeOut(animationSpec = tween(0)) }
+                // Transisi cross-fade NavHost DIMATIKAN total (bukan cuma durasi 0).
+                // Sebelumnya pakai fadeIn/fadeOut(tween(0)) — meski durasinya 0ms,
+                // Compose Navigation tetap menjalankan crossfade antara screen lama
+                // & baru selama proses sharedBounds morphing masih berjalan (yang
+                // punya durasi sendiri), sehingga kedua layer numpuk dan keduanya
+                // berubah alpha bareng -> kelihatan transparan/burem pas buka-tutup
+                // catatan. Dengan None, cuma sharedBounds yang mengatur transisi visual,
+                // hasilnya solid tanpa fade.
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
