@@ -5,10 +5,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -43,7 +47,8 @@ import java.util.Calendar
 fun RecordScreen(
     viewModel: RecordViewModel,
     userName: String,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
@@ -85,274 +90,266 @@ fun RecordScreen(
 
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(topInsets + 40.dp))
+    with(animatedVisibilityScope) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(topInsets + 40.dp))
 
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-            Text(
-                text = greeting,
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Start
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Surface(
-                shape = CircleShape,
-                color = when {
-                    isPaused -> MaterialTheme.colorScheme.tertiaryContainer
-                    isRecording -> MaterialTheme.colorScheme.errorContainer
-                    else -> MaterialTheme.colorScheme.secondaryContainer
-                },
-                modifier = Modifier.padding(bottom = 16.dp)
+            // ANIMASI CHOREOGRAPHY: Teks Greeting dan Timer meluncur elegan
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()), 
+                horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    text = timeString,
-                    style = MaterialTheme.typography.labelLarge,
+                    text = greeting,
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Start
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Surface(
+                    shape = CircleShape,
                     color = when {
-                        isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
-                        isRecording -> MaterialTheme.colorScheme.onErrorContainer
-                        else -> MaterialTheme.colorScheme.onSecondaryContainer
+                        isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+                        isRecording -> MaterialTheme.colorScheme.errorContainer
+                        else -> MaterialTheme.colorScheme.secondaryContainer
                     },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Text(
+                        text = timeString,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = when {
+                            isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
+                            isRecording -> MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            AudioWaveform(
+                amplitude = amplitude,
+                modifier = Modifier
+                    .padding(vertical = 32.dp)
+                    .animateEnterExit(enter = fadeIn()) // Waveform cukup masuk pudar aja
+            )
+
+            val scrollState = rememberScrollState()
+            LaunchedEffect(recognizedText) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            Box(
+                // ANIMASI CHOREOGRAPHY: Kotak Live Teks Mekar Lembut
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .animateEnterExit(enter = scaleIn(initialScale = 0.9f) + fadeIn())
+                    .clip(MaterialTheme.shapes.extraLarge)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { showLiveTextSheet = true }
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
 
-        AudioWaveform(
-            amplitude = amplitude,
-            modifier = Modifier.padding(vertical = 32.dp)
-        )
+            val isSplit = isRecording || isPaused
+            val totalAreaWidth = 280.dp
 
-        val scrollState = rememberScrollState()
-        LaunchedEffect(recognizedText) {
-            scrollState.animateScrollTo(scrollState.maxValue)
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .clip(MaterialTheme.shapes.extraLarge)
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable { showLiveTextSheet = true }
-                .padding(24.dp)
-        ) {
-            Text(
-                text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Start,
+            Box(
+                // ANIMASI CHOREOGRAPHY: Pusat jiwa dari layar record: Mekar berdetak!
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        val isSplit = isRecording || isPaused
-        val totalAreaWidth = 280.dp
-
-        Box(
-            modifier = Modifier
-                .widthIn(min = totalAreaWidth)
-                .height(80.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            var isLeftPressed by remember { mutableStateOf(false) }
-            var isStopPressed by remember { mutableStateOf(false) }
-
-            val leftTargetWidth = when {
-                isStopPressed && isSplit -> 88.dp 
-                isLeftPressed && isSplit -> 152.dp  
-                isLeftPressed            -> totalAreaWidth + 56.dp 
-                isSplit                  -> 120.dp
-                else                     -> totalAreaWidth
-            }
-            val rightTargetWidth = when {
-                !isSplit                  -> 0.dp
-                isStopPressed              -> 152.dp 
-                isLeftPressed               -> 88.dp  
-                else                        -> 120.dp
-            }
-            val gapTarget = if (isSplit) 16.dp else 0.dp
-
-            val leftButtonWidth by animateDpAsState(
-                targetValue = leftTargetWidth,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "leftWidth"
-            )
-            val rightButtonWidth by animateDpAsState(
-                targetValue = rightTargetWidth,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "rightWidth"
-            )
-            val rightButtonAlpha by animateFloatAsState(
-                targetValue = if (isSplit) 1f else 0f,
-                animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                label = "rightAlpha"
-            )
-            val gapWidth by animateDpAsState(
-                targetValue = gapTarget,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "gap"
-            )
-            val leftIconScale by animateFloatAsState(
-                targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                label = "leftIconScale"
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(gapWidth),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.wrapContentWidth()
+                    .widthIn(min = totalAreaWidth)
+                    .height(80.dp)
+                    .animateEnterExit(enter = scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(leftButtonWidth)
-                        .height(80.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when {
-                                isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
-                                isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                else                 -> MaterialTheme.colorScheme.primary
-                            }
-                        )
-                        .pointerInput(isSplit, isPaused) {
-                            detectTapGestures(
-                                onPress = {
-                                    isLeftPressed = true
-                                    tryAwaitRelease()
-                                    isLeftPressed = false
-                                    when {
-                                        !isSplit -> {
-                                            if (!hasPermission) {
-                                                launcher.launch(Manifest.permission.RECORD_AUDIO)
-                                            } else {
-                                                val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                                viewModel.toggleRecording(isEmulator)
-                                            }
-                                        }
-                                        isPaused -> viewModel.resumeRecording()
-                                        else     -> viewModel.pauseRecording()
-                                    }
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = when {
-                                isSplit && isPaused -> Icons.Default.PlayArrow
-                                isSplit            -> Icons.Default.Pause
-                                else               -> Icons.Default.Mic
-                            },
-                            contentDescription = when {
-                                isSplit && isPaused -> "Resume"
-                                isSplit            -> "Pause"
-                                else               -> "Record"
-                            },
-                            tint = when {
-                                isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
-                                isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
-                                else                 -> MaterialTheme.colorScheme.onPrimary
-                            },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .scale(leftIconScale)
-                        )
-                        if (!isSplit) {
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Record",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                    }
-                }
+                var isLeftPressed by remember { mutableStateOf(false) }
+                var isStopPressed by remember { mutableStateOf(false) }
 
-                if (rightButtonWidth > 0.dp) {
+                val leftTargetWidth = when {
+                    isStopPressed && isSplit -> 88.dp 
+                    isLeftPressed && isSplit -> 152.dp  
+                    isLeftPressed            -> totalAreaWidth + 56.dp 
+                    isSplit                  -> 120.dp
+                    else                     -> totalAreaWidth
+                }
+                val rightTargetWidth = when {
+                    !isSplit                  -> 0.dp
+                    isStopPressed              -> 152.dp 
+                    isLeftPressed               -> 88.dp  
+                    else                        -> 120.dp
+                }
+                val gapTarget = if (isSplit) 16.dp else 0.dp
+
+                val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
+                val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
+                val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
+                val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
+                val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(gapWidth),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.wrapContentWidth()
+                ) {
                     Box(
                         modifier = Modifier
-                            .width(rightButtonWidth)
+                            .width(leftButtonWidth)
                             .height(80.dp)
-                            .alpha(rightButtonAlpha)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.tertiary)
-                            .pointerInput(Unit) {
+                            .background(
+                                when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
+                                    else                 -> MaterialTheme.colorScheme.primary
+                                }
+                            )
+                            .pointerInput(isSplit, isPaused) {
                                 detectTapGestures(
                                     onPress = {
-                                        isStopPressed = true
+                                        isLeftPressed = true
                                         tryAwaitRelease()
-                                        isStopPressed = false
-
-                                        viewModel.stopRecordingInstant()
-
-                                        coroutineScope.launch {
-                                            val saved = viewModel.saveNote()
-                                            snackbarHostState.showSnackbar(
-                                                message = if (saved) "Note saved" else "No text to save",
-                                                duration = SnackbarDuration.Short
-                                            )
+                                        isLeftPressed = false
+                                        when {
+                                            !isSplit -> {
+                                                if (!hasPermission) {
+                                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                                } else {
+                                                    val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                    viewModel.toggleRecording(isEmulator)
+                                                }
+                                            }
+                                            isPaused -> viewModel.resumeRecording()
+                                            else     -> viewModel.pauseRecording()
                                         }
                                     }
                                 )
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Stop,
-                            contentDescription = "Stop",
-                            tint = MaterialTheme.colorScheme.onTertiary,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when {
+                                    isSplit && isPaused -> Icons.Default.PlayArrow
+                                    isSplit            -> Icons.Default.Pause
+                                    else               -> Icons.Default.Mic
+                                },
+                                contentDescription = when {
+                                    isSplit && isPaused -> "Resume"
+                                    isSplit            -> "Pause"
+                                    else               -> "Record"
+                                },
+                                tint = when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    else                 -> MaterialTheme.colorScheme.onPrimary
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .scale(leftIconScale)
+                            )
+                            if (!isSplit) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Record",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+
+                    if (rightButtonWidth > 0.dp) {
+                        Box(
+                            modifier = Modifier
+                                .width(rightButtonWidth)
+                                .height(80.dp)
+                                .alpha(rightButtonAlpha)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.tertiary)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            isStopPressed = true
+                                            tryAwaitRelease()
+                                            isStopPressed = false
+
+                                            viewModel.stopRecordingInstant()
+
+                                            coroutineScope.launch {
+                                                val saved = viewModel.saveNote()
+                                                snackbarHostState.showSnackbar(
+                                                    message = if (saved) "Note saved" else "No text to save",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                            }
+                                        }
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "Stop",
+                                tint = MaterialTheme.colorScheme.onTertiary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(32.dp))
-    }
+            Spacer(modifier = Modifier.height(32.dp))
+        } // end Column
 
-    if (showLiveTextSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showLiveTextSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState())
+        if (showLiveTextSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showLiveTextSheet = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
             ) {
-                Text(
-                    text = "Live Transcription",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(48.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = "Live Transcription",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(48.dp))
+                }
             }
         }
     }
 }
-
-
