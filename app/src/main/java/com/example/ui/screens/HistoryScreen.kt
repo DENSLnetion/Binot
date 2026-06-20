@@ -7,8 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
@@ -159,7 +157,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -341,12 +339,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            enter = EnterTransition.None,
-                                            exit = ExitTransition.None
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -365,12 +358,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            enter = EnterTransition.None,
-                                            exit = ExitTransition.None
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -601,7 +589,7 @@ fun MorphingSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
-                // FIX FATAL: Pasang penahan tiang! Biar kaga ngempes pas tombol ☰ dibuang dari layar.
+                // FIX FATAL: Pasang penahan tiang! Biar kaga ngempes pas tombol â˜° dibuang dari layar.
                 .defaultMinSize(minHeight = 48.dp) 
         ) {
             AnimatedVisibility(
@@ -651,9 +639,9 @@ fun NoteCard(
     val minHeight = remember(note.id) { (140..220).random().dp }
     // SimpleDateFormat di-remember (bukan dibuat ulang tiap recomposition). Kecil,
     // tapi card ini ikut numpang recompose berkali-kali selama shared transition
-    // morphing item lain di grid berjalan — akumulasi banyak instance jadi terasa.
+    // morphing item lain di grid berjalan â€” akumulasi banyak instance jadi terasa.
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
