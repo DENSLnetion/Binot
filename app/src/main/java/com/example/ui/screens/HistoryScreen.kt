@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.lazy.staggeredgrid.animateItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -75,7 +76,7 @@ fun HistoryScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit,
-    onTrashClick: () -> Unit // Navigasi ke Trash
+    onTrashClick: () -> Unit
 ) {
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
@@ -100,11 +101,10 @@ fun HistoryScreen(
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
+
     var isSearchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    
-    // FIX SNACKBAR: Scope nempel sama HistoryScreen
     val coroutineScope = rememberCoroutineScope()
 
     val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
@@ -236,12 +236,23 @@ fun HistoryScreen(
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {
                             if (isMultiSelectLabelMode) {
-                                Checkbox(checked = isLabelSelected, onCheckedChange = { viewModel.toggleLabelFilter(label) })
+                                Checkbox(
+                                    checked = isLabelSelected,
+                                    onCheckedChange = { viewModel.toggleLabelFilter(label) }
+                                )
                             } else {
-                                Icon(Icons.Default.Label, contentDescription = null, tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(
+                                    Icons.Default.Label,
+                                    contentDescription = null,
+                                    tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                             Spacer(Modifier.width(12.dp))
-                            Text(label, color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                label,
+                                color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
                     }
 
@@ -256,7 +267,6 @@ fun HistoryScreen(
                     Spacer(Modifier.height(16.dp))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     
-                    // TOMBOL TRASH DI SIDE PANEL
                     NavigationDrawerItem(
                         label = { Text("Trash", color = MaterialTheme.colorScheme.error) },
                         icon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
@@ -318,7 +328,6 @@ fun HistoryScreen(
                             text = { Text("Import Audio") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            // FIX FAB FLASH: Z-index Dewa + ngilang otomatis pas transisi
                             modifier = Modifier
                                 .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
@@ -352,7 +361,7 @@ fun HistoryScreen(
                             items(pinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
-                                    modifier = Modifier.animateItem(), // FIX NGAMBANG/PINDAH KOLOM
+                                    modifier = Modifier.animateItem(),
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
@@ -379,7 +388,7 @@ fun HistoryScreen(
                             items(unpinnedNotes, key = { it.id }) { note ->
                                 DismissibleNoteCard(
                                     note = note,
-                                    modifier = Modifier.animateItem(), // FIX NGAMBANG/PINDAH KOLOM
+                                    modifier = Modifier.animateItem(),
                                     isSelected = selectedNotes.contains(note.id),
                                     selectedLabels = selectedLabels,
                                     selectionMode = selectionMode,
@@ -410,24 +419,60 @@ fun HistoryScreen(
             onDismissRequest = { showNewLabelDialog = false },
             title = { Text("Create New Label") },
             text = { 
-                OutlinedTextField(value = newLabelInput, onValueChange = { newLabelInput = it }, label = { Text("Label Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) 
+                OutlinedTextField(
+                    value = newLabelInput, 
+                    onValueChange = { newLabelInput = it }, 
+                    label = { Text("Label Name") }, 
+                    singleLine = true, 
+                    modifier = Modifier.fillMaxWidth()
+                ) 
             },
-            confirmButton = { Button(onClick = { if (newLabelInput.isNotBlank()) { viewModel.createIndependentLabel(newLabelInput.trim()); showNewLabelDialog = false; newLabelInput = "" } }) { Text("Create Label") } },
+            confirmButton = {
+                Button(onClick = {
+                    if (newLabelInput.isNotBlank()) {
+                        viewModel.createIndependentLabel(newLabelInput.trim())
+                        showNewLabelDialog = false
+                        newLabelInput = ""
+                    }
+                }) { Text("Create Label") }
+            },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
     }
 
     if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
-        ModalBottomSheet(onDismissRequest = { labelBeingManaged = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        ModalBottomSheet(
+            onDismissRequest = { labelBeingManaged = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
-                Text(text = labelBeingManaged ?: "", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(
+                    text = labelBeingManaged ?: "",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showRenameLabelDialog = true }.padding(horizontal = 16.dp, vertical = 16.dp)) {
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showRenameLabelDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                ) {
                     Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.width(16.dp))
                     Text("Rename Label", color = MaterialTheme.colorScheme.onSurface)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { showDeleteLabelDialog = true }.padding(horizontal = 16.dp, vertical = 16.dp)) {
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDeleteLabelDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                ) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(16.dp))
                     Text("Delete Label", color = MaterialTheme.colorScheme.error)
@@ -441,9 +486,28 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { showRenameLabelDialog = false; labelBeingManaged = null },
             title = { Text("Rename Label") },
-            text = { OutlinedTextField(value = renameLabelInput, onValueChange = { renameLabelInput = it }, label = { Text("Label Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { Button(onClick = { val oldLabel = labelBeingManaged; if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) { viewModel.renameLabel(oldLabel, renameLabelInput.trim()) }; showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") } }
+            text = {
+                OutlinedTextField(
+                    value = renameLabelInput,
+                    onValueChange = { renameLabelInput = it },
+                    label = { Text("Label Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val oldLabel = labelBeingManaged
+                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
+                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                    }
+                    showRenameLabelDialog = false
+                    labelBeingManaged = null
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+            }
         )
     }
 
@@ -452,8 +516,16 @@ fun HistoryScreen(
             onDismissRequest = { showDeleteLabelDialog = false; labelBeingManaged = null },
             title = { Text("Delete Label") },
             text = { Text("Label \"${labelBeingManaged}\" will be removed from all notes. This can't be undone.") },
-            confirmButton = { TextButton(onClick = { labelBeingManaged?.let { viewModel.deleteLabel(it) }; showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") } }
+            confirmButton = {
+                TextButton(onClick = {
+                    labelBeingManaged?.let { viewModel.deleteLabel(it) }
+                    showDeleteLabelDialog = false
+                    labelBeingManaged = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+            }
         )
     }
 
@@ -462,8 +534,15 @@ fun HistoryScreen(
             onDismissRequest = { showDeleteMultipleLabelsDialog = false },
             title = { Text("Delete Labels") },
             text = { Text("${selectedLabels.size} label${if (selectedLabels.size > 1) "s" else ""} will be removed from all notes. This can't be undone.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteMultipleLabels(selectedLabels); showDeleteMultipleLabelsDialog = false }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") } }
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMultipleLabels(selectedLabels)
+                    showDeleteMultipleLabelsDialog = false
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") }
+            }
         )
     }
 
@@ -485,7 +564,11 @@ fun HistoryScreen(
                             actionLabel = "Undo",
                             duration = SnackbarDuration.Short
                         )
-                        if (result == SnackbarResult.ActionPerformed) { viewModel.undoDelete() } else { viewModel.clearRecentlyDeleted() }
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.undoDelete()
+                        } else {
+                            viewModel.clearRecentlyDeleted()
+                        }
                     }
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -661,7 +744,6 @@ fun NoteCard(
     onClick: () -> Unit,
     onLabelClick: (String) -> Unit
 ) {
-    // FIX TINGGI NGAMBANG: Lock ukuran pakai note.id, jadi di-scroll secepat apapun bentuknya abadi
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
@@ -708,5 +790,3 @@ fun NoteCard(
         }
     }
 }
-
-
