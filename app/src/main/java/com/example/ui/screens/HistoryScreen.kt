@@ -263,13 +263,13 @@ fun HistoryScreen(
         }
     ) {
         Scaffold(
-            // KUNCI: Layar Tab History ikut jadi surfaceVariant biar gabung sama background MainActivity
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // KUNCI KANVAS
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 if (selectionMode) {
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer, // Diubah biar nyolok pas select
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
                     ) {
                         TopAppBar(
@@ -590,7 +590,7 @@ fun MorphingSearchBar(
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
-            // KUNCI: Biar match sama card kertas, warnanya diganti ke surface
+            // KUNCI KERTAS: Biar sama kayak Card
             .background(MaterialTheme.colorScheme.surface) 
     ) {
         Row(
@@ -650,7 +650,8 @@ fun NoteCard(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            // KUNCI: Berubah jadi surface (kertas murni), nyaru 100% sama background detailnya nanti
+            // KUNCI KERTAS: Pakai surface murni. Warnanya bakal lebih gelap dari kanvas di mode gelap,
+            // persis kayak logika desain Google Keep yang lu idamkan.
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface
         ),
@@ -706,5 +707,3 @@ fun NoteCard(
         }
     }
 }
-
-
