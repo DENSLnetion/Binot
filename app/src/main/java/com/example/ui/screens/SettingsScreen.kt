@@ -36,19 +36,49 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-private fun BouncyButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+private fun BouncyButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(targetValue = if (isPressed) 0.92f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "buttonBounce")
-    Button(onClick = onClick, enabled = enabled, interactionSource = interactionSource, modifier = modifier.scale(scale), content = content)
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "buttonBounce"
+    )
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interactionSource,
+        modifier = modifier.scale(scale),
+        content = content
+    )
 }
 
 @Composable
-private fun BouncyOutlinedButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
+private fun BouncyOutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(targetValue = if (isPressed) 0.92f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "outlinedButtonBounce")
-    OutlinedButton(onClick = onClick, enabled = enabled, interactionSource = interactionSource, modifier = modifier.scale(scale), content = content)
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "outlinedButtonBounce"
+    )
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interactionSource,
+        modifier = modifier.scale(scale),
+        content = content
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,7 +115,6 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        // KUNCI WARNA SERASI: Latar belakang pakai Kanvas
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
@@ -109,7 +138,6 @@ fun SettingsScreen(
             )
 
             Card(
-                // KUNCI WARNA: Kotak setting pakai warna Kertas
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(20.dp)
             ) {
