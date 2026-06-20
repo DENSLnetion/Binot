@@ -137,7 +137,6 @@ class SettingsViewModel(
             try {
                 val release = RetrofitClient.githubService.getLatestRelease()
                 
-                // Simpan versi terbarunya
                 _latestVersionStr.value = release.tag_name
                 
                 if (isVersionGreater(release.tag_name, currentVersion)) {
@@ -155,7 +154,6 @@ class SettingsViewModel(
                 }
             } catch (e: HttpException) {
                 e.printStackTrace()
-                // FIX FATAL UX: Bikin pesannya elegan biar lu dan user kaga panik
                 if (e.code() == 403) {
                     _latestVersionStr.value = "Server Limit (Coba lagi 1 jam)" 
                 } else if (e.code() == 404) {
@@ -269,5 +267,3 @@ class SettingsViewModel(
             }
     }
 }
-
-
