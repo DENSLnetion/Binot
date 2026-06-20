@@ -52,6 +52,11 @@ fun RecordScreen(
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
+    // Scope di level Composable utama (BUKAN di dalam Box tombol Stop yang kondisional),
+    // supaya coroutine showSnackbar tidak ikut ter-cancel ketika tombol Stop collapse
+    // (rightButtonWidth -> 0.dp) dan Box-nya hilang dari composition.
+    val coroutineScope = rememberCoroutineScope()
+
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
     var hasPermission by remember {
@@ -292,7 +297,6 @@ fun RecordScreen(
 
                 // Tombol KANAN: Stop — hanya tampil saat split
                 if (rightButtonWidth > 0.dp) {
-                    val coroutineScope = rememberCoroutineScope()
                     Box(
                         modifier = Modifier
                             .width((rightButtonWidth - leftPressExtra + stopPressExtra).coerceAtLeast(64.dp))
