@@ -13,6 +13,7 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -119,7 +120,6 @@ fun ResultScreen(
         }
     }
 
-    // Bebas dari kutukan hack delay 60ms. BackHandler bersih sesuai aslinya.
     BackHandler(enabled = true) {
         if (showSidePanel) {
             showSidePanel = false
@@ -133,8 +133,6 @@ fun ResultScreen(
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            // Ini kunci utamanya. Kita kasih tau Compose buat "Nge-Stretch layarnya sebagai 
-            // gambar tunggal" (ScaleToBounds) selama animasi berjalan.
             modifier = Modifier
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
@@ -456,7 +454,6 @@ fun ResultScreen(
 
                     if (note!!.audioPath != null) {
                         var isPlayPressed by remember { mutableStateOf(false) }
-                        // Nggak ada yg salah di button animasi, jadi dibiarkan pakai spring aslinya
                         val playWidth by animateDpAsState(
                             targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
                             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -635,3 +632,4 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
+
