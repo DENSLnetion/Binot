@@ -17,8 +17,6 @@ class SettingsRepository(private val context: Context) {
     companion object {
         val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
         val THEME_MODE = intPreferencesKey("theme_mode") // 0 = System, 1 = Light, 2 = Dark
-        
-        // Tambahan Key untuk nama User (Sinkron dengan Sektor 2)
         val USER_NAME = stringPreferencesKey("user_name") 
     }
 
@@ -30,7 +28,6 @@ class SettingsRepository(private val context: Context) {
         preferences[THEME_MODE] ?: 0
     }
 
-    // Flow untuk ngebaca nama user
     val userNameFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[USER_NAME] ?: ""
     }
@@ -47,7 +44,6 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    // Fungsi untuk nge-save nama user
     suspend fun saveUserName(name: String) {
         context.dataStore.edit { preferences ->
             preferences[USER_NAME] = name
