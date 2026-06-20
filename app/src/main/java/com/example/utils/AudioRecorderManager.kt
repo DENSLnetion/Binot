@@ -21,7 +21,6 @@ import java.util.Locale
 class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
-    // Engine MP4 resmi dibunuh dari sini biar ga bentrok
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -35,13 +34,9 @@ class AudioRecorderManager(private val context: Context) {
     private val _recognizedText = MutableStateFlow("")
     val recognizedText: StateFlow<String> = _recognizedText.asStateFlow()
 
-    // True saat mic benar-benar dihentikan sementara (pause).
-    // Dipakai supaya listener/thread simulasi tidak auto-restart selama pause.
     @Volatile
     private var isPaused = false
 
-    // Flag mode simulasi terakhir, dipakai resumeRecording() untuk tahu
-    // harus nyalain SpeechRecognizer lagi atau lanjut simulasi.
     private var lastIsEmulator = false
 
     private var originalMusicVolume = -1
@@ -143,16 +138,9 @@ class AudioRecorderManager(private val context: Context) {
             return
         }
 
-        // KEMBALI KE ENGINE TUNGGAL: Cuma nyalain SpeechRecognizer
         initSpeechRecognizer()
     }
 
-    /**
-     * Pause sungguhan: mic dimatikan (stopListening / hentikan thread simulasi),
-     * amplitude dipaksa 0, teks yang sudah terkumpul tetap dipertahankan.
-     * Beda dengan stopRecording(): volume device TIDAK direstore di sini,
-     * karena recording dianggap masih "berlangsung" (cuma ditahan sementara).
-     */
     fun pauseRecording() {
         if (!_isRecording.value || isPaused) return
         isPaused = true
@@ -160,12 +148,6 @@ class AudioRecorderManager(private val context: Context) {
         _amplitude.value = 0f
     }
 
-    /**
-     * Resume dari pause: nyalain ulang mic. Untuk SpeechRecognizer, instance lama
-     * di-destroy lalu dibuat baru (tidak ada API resume native di Android),
-     * teks baru akan di-append ke recognizedText yang sudah ada.
-     * Untuk mode simulasi, thread loop baru dijalankan lagi.
-     */
     fun resumeRecording() {
         if (!_isRecording.value || !isPaused) return
         isPaused = false
@@ -198,7 +180,6 @@ class AudioRecorderManager(private val context: Context) {
                             _amplitude.value = 0f
                             restoreAllVolumes()
                         }
-                        // Kalau isPaused == true: diam saja, jangan restart, jangan restore volume.
                     }
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -248,7 +229,6 @@ class AudioRecorderManager(private val context: Context) {
         thread.start()
     }
 
-    // Ganti output stopRecording balik jadi null
     fun stopRecording(): String? {
         _isRecording.value = false
         isPaused = false
@@ -260,7 +240,6 @@ class AudioRecorderManager(private val context: Context) {
             restoreAllVolumes()
         }
         
-        return null // Kaga ada audio yang disimpen
+        return null
     }
 }
-
