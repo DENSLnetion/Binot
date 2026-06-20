@@ -38,7 +38,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
     val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
-    // StateFlow buat layar Trash
     val trashedNotes: StateFlow<List<NoteEntity>> = repository.trashedNotes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -231,7 +230,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _recentlyDeleted = MutableStateFlow<List<NoteEntity>>(emptyList())
     val recentlyDeleted: StateFlow<List<NoteEntity>> = _recentlyDeleted.asStateFlow()
 
-    // TRASH LOGIC: Soft Delete -> pindah ke tong sampah (isTrashed = true)
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
             val notesToTrash = ids.mapNotNull { repository.getNoteById(it) }
@@ -240,7 +238,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // TRASH LOGIC: Kembalikan dari undo snackbar
     fun undoDelete() {
         viewModelScope.launch {
             _recentlyDeleted.value.forEach { note ->
@@ -254,7 +251,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _recentlyDeleted.value = emptyList()
     }
 
-    // TRASH LOGIC: Fitur buat layar Trash
     fun restoreMultipleFromTrash(ids: Set<Int>) {
         viewModelScope.launch {
             ids.forEach { id ->
