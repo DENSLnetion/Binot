@@ -98,8 +98,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // KUNCI: Ubah warna kanvas utama aplikasi jadi surfaceVariant
-        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        // KUNCI KANVAS: Pakai surfaceContainer. Latar belakang aplikasi bakal pas (tidak terlalu terang).
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
