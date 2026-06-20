@@ -29,27 +29,21 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _selectedLabels = MutableStateFlow<Set<String>>(emptySet())
     val selectedLabels: StateFlow<Set<String>> = _selectedLabels.asStateFlow()
 
-    // Toggle mode multi-select label di side panel. Default false = tap label cuma bisa pilih satu.
     private val _isMultiSelectLabelMode = MutableStateFlow(false)
     val isMultiSelectLabelMode: StateFlow<Boolean> = _isMultiSelectLabelMode.asStateFlow()
 
-    private val _sortMode = MutableStateFlow(0) // 0 = Terbaru, 1 = Terlama, 2 = A-Z
+    private val _sortMode = MutableStateFlow(0)
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
     private val _latestRelease = MutableStateFlow<GithubRelease?>(null)
     val latestRelease: StateFlow<GithubRelease?> = _latestRelease.asStateFlow()
 
-    // LOGIKA HACKER: Mesin Penyedot Label Mandiri
     val uniqueLabels: StateFlow<List<String>> = repository.allNotes.map { notes ->
-        // 1. Cari catatan kamus sembunyi
         val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
-        // 2. Ekstrak label mandiri dari rawText-nya
         val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
-        // 3. Ekstrak label dari catatan-catatan asli
         val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
             .flatMap { it.label?.split("|")?.map { l -> l.trim() }?.filter { l -> l.isNotBlank() } ?: emptyList() }
         
-        // 4. Gabungin semuanya tanpa duplikat
         (customLabels + noteLabels).distinct().sorted()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -57,7 +51,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         repository.allNotes, _searchQuery, _selectedLabels, _sortMode
     ) { notes, query, labels, sort ->
 
-        // WAJIB: Sembunyiin catatan kamus dari UI utama!
         val realNotes = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
 
         val labelFilteredNotes = if (labels.isEmpty()) realNotes else realNotes.filter { note ->
@@ -75,7 +68,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
         }
 
-        // Apply sort — pinned selalu di atas dalam grup masing-masing
         when (sort) {
             1 -> searchedNotes.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenBy { it.timestamp })
             2 -> searchedNotes.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenBy { it.title.lowercase() })
@@ -87,10 +79,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         initialValue = emptyList()
     )
 
-    // Tap label di side panel.
-    // - Mode normal (default): cuma bisa pilih satu label. Tap label lain langsung ganti pilihan.
-    //   Tap label yg lagi aktif lagi = unselect (balik ke "All Notes").
-    // - Mode multi-select (toggle aktif): perilaku lama, bisa pilih banyak label sekaligus.
     fun toggleLabelFilter(label: String) {
         if (_isMultiSelectLabelMode.value) {
             _selectedLabels.value = if (label in _selectedLabels.value) {
@@ -111,7 +99,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _selectedLabels.value = emptySet()
     }
 
-    // Nyalain/matiin mode multi-select label. Pas dimatiin, filter label di-reset.
     fun setMultiSelectLabelMode(enabled: Boolean) {
         _isMultiSelectLabelMode.value = enabled
         if (!enabled) {
@@ -119,7 +106,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // Batch hapus beberapa label sekaligus (dipanggil dari tombol hapus saat mode multi-select aktif)
     fun deleteMultipleLabels(labels: Set<String>) {
         labels.forEach { deleteLabel(it) }
     }
@@ -128,19 +114,16 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         _sortMode.value = mode
     }
 
-    // LOGIKA BARU: Cuma bikin label ke buku tabungan, KAGA bikin catatan kosong!
     fun createIndependentLabel(label: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             
             if (sysNote != null) {
-                // Tambahin ke kamus yang udah ada
                 val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
                 existingLabels.add(label)
                 repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
             } else {
-                // Bikin kamus baru kalau belum ada
                 val newSysNote = NoteEntity(
                     title = "[[BINOT_SYSTEM_LABELS]]", 
                     rawText = label, 
@@ -151,13 +134,11 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         }
     }
 
-    // Ganti nama label di semua note yang make + di kamus system label
     fun renameLabel(oldLabel: String, newLabel: String) {
         if (oldLabel.isBlank() || newLabel.isBlank() || oldLabel == newLabel) return
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
 
-            // Update tiap note yang punya label lama
             notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
                 val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 if (labels.contains(oldLabel)) {
@@ -166,7 +147,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 }
             }
 
-            // Update kamus system label
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             if (sysNote != null) {
                 val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
@@ -175,20 +155,17 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
             }
 
-            // Kalau lagi difilter pakai label lama, update ke label baru di set
             if (oldLabel in _selectedLabels.value) {
                 _selectedLabels.value = (_selectedLabels.value - oldLabel) + newLabel
             }
         }
     }
 
-    // Hapus label dari semua note yang make + dari kamus system label
     fun deleteLabel(label: String) {
         if (label.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
 
-            // Lepas label dari tiap note yang punya
             notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
                 val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                 if (labels.contains(label)) {
@@ -198,7 +175,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 }
             }
 
-            // Hapus dari kamus system label
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             if (sysNote != null) {
                 val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
@@ -210,7 +186,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
                 }
             }
 
-            // Kalau lagi difilter pakai label yang dihapus, lepas dari filter set
             if (label in _selectedLabels.value) {
                 _selectedLabels.value = _selectedLabels.value - label
             }
@@ -254,7 +229,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
 
     fun deleteMultiple(ids: Set<Int>) {
         viewModelScope.launch {
-            // Simpan dulu sebelum hapus, untuk keperluan undo
             val notesToDelete = ids.mapNotNull { repository.getNoteById(it) }
             _recentlyDeleted.value = notesToDelete
             ids.forEach { repository.deleteById(it) }
@@ -264,7 +238,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     fun undoDelete() {
         viewModelScope.launch {
             _recentlyDeleted.value.forEach { note ->
-                // Insert balik dengan id asli supaya gak duplikat
                 repository.insert(note)
             }
             _recentlyDeleted.value = emptyList()
@@ -326,4 +299,3 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
-
