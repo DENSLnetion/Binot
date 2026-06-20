@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
+import com.example.viewmodel.RecordViewModel.SaveEvent
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,25 +53,24 @@ fun RecordScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
-    val noteSaved by viewModel.noteSaved.collectAsState()
-    LaunchedEffect(noteSaved) {
-        if (noteSaved) {
-            viewModel.consumeNoteSaved()
-            snackbarHostState.showSnackbar(
-                message = "Note saved",
-                duration = SnackbarDuration.Short
-            )
-        }
-    }
-
-    val saveFailed by viewModel.saveFailed.collectAsState()
-    LaunchedEffect(saveFailed) {
-        if (saveFailed) {
-            viewModel.consumeSaveFailed()
-            snackbarHostState.showSnackbar(
-                message = "Tidak ada teks untuk disimpan",
-                duration = SnackbarDuration.Short
-            )
+    val saveEvent by viewModel.saveEvent.collectAsState()
+    LaunchedEffect(saveEvent) {
+        when (saveEvent) {
+            is SaveEvent.Saved -> {
+                viewModel.consumeSaveEvent()
+                snackbarHostState.showSnackbar(
+                    message = "Note saved",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            is SaveEvent.Failed -> {
+                viewModel.consumeSaveEvent()
+                snackbarHostState.showSnackbar(
+                    message = "Tidak ada teks untuk disimpan",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            else -> Unit
         }
     }
 
@@ -112,7 +112,7 @@ fun RecordScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
             Text(
@@ -121,7 +121,7 @@ fun RecordScreen(
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Start
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             Surface(
                 shape = CircleShape,
@@ -216,23 +216,33 @@ fun RecordScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.wrapContentWidth()
             ) {
-                // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
+                // State tekan untuk kedua tombol dideklarasikan di sini (sebelum dipakai
+                // kedua Box) supaya masing-masing bisa menyusut saat tombol sebelahnya
+                // sedang ditekan-lama (morph simetris).
                 var isLeftPressed by remember { mutableStateOf(false) }
+                var isStopPressed by remember { mutableStateOf(false) }
+
                 // Idle: morph lebih panjang (efek "tekan lama" murni visual, tap biasa tetap jalan).
-                // Split: morph lebih jauh lagi, dan tombol Stop di sebelahnya ikut menyusut.
+                // Split: morph lebih jauh lagi, dan tombol di sebelahnya ikut menyusut.
                 val leftPressExtra by animateDpAsState(
                     targetValue = when {
                         isLeftPressed && isSplit -> 32.dp
                         isLeftPressed            -> 20.dp
                         else                     -> 0.dp
                     },
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
                     label = "leftPress"
                 )
+                val stopPressExtra by animateDpAsState(
+                    targetValue = if (isStopPressed) 32.dp else 0.dp,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                    label = "stopPress"
+                )
 
+                // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
                 Box(
                     modifier = Modifier
-                        .width(leftButtonWidth + leftPressExtra)
+                        .width((leftButtonWidth + leftPressExtra - stopPressExtra).coerceAtLeast(64.dp))
                         .height(80.dp)
                         .clip(CircleShape)
                         .background(
@@ -298,16 +308,9 @@ fun RecordScreen(
 
                 // Tombol KANAN: Stop — hanya tampil saat split
                 if (rightButtonWidth > 0.dp) {
-                    var isStopPressed by remember { mutableStateOf(false) }
-                    val stopPressExtra by animateDpAsState(
-                        targetValue = if (isStopPressed) 8.dp else 0.dp,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                        label = "stopPress"
-                    )
-
                     Box(
                         modifier = Modifier
-                            .width((rightButtonWidth - leftPressExtra).coerceAtLeast(64.dp) + stopPressExtra)
+                            .width((rightButtonWidth - leftPressExtra + stopPressExtra).coerceAtLeast(64.dp))
                             .height(80.dp)
                             .alpha(rightButtonAlpha)
                             .clip(CircleShape)
@@ -318,12 +321,14 @@ fun RecordScreen(
                                         isStopPressed = true
                                         tryAwaitRelease()
                                         isStopPressed = false
+                                        val wasRecording = isRecording
                                         val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                        // Stop recording (juga reset isPaused di ViewModel)
-                                        if (isRecording) viewModel.toggleRecording(isEmulator)
-                                        else viewModel.stopFromPaused(isEmulator)
-                                        // Simpan, snackbar akan muncul via LaunchedEffect
+                                        // Simpan dulu SELAGI recognizer masih hidup / teks masih fresh,
+                                        // baru hentikan mic. Urutan lama (stop dulu baru save) berisiko
+                                        // kepotong race dengan callback async SpeechRecognizer.
                                         viewModel.saveNote()
+                                        if (wasRecording) viewModel.toggleRecording(isEmulator)
+                                        else viewModel.stopFromPaused(isEmulator)
                                     }
                                 )
                             },
