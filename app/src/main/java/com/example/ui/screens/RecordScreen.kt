@@ -63,6 +63,17 @@ fun RecordScreen(
         }
     }
 
+    val saveFailed by viewModel.saveFailed.collectAsState()
+    LaunchedEffect(saveFailed) {
+        if (saveFailed) {
+            viewModel.consumeSaveFailed()
+            snackbarHostState.showSnackbar(
+                message = "Tidak ada teks untuk disimpan",
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -122,7 +133,7 @@ fun RecordScreen(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 Text(
-                    text = if (isPaused) "⏸ $timeString" else timeString,
+                    text = timeString,
                     style = MaterialTheme.typography.labelLarge,
                     color = when {
                         isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
@@ -207,8 +218,14 @@ fun RecordScreen(
             ) {
                 // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
                 var isLeftPressed by remember { mutableStateOf(false) }
+                // Idle: morph lebih panjang (efek "tekan lama" murni visual, tap biasa tetap jalan).
+                // Split: morph lebih jauh lagi, dan tombol Stop di sebelahnya ikut menyusut.
                 val leftPressExtra by animateDpAsState(
-                    targetValue = if (isLeftPressed) 8.dp else 0.dp,
+                    targetValue = when {
+                        isLeftPressed && isSplit -> 32.dp
+                        isLeftPressed            -> 20.dp
+                        else                     -> 0.dp
+                    },
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
                     label = "leftPress"
                 )
@@ -290,7 +307,7 @@ fun RecordScreen(
 
                     Box(
                         modifier = Modifier
-                            .width(rightButtonWidth + stopPressExtra)
+                            .width((rightButtonWidth - leftPressExtra).coerceAtLeast(64.dp) + stopPressExtra)
                             .height(80.dp)
                             .alpha(rightButtonAlpha)
                             .clip(CircleShape)
