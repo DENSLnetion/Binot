@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RecordViewModel(
     private val audioRecorderManager: AudioRecorderManager,
@@ -34,6 +35,12 @@ class RecordViewModel(
 
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
+    // Event flag: true = baru saja simpan, Screen reset setelah tampil snackbar
+    private val _noteSaved = MutableStateFlow(false)
+    val noteSaved: StateFlow<Boolean> = _noteSaved.asStateFlow()
+
+    fun consumeNoteSaved() { _noteSaved.value = false }
 
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
@@ -97,7 +104,7 @@ class RecordViewModel(
         timerJob = null
     }
 
-    fun saveNote(onSaved: () -> Unit = {}) {
+    fun saveNote() {
         val text = recognizedText.value.trim()
         if (text.isEmpty()) return
 
@@ -110,8 +117,8 @@ class RecordViewModel(
                 isPinned = false,
                 audioPath = null
             )
-            val id = repository.insert(note).toInt()
-            onSaved()
+            val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
+            _noteSaved.value = true
 
             // Generate AI title di background
             if (apiKey.isNotBlank()) {
