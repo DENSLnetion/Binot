@@ -13,9 +13,7 @@ data class NoteEntity(
     val isPinned: Boolean = false,
     val audioPath: String? = null,
     val label: String? = null,
-    // TRASH FIX: Kolom baru buat Soft Delete
     val isTrashed: Boolean = false
 )
 
 
-```
