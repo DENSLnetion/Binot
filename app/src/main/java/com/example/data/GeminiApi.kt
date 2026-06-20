@@ -46,7 +46,6 @@ data class GeminiError(
     val message: String? = null
 )
 
-// --- LOGIKA FIX: Bikin field nullable biar parser JSON kaga muntah kalau ada data kosong
 data class GithubRelease(
     val tag_name: String,
     val name: String? = null,
@@ -70,7 +69,6 @@ interface GeminiApiService {
 }
 
 interface GithubApiService {
-    // FIX FATAL: GitHub wajib pake KTP (User-Agent) kalau kaga bakal di blokir (Error 403)
     @Headers("User-Agent: BinotApp")
     @GET("repos/DENSLnetion/Binot/releases/latest")
     suspend fun getLatestRelease(): GithubRelease
