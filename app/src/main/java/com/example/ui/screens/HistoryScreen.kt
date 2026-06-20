@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
@@ -339,7 +341,12 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
+                                        modifier = Modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            enter = EnterTransition.None,
+                                            exit = ExitTransition.None
+                                        ),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -358,7 +365,12 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
+                                        modifier = Modifier.sharedBounds(
+                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            enter = EnterTransition.None,
+                                            exit = ExitTransition.None
+                                        ),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
