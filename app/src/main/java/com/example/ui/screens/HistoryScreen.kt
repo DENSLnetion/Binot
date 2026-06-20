@@ -7,8 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
@@ -89,7 +87,7 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
-    // State buat fitur kelola label (rename/delete)
+    // State fitur kelola label
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
     var showRenameLabelDialog by remember { mutableStateOf(false) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
@@ -154,12 +152,11 @@ fun HistoryScreen(
                     Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        // AccessTime = jam/terbaru, History = putar balik/terlama, SortByAlpha = A-Z
                         data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -290,30 +287,14 @@ fun HistoryScreen(
                         )
                     }
                 } else {
-                    // FIX (search bar ketutupan box "Result" yg lagi nyusut pas nutup catatan):
-                    // sharedBounds() di ResultScreen render di overlay layer terpisah yang
-                    // by design ngambang di atas SEMUA konten layar tujuan selama animasi
-                    // morph jalan — termasuk MorphingSearchBar ini, padahal search bar statis,
-                    // gak ikut animasi apa-apa. Makanya box Result yang masih gede (durante
-                    // proses nyusut) numpuk di depan search bar selama sepersekian detik.
-                    // renderInSharedTransitionScopeOverlay ngedaftarin search bar ini ikut
-                    // digambar di overlay layer yang sama, tapi dikasih zIndexInOverlay lebih
-                    // tinggi (1f vs default 0f punya sharedBounds) — jadi dia yang menang
-                    // digambar paling atas, gak akan ketutupan box Result lagi.
-                    // CATATAN: ini member function di interface SharedTransitionScope,
-                    // BUKAN top-level function — jadi TIDAK di-import, cuma kepake di
-                    // dalam blok with(sharedTransitionScope) { ... } kayak di bawah ini.
-                    with(sharedTransitionScope) {
-                        MorphingSearchBar(
-                            query = searchQuery,
-                            onQueryChange = { viewModel.updateSearchQuery(it) },
-                            isFocused = isSearchFocused,
-                            onFocusChange = { isSearchFocused = it },
-                            onClearFocus = { focusManager.clearFocus() },
-                            onMenuClick = { coroutineScope.launch { drawerState.open() } },
-                            modifier = Modifier.renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
-                        )
-                    }
+                    MorphingSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { viewModel.updateSearchQuery(it) },
+                        isFocused = isSearchFocused,
+                        onFocusChange = { isSearchFocused = it },
+                        onClearFocus = { focusManager.clearFocus() },
+                        onMenuClick = { coroutineScope.launch { drawerState.open() } }
+                    )
                 }
             },
             floatingActionButton = {
@@ -357,12 +338,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            enter = EnterTransition.None,
-                                            exit = ExitTransition.None
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -381,12 +357,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            enter = EnterTransition.None,
-                                            exit = ExitTransition.None
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -427,7 +398,6 @@ fun HistoryScreen(
         )
     }
 
-    // Bottom sheet kecil pas titik tiga di label dipencet: pilihan Rename atau Delete
     if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
         ModalBottomSheet(
             onDismissRequest = { labelBeingManaged = null },
@@ -595,8 +565,7 @@ fun MorphingSearchBar(
     isFocused: Boolean,
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit,
-    onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onMenuClick: () -> Unit
 ) {
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     
@@ -607,7 +576,7 @@ fun MorphingSearchBar(
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
@@ -618,7 +587,6 @@ fun MorphingSearchBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
-                // FIX FATAL: Pasang penahan tiang! Biar kaga ngempes pas tombol ☰ dibuang dari layar.
                 .defaultMinSize(minHeight = 48.dp) 
         ) {
             AnimatedVisibility(
@@ -666,11 +634,8 @@ fun NoteCard(
     onLabelClick: (String) -> Unit
 ) {
     val minHeight = remember(note.id) { (140..220).random().dp }
-    // SimpleDateFormat di-remember (bukan dibuat ulang tiap recomposition). Kecil,
-    // tapi card ini ikut numpang recompose berkali-kali selama shared transition
-    // morphing item lain di grid berjalan — akumulasi banyak instance jadi terasa.
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
