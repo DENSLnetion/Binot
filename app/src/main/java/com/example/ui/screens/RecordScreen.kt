@@ -8,7 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -166,81 +165,75 @@ fun RecordScreen(
 
         val totalAreaWidth = 280.dp
 
-        val leftButtonWidth by animateDpAsState(
-            targetValue = if (isSplit) 120.dp else totalAreaWidth,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "leftWidth"
-        )
-        val rightButtonWidth by animateDpAsState(
-            targetValue = if (isSplit) 120.dp else 0.dp,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "rightWidth"
-        )
-        val rightButtonAlpha by animateFloatAsState(
-            targetValue = if (isSplit) 1f else 0f,
-            animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            label = "rightAlpha"
-        )
-        val gapWidth by animateDpAsState(
-            targetValue = if (isSplit) 16.dp else 0.dp,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "gap"
-        )
-
         Box(
             modifier = Modifier
                 .widthIn(min = totalAreaWidth)
                 .height(80.dp),
             contentAlignment = Alignment.Center
         ) {
+            // State tekan untuk kedua tombol dideklarasikan di sini (sebelum dipakai
+            // kedua Box) supaya masing-masing bisa menyusut saat tombol sebelahnya
+            // sedang ditekan-lama (morph simetris).
+            var isLeftPressed by remember { mutableStateOf(false) }
+            var isStopPressed by remember { mutableStateOf(false) }
+
+            // PENTING: target lebar dihitung sebagai SATU angka pasti per kondisi
+            // (bukan menjumlahkan beberapa animateDpAsState independen). Spring di
+            // Compose punya velocity/posisi sendiri-sendiri — menjumlah beberapa
+            // animasi independen dalam satu rumus width bikin hasilnya goyang/patah
+            // karena masing-masing overshoot & settle di waktu yang sedikit beda.
+            // Dengan satu target pasti -> satu animateDpAsState, geraknya pasti mulus.
+            val leftTargetWidth = when {
+                isStopPressed && isSplit -> 88.dp   // nyusut dikit pas Stop ditekan
+                isLeftPressed && isSplit -> 152.dp  // morph dikit pas split lagi ditekan
+                isLeftPressed            -> totalAreaWidth + 56.dp // morph manjang pas idle ditekan
+                isSplit                  -> 120.dp
+                else                     -> totalAreaWidth
+            }
+            val rightTargetWidth = when {
+                !isSplit                  -> 0.dp
+                isStopPressed              -> 152.dp // morph dikit pas Stop ditekan
+                isLeftPressed               -> 88.dp  // nyusut dikit pas tombol kiri ditekan
+                else                        -> 120.dp
+            }
+            val gapTarget = if (isSplit) 16.dp else 0.dp
+
+            val leftButtonWidth by animateDpAsState(
+                targetValue = leftTargetWidth,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "leftWidth"
+            )
+            val rightButtonWidth by animateDpAsState(
+                targetValue = rightTargetWidth,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "rightWidth"
+            )
+            val rightButtonAlpha by animateFloatAsState(
+                targetValue = if (isSplit) 1f else 0f,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "rightAlpha"
+            )
+            val gapWidth by animateDpAsState(
+                targetValue = gapTarget,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "gap"
+            )
+            // Icon sedikit membesar pas ditekan, biar morphing kerasa "hidup"
+            val leftIconScale by animateFloatAsState(
+                targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "leftIconScale"
+            )
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(gapWidth),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.wrapContentWidth()
             ) {
-                // State tekan untuk kedua tombol dideklarasikan di sini (sebelum dipakai
-                // kedua Box) supaya masing-masing bisa menyusut saat tombol sebelahnya
-                // sedang ditekan-lama (morph simetris).
-                var isLeftPressed by remember { mutableStateOf(false) }
-                var isStopPressed by remember { mutableStateOf(false) }
-
-                // Idle: morph lebih panjang & kerasa (efek "tekan/tahan" murni visual, tap biasa tetap jalan).
-                // Diperbesar supaya morphing-nya intuitif kayak transisi ke Pause, bukan cuma geser dikit.
-                val leftPressExtra by animateDpAsState(
-                    targetValue = when {
-                        isLeftPressed && isSplit -> 32.dp
-                        isLeftPressed            -> 56.dp
-                        else                     -> 0.dp
-                    },
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                    label = "leftPress"
-                )
-                // Icon sedikit membesar pas ditekan, biar morphing kerasa "hidup" bukan cuma lebar Box-nya doang
-                val leftIconScale by animateFloatAsState(
-                    targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                    label = "leftIconScale"
-                )
-                // stopPressExtra hanya relevan SELAMA tombol masih split (isSplit true).
-                // Begitu Stop dilepas dan isSplit balik ke false, nilai ini di-snap instan
-                // ke 0 (animationSpec snap, bukan spring) supaya TIDAK ikut beranimasi
-                // bersamaan dengan leftButtonWidth yang collapse balik ke 280dp — kalau
-                // dua-duanya sama-sama spring jalan paralel, hasilnya kelihatan geser-geser
-                // gak rata sesaat sebelum settle.
-                val stopPressExtra by animateDpAsState(
-                    targetValue = if (isStopPressed && isSplit) 32.dp else 0.dp,
-                    animationSpec = if (isSplit) {
-                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-                    } else {
-                        snap()
-                    },
-                    label = "stopPress"
-                )
-
                 // Tombol KIRI: idle=Record, recording=Pause, paused=Resume
                 Box(
                     modifier = Modifier
-                        .width((leftButtonWidth + leftPressExtra - stopPressExtra).coerceAtLeast(64.dp))
+                        .width(leftButtonWidth)
                         .height(80.dp)
                         .clip(CircleShape)
                         .background(
@@ -310,7 +303,7 @@ fun RecordScreen(
                 if (rightButtonWidth > 0.dp) {
                     Box(
                         modifier = Modifier
-                            .width((rightButtonWidth - leftPressExtra + stopPressExtra).coerceAtLeast(64.dp))
+                            .width(rightButtonWidth)
                             .height(80.dp)
                             .alpha(rightButtonAlpha)
                             .clip(CircleShape)
