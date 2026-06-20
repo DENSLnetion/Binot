@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
@@ -263,7 +264,6 @@ fun HistoryScreen(
         }
     ) {
         Scaffold(
-            // KUNCI KANVAS
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
@@ -300,14 +300,18 @@ fun HistoryScreen(
             },
             floatingActionButton = {
                 if (!selectionMode) {
-                    ExtendedFloatingActionButton(
-                        onClick = { importLauncher.launch("audio/*") },
-                        expanded = isFabExpanded,
-                        icon = { Icon(Icons.Default.Audiotrack, "Import Audio") },
-                        text = { Text("Import Audio") },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    with(sharedTransitionScope) {
+                        ExtendedFloatingActionButton(
+                            onClick = { importLauncher.launch("audio/*") },
+                            expanded = isFabExpanded,
+                            icon = { Icon(Icons.Default.Audiotrack, "Import Audio") },
+                            text = { Text("Import Audio") },
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            // FIX 1: Memaksa layer FAB selalu di atas shared overlay animasi!
+                            modifier = Modifier.renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
+                        )
+                    }
                 }
             }
         ) { innerPadding ->
@@ -334,21 +338,23 @@ fun HistoryScreen(
                                 Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
                             }
                             items(pinnedNotes, key = { it.id }) { note ->
-                                val isSelected = selectedNotes.contains(note.id)
-                                with(sharedTransitionScope) {
-                                    NoteCard(
-                                        note = note, isSelected = isSelected,
-                                        selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
-                                        ),
-                                        onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
-                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
-                                        onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
-                                    )
-                                }
+                                DismissibleNoteCard(
+                                    note = note,
+                                    isSelected = selectedNotes.contains(note.id),
+                                    selectedLabels = selectedLabels,
+                                    selectionMode = selectionMode,
+                                    sharedTransitionScope = sharedTransitionScope,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    viewModel = viewModel,
+                                    snackbarHostState = snackbarHostState,
+                                    onSelect = { 
+                                        if (selectionMode) { 
+                                            selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                            if (selectedNotes.isEmpty()) selectionMode = false 
+                                        } else { onNoteClick(note.id) }
+                                    },
+                                    onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                )
                             }
                         }
 
@@ -357,21 +363,23 @@ fun HistoryScreen(
                                 Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
                             }
                             items(unpinnedNotes, key = { it.id }) { note ->
-                                val isSelected = selectedNotes.contains(note.id)
-                                with(sharedTransitionScope) {
-                                    NoteCard(
-                                        note = note, isSelected = isSelected,
-                                        selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            sharedContentState = rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope = animatedVisibilityScope,
-                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
-                                        ),
-                                        onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
-                                        onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
-                                        onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
-                                    )
-                                }
+                                DismissibleNoteCard(
+                                    note = note,
+                                    isSelected = selectedNotes.contains(note.id),
+                                    selectedLabels = selectedLabels,
+                                    selectionMode = selectionMode,
+                                    sharedTransitionScope = sharedTransitionScope,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    viewModel = viewModel,
+                                    snackbarHostState = snackbarHostState,
+                                    onSelect = { 
+                                        if (selectionMode) { 
+                                            selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                            if (selectedNotes.isEmpty()) selectionMode = false 
+                                        } else { onNoteClick(note.id) }
+                                    },
+                                    onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                )
                             }
                         }
                         item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
@@ -567,6 +575,89 @@ fun HistoryScreen(
     }
 }
 
+// FIX 4: Komponen NoteCard Dibungkus SwipeToDismissBox
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@Composable
+fun DismissibleNoteCard(
+    note: NoteEntity,
+    isSelected: Boolean,
+    selectedLabels: Set<String>,
+    selectionMode: Boolean,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    viewModel: HistoryViewModel,
+    snackbarHostState: SnackbarHostState,
+    onSelect: () -> Unit,
+    onLongSelect: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                // Eksekusi hapus & trigger undo snackbar
+                viewModel.deleteMultiple(setOf(note.id))
+                coroutineScope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "1 note deleted",
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoDelete()
+                    } else {
+                        viewModel.clearRecentlyDeleted()
+                    }
+                }
+                true
+            } else false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        // Disable swipe saat selection mode berjalan biar user ga salah usap
+        enableDismissFromStartToEnd = !selectionMode,
+        enableDismissFromEndToStart = !selectionMode,
+        backgroundContent = {
+            val color by animateColorAsState(
+                targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
+                label = "deleteColor"
+            )
+            val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(color, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 24.dp),
+                contentAlignment = alignment
+            ) {
+                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+        },
+        // FIX 3: animateItem() mencegah card lompat-lompat pindah kolom ngaco pas di grid
+        modifier = Modifier.animateItem() 
+    ) {
+        with(sharedTransitionScope) {
+            NoteCard(
+                note = note, 
+                isSelected = isSelected,
+                selectedLabels = selectedLabels,
+                modifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState("note-${note.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                ),
+                onLongClick = onLongSelect,
+                onClick = onSelect,
+                onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
+            )
+        }
+    }
+}
+
 @Composable
 fun MorphingSearchBar(
     query: String,
@@ -590,7 +681,6 @@ fun MorphingSearchBar(
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
-            // KUNCI KERTAS: Biar sama kayak Card
             .background(MaterialTheme.colorScheme.surface) 
     ) {
         Row(
@@ -643,15 +733,14 @@ fun NoteCard(
     onClick: () -> Unit,
     onLabelClick: (String) -> Unit
 ) {
-    val minHeight = remember(note.id) { (140..220).random().dp }
+    // FIX 2: Tinggi deterministik berbasis ID. Scroll secepat apapun card kaga bakal ganti ukuran/ngambang!
+    val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            // KUNCI KERTAS: Pakai surface murni. Warnanya bakal lebih gelap dari kanvas di mode gelap,
-            // persis kayak logika desain Google Keep yang lu idamkan.
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface
         ),
@@ -707,3 +796,4 @@ fun NoteCard(
         }
     }
 }
+
