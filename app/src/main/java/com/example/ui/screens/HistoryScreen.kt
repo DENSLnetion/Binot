@@ -605,13 +605,13 @@ fun HistoryScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.NewReleases, contentDescription = "Update", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("Update Baru Tersedia!", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("New Update Available!", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Versi ${latestRelease!!.tag_name} sudah siap diunduh.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text("Version ${latestRelease!!.tag_name} is ready to download.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.4f), RoundedCornerShape(12.dp)).padding(16.dp)) {
-                    Text(latestRelease!!.body ?: "Pembaruan performa dan fitur baru.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.verticalScroll(rememberScrollState()))
+                    Text(latestRelease!!.body ?: "Performance improvements and new features.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.verticalScroll(rememberScrollState()))
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = { val apkUrl = latestRelease!!.assets?.firstOrNull()?.browser_download_url ?: latestRelease!!.html_url; context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))); viewModel.dismissUpdateNotification() }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Download Update (APK)") }
