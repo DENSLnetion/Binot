@@ -29,6 +29,10 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     private val _selectedLabels = MutableStateFlow<Set<String>>(emptySet())
     val selectedLabels: StateFlow<Set<String>> = _selectedLabels.asStateFlow()
 
+    // Toggle mode multi-select label di side panel. Default false = tap label cuma bisa pilih satu.
+    private val _isMultiSelectLabelMode = MutableStateFlow(false)
+    val isMultiSelectLabelMode: StateFlow<Boolean> = _isMultiSelectLabelMode.asStateFlow()
+
     private val _sortMode = MutableStateFlow(0) // 0 = Terbaru, 1 = Terlama, 2 = A-Z
     val sortMode: StateFlow<Int> = _sortMode.asStateFlow()
 
@@ -83,16 +87,41 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         initialValue = emptyList()
     )
 
+    // Tap label di side panel.
+    // - Mode normal (default): cuma bisa pilih satu label. Tap label lain langsung ganti pilihan.
+    //   Tap label yg lagi aktif lagi = unselect (balik ke "All Notes").
+    // - Mode multi-select (toggle aktif): perilaku lama, bisa pilih banyak label sekaligus.
     fun toggleLabelFilter(label: String) {
-        _selectedLabels.value = if (label in _selectedLabels.value) {
-            _selectedLabels.value - label
+        if (_isMultiSelectLabelMode.value) {
+            _selectedLabels.value = if (label in _selectedLabels.value) {
+                _selectedLabels.value - label
+            } else {
+                _selectedLabels.value + label
+            }
         } else {
-            _selectedLabels.value + label
+            _selectedLabels.value = if (_selectedLabels.value == setOf(label)) {
+                emptySet()
+            } else {
+                setOf(label)
+            }
         }
     }
 
     fun clearLabelFilter() {
         _selectedLabels.value = emptySet()
+    }
+
+    // Nyalain/matiin mode multi-select label. Pas dimatiin, filter label di-reset.
+    fun setMultiSelectLabelMode(enabled: Boolean) {
+        _isMultiSelectLabelMode.value = enabled
+        if (!enabled) {
+            _selectedLabels.value = emptySet()
+        }
+    }
+
+    // Batch hapus beberapa label sekaligus (dipanggil dari tombol hapus saat mode multi-select aktif)
+    fun deleteMultipleLabels(labels: Set<String>) {
+        labels.forEach { deleteLabel(it) }
     }
 
     fun setSortMode(mode: Int) {
