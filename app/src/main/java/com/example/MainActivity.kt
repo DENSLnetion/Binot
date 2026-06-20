@@ -9,6 +9,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -99,6 +100,16 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
+        // FIX: Scaffold terluar ini defaultnya konsumsi inset status bar buat innerPadding
+        // yang dipasang ke NavHost — jadi tiap screen anak (Record/History/Settings/Result)
+        // udah nerima kanvas yang START-nya di bawah status bar, bukan di y=0 layar beneran.
+        // Padahal tiap screen anak udah ngitung WindowInsets.statusBars sendiri buat
+        // topInsets/topBar masing-masing. Konsumsi dobel ini yang bikin MorphingSearchBar
+        // di HistoryScreen gak pernah bisa "nembus" ke belakang status bar pas fokus —
+        // dia cuma nempel ke batas atas kanvas yang udah kepotong duluan.
+        // Dengan contentWindowInsets = 0, NavHost dapet kanvas FULL (0,0 sampe ujung layar),
+        // dan urusan inset sepenuhnya didelegasikan ke tiap screen.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
