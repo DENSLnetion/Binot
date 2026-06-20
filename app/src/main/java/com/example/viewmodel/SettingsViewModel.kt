@@ -34,6 +34,20 @@ class SettingsViewModel(
     private val noteRepository: NoteRepository 
 ) : ViewModel() {
 
+    // FIX ONBOARDING FLASH: Indikator absolut pendeteksi kapan data selesai dibaca dari storage
+    private val _isDataLoaded = MutableStateFlow(false)
+    val isDataLoaded: StateFlow<Boolean> = _isDataLoaded.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            // Begitu storage berhasil ngasih data (mau itu isinya kosong atau ada namanya),
+            // kita kasih lampu hijau ke MainActivity kalau loading memori udah kelar.
+            settingsRepository.userNameFlow.collect {
+                _isDataLoaded.value = true
+            }
+        }
+    }
+
     val userName: StateFlow<String> = settingsRepository.userNameFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
