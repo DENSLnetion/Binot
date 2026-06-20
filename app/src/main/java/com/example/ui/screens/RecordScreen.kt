@@ -41,7 +41,8 @@ import java.util.Calendar
 @Composable
 fun RecordScreen(
     viewModel: RecordViewModel,
-    userName: String
+    userName: String,
+    snackbarHostState: SnackbarHostState
 ) {
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
@@ -50,7 +51,6 @@ fun RecordScreen(
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
     val saveEvent by viewModel.saveEvent.collectAsState()
@@ -101,14 +101,10 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -347,7 +343,6 @@ fun RecordScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
     } // end Column
-    } // end Scaffold
 
     if (showLiveTextSheet) {
         ModalBottomSheet(
