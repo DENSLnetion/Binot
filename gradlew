@@ -1,10 +1,7 @@
 #!/usr/bin/env sh
-# Minimal Gradle Wrapper launcher
 set -e
 
-# Resolve script dir
 SCRIPT_DIR="$(cd "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
-
 WRAPPER_JAR="$SCRIPT_DIR/gradle/wrapper/gradle-wrapper.jar"
 
 if [ ! -f "$WRAPPER_JAR" ]; then
