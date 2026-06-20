@@ -10,7 +10,6 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
@@ -340,13 +339,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope,
-                                            boundsTransform = { _, _ ->
-                                                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
-                                            }
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -365,13 +358,7 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        modifier = Modifier.sharedBounds(
-                                            rememberSharedContentState("note-${note.id}"),
-                                            animatedVisibilityScope,
-                                            boundsTransform = { _, _ ->
-                                                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
-                                            }
-                                        ),
+                                        modifier = Modifier.sharedBounds(rememberSharedContentState("note-${note.id}"), animatedVisibilityScope),
                                         onLongClick = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } },
                                         onClick = { if (selectionMode) { selectedNotes = if (isSelected) selectedNotes - note.id else selectedNotes + note.id; if (selectedNotes.isEmpty()) selectionMode = false } else { onNoteClick(note.id) } },
                                         onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -650,7 +637,10 @@ fun NoteCard(
     onLabelClick: (String) -> Unit
 ) {
     val minHeight = remember(note.id) { (140..220).random().dp }
-    val formatter = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+    // SimpleDateFormat di-remember (bukan dibuat ulang tiap recomposition). Kecil,
+    // tapi card ini ikut numpang recompose berkali-kali selama shared transition
+    // morphing item lain di grid berjalan — akumulasi banyak instance jadi terasa.
+    val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
