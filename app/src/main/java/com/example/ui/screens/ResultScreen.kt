@@ -149,12 +149,24 @@ fun ResultScreen(
     // re-layout di tengah resize cepat — itu yang kelihatan kayak "transparan sejenak".
     // Animasi BUKA gak kena masalah ini karena ada jeda 60ms showContent=false dulu
     // (cuma nampilin placeholder kosong solid) sebelum konten berat muncul.
-    // Sekarang BackHandler selalu aktif dan flip showContent=false LEBIH DULU sebelum
-    // memicu navigasi balik — jadi pas animasi shrink berjalan, yang keliatan cuma
-    // placeholder solid (AiThinkingAnimation), persis simetris dengan animasi buka.
+    //
+    // RONDE 2: setelah enter/exit fade di sharedBounds dimatiin (biar gak transparan),
+    // ketauan race baru — showContent=false dipanggil BARENGAN dengan onNavigateBack(),
+    // tapi animasi shrink-nya jalan duluan SEBELUM Compose sempat recompose 1 frame
+    // dengan showContent=false. Hasilnya konten berat (judul+teks asli) masih sempat
+    // kebawa kelihatan sekilas pas box-nya udah mulai mengecil. Solusinya: pisahin jadi
+    // dua tahap via isClosing — set showContent=false DULU, render minimal 1 frame,
+    // baru LaunchedEffect men-trigger onNavigateBack() di frame berikutnya.
+    var isClosing by remember { mutableStateOf(false) }
     val closeNote: () -> Unit = {
         showContent = false
-        onNavigateBack()
+        isClosing = true
+    }
+    LaunchedEffect(isClosing) {
+        if (isClosing) {
+            withFrameNanos { } // tunggu tepat 1 frame biar placeholder kosong ke-commit dulu
+            onNavigateBack()
+        }
     }
 
     BackHandler(enabled = true) {
