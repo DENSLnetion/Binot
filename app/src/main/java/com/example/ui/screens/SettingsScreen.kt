@@ -35,11 +35,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// Wrapper tipis di atas Button/OutlinedButton M3 bawaan: nambahin animasi "mengkerut"
-// pas ditekan, pakai spring bouncy yang sama persis kayak tombol Record/capsule lain
-// di RecordScreen & ResultScreen — biar seluruh tombol capsule di app berasa konsisten.
-// Tetap pakai Button/OutlinedButton asli (bukan Box custom) jadi ripple, enabled-state,
-// dan shape default M3 gak berubah — cuma nambah scale animation di atasnya.
 @Composable
 private fun BouncyButton(
     onClick: () -> Unit,
@@ -221,7 +216,6 @@ fun SettingsScreen(
                             } else if (updateState == UpdateState.Available) {
                                 Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             } else if (updateState == UpdateState.Error) {
-                                // FIX: Nampilin pesan error yang sesungguhnya (Biar gampang di debug)
                                 Text("Failed: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
                                 Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
