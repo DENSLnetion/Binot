@@ -303,7 +303,7 @@ fun RecordScreen(
                                         val saved = viewModel.saveNote()
                                         android.widget.Toast.makeText(
                                             context,
-                                            if (saved) "Note saved" else "Tidak ada teks untuk disimpan",
+                                            if (saved) "Note saved" else "No text to save",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                         if (wasRecording) viewModel.toggleRecording(isEmulator)
