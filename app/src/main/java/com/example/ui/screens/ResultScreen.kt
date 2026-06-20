@@ -15,6 +15,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -52,6 +53,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -118,14 +120,6 @@ fun ResultScreen(
         }
     }
 
-    BackHandler(enabled = isTitleFocused || showSidePanel) {
-        if (showSidePanel) {
-            showSidePanel = false
-        } else if (isTitleFocused) {
-            focusManager.clearFocus()
-        }
-    }
-
     // PENTING (fix lag/stuck saat buka-tutup catatan):
     // sharedBounds() menghitung morph posisi/ukuran SETIAP FRAME selama transisi
     // berjalan. Sebelumnya seluruh isi ResultScreen (TopAppBar dgn BasicTextField,
@@ -143,6 +137,32 @@ fun ResultScreen(
     LaunchedEffect(Unit) {
         delay(60)
         showContent = true
+    }
+
+    // FIX (animasi tutup catatan transparan sejenak):
+    // Sebelumnya BackHandler cuma aktif kalau isTitleFocused/showSidePanel — back-press
+    // normal jatuh ke NavController bawaan, yang langsung motong komposisi screen ini
+    // SAAT showContent masih true. Karena itu, saat sharedBounds menyusut balik ke
+    // card, seluruh konten berat (SelectionContainer, MarkdownText, dst) masih nyoba
+    // re-layout di tengah resize cepat — itu yang kelihatan kayak "transparan sejenak".
+    // Animasi BUKA gak kena masalah ini karena ada jeda 60ms showContent=false dulu
+    // (cuma nampilin placeholder kosong solid) sebelum konten berat muncul.
+    // Sekarang BackHandler selalu aktif dan flip showContent=false LEBIH DULU sebelum
+    // memicu navigasi balik — jadi pas animasi shrink berjalan, yang keliatan cuma
+    // placeholder solid (AiThinkingAnimation), persis simetris dengan animasi buka.
+    val closeNote: () -> Unit = {
+        showContent = false
+        onNavigateBack()
+    }
+
+    BackHandler(enabled = true) {
+        if (showSidePanel) {
+            showSidePanel = false
+        } else if (isTitleFocused) {
+            focusManager.clearFocus()
+        } else {
+            closeNote()
+        }
     }
 
     with(sharedTransitionScope) {
@@ -188,7 +208,7 @@ fun ResultScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
+                        IconButton(onClick = closeNote) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
@@ -469,19 +489,17 @@ fun ResultScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (note!!.summary != null) {
-                        Box(
-                            modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.errorContainer).clickable {
+                        BouncyCapsule(
+                            onClick = {
                                 viewModel.restoreRawText()
                                 coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
                                 showSidePanel = false
-                            }.padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
+                            },
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
-                            }
+                            Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -520,52 +538,44 @@ fun ResultScreen(
                     }
 
                     if (note!!.audioPath != null) {
-                        Box(
-                            modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
-                                exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4")
-                            }.padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.Center
+                        BouncyCapsule(
+                            onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
-                            }
+                            Icon(Icons.Default.Download, contentDescription = "Save MP3", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Save Audio", color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
 
-                    Box(
-                        modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                    BouncyCapsule(
+                        onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
                             coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
                             showSidePanel = false
-                        }.padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.Center
+                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Copy", color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Copy", color = MaterialTheme.colorScheme.onSurface)
                     }
 
-                    Box(
-                        modifier = Modifier.height(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                    BouncyCapsule(
+                        onClick = {
                             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
                             showSidePanel = false
-                        }.padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.Center
+                        },
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Share", color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Share", color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
@@ -606,6 +616,43 @@ fun buildHighlightedString(text: String, query: String, highlightColor: Color, t
             append(text.substring(index, index + query.length))
         }
         startIndex = index + query.length
+    }
+}
+
+// Capsule button dengan animasi tekan ala tombol Record di RecordScreen: mengkerut
+// pas ditekan, balik lagi pas dilepas, pakai spring bouncy yang sama persis biar
+// "rasanya" konsisten di seluruh app (dipakai di tombol Restore/Save Audio/Copy/Share).
+@Composable
+private fun BouncyCapsule(
+    onClick: () -> Unit,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "capsuleScale"
+    )
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .height(48.dp)
+            .clip(CircleShape)
+            .background(containerColor)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    isPressed = true
+                    tryAwaitRelease()
+                    isPressed = false
+                    onClick()
+                })
+            }
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }
 
