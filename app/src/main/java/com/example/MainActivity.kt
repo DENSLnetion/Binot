@@ -6,8 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,9 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -48,7 +47,6 @@ import com.example.viewmodel.HistoryViewModel
 import com.example.viewmodel.RecordViewModel
 import com.example.viewmodel.ResultViewModel
 import com.example.viewmodel.SettingsViewModel
-import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,14 +79,12 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val currentRoute = navBackStackEntry?.destination?.route
     val userName by settingsViewModel.userName.collectAsState()
 
-    var isReady by remember { mutableStateOf(false) }
-    LaunchedEffect(userName) {
-        delay(100) 
-        isReady = true
-    }
+    // FIX ONBOARDING FLASH: Baca lampu hijau dari ViewModel
+    val isDataLoaded by settingsViewModel.isDataLoaded.collectAsState()
 
-    if (!isReady) {
-        Box(modifier = Modifier.fillMaxSize())
+    if (!isDataLoaded) {
+        // Nahan render sampai memori 100% siap. Bebas distorsi sekedip!
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer))
         return
     }
 
@@ -142,10 +138,13 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None }
+                // ANIMASI CHOREOGRAPHY 1: Aktifkan Fade-In/Out dasar NavHost
+                // biar latar kanvasnya ganti dengan mulus sambil ngasih ruang buat
+                // komponen di layar (Kertas) untuk melakukan mekar (scale/slide).
+                enterTransition = { fadeIn(animationSpec = tween(300)) },
+                exitTransition = { fadeOut(animationSpec = tween(300)) },
+                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                popExitTransition = { fadeOut(animationSpec = tween(300)) }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
@@ -170,7 +169,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     RecordScreen(
                         viewModel = recordViewModel,
                         userName = userName,
-                        snackbarHostState = snackbarHostState
+                        snackbarHostState = snackbarHostState,
+                        animatedVisibilityScope = this@composable // Dioper buat nyalain animasi mekar di dalam
                     )
                 }
                 composable("history") {
@@ -195,7 +195,10 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(viewModel = settingsViewModel)
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        animatedVisibilityScope = this@composable // Dioper buat animasi slide up
+                    )
                 }
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
@@ -216,5 +219,3 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
-
-
