@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -220,9 +221,19 @@ fun RecordScreen(
                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
                     label = "leftIconScale"
                 )
+                // stopPressExtra hanya relevan SELAMA tombol masih split (isSplit true).
+                // Begitu Stop dilepas dan isSplit balik ke false, nilai ini di-snap instan
+                // ke 0 (animationSpec snap, bukan spring) supaya TIDAK ikut beranimasi
+                // bersamaan dengan leftButtonWidth yang collapse balik ke 280dp — kalau
+                // dua-duanya sama-sama spring jalan paralel, hasilnya kelihatan geser-geser
+                // gak rata sesaat sebelum settle.
                 val stopPressExtra by animateDpAsState(
-                    targetValue = if (isStopPressed) 32.dp else 0.dp,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                    targetValue = if (isStopPressed && isSplit) 32.dp else 0.dp,
+                    animationSpec = if (isSplit) {
+                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+                    } else {
+                        snap()
+                    },
                     label = "stopPress"
                 )
 
