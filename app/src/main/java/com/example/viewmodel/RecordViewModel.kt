@@ -48,6 +48,17 @@ class RecordViewModel(
         }
     }
 
+    // Versi instan dari toggleRecording untuk kasus Stop: cuma matiin recorder + timer,
+    // TANPA nunggu apa pun. Dipanggil duluan dari UI sebelum saveNote(), supaya state
+    // isRecording berubah seketika dan animasi morph tombol langsung jalan mulus,
+    // gak nunggu insert DB / delay(300) di saveNote().
+    fun stopRecordingInstant() {
+        audioRecorderManager.stopRecording()
+        stopTimer()
+        _isPaused.value = false
+        _recordingSeconds.value = 0
+    }
+
     fun pauseRecording() {
         if (!isRecording.value || _isPaused.value) return
         _isPaused.value = true
