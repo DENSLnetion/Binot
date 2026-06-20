@@ -11,10 +11,17 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -26,6 +33,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.lazy.staggeredgrid.animateItem
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -307,14 +315,21 @@ fun HistoryScreen(
                         )
                     }
                 } else {
-                    MorphingSearchBar(
-                        query = searchQuery,
-                        onQueryChange = { viewModel.updateSearchQuery(it) },
-                        isFocused = isSearchFocused,
-                        onFocusChange = { isSearchFocused = it },
-                        onClearFocus = { focusManager.clearFocus() },
-                        onMenuClick = { coroutineScope.launch { drawerState.open() } }
-                    )
+                    // ANIMASI CHOREOGRAPHY 2: Search Bar Mekar
+                    with(animatedVisibilityScope) {
+                        MorphingSearchBar(
+                            query = searchQuery,
+                            onQueryChange = { viewModel.updateSearchQuery(it) },
+                            isFocused = isSearchFocused,
+                            onFocusChange = { isSearchFocused = it },
+                            onClearFocus = { focusManager.clearFocus() },
+                            onMenuClick = { coroutineScope.launch { drawerState.open() } },
+                            modifier = Modifier.animateEnterExit(
+                                enter = scaleIn(initialScale = 0.9f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                                exit = scaleOut(targetScale = 0.9f) + fadeOut()
+                            )
+                        )
+                    }
                 }
             },
             floatingActionButton = {
@@ -330,6 +345,8 @@ fun HistoryScreen(
                             modifier = Modifier
                                 .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
+                                // ANIMASI CHOREOGRAPHY 3: FAB Pop-In
+                                .then(with(animatedVisibilityScope) { Modifier.animateEnterExit(enter = scaleIn(initialScale = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))) })
                         )
                     }
                 }
@@ -346,67 +363,77 @@ fun HistoryScreen(
                         )
                     }
                 } else {
-                    LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Fixed(2),
-                        state = gridState,
-                        modifier = Modifier.fillMaxSize().weight(1f).padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalItemSpacing = 8.dp
-                    ) {
-                        if (pinnedNotes.isNotEmpty()) {
-                            item(span = StaggeredGridItemSpan.FullLine) {
-                                Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
+                    // ANIMASI CHOREOGRAPHY 4: Grid meluncur dari bawah
+                    with(animatedVisibilityScope) {
+                        LazyVerticalStaggeredGrid(
+                            columns = StaggeredGridCells.Fixed(2),
+                            state = gridState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .weight(1f)
+                                .padding(horizontal = 8.dp)
+                                .animateEnterExit(
+                                    enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
+                                    exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalItemSpacing = 8.dp
+                        ) {
+                            if (pinnedNotes.isNotEmpty()) {
+                                item(span = StaggeredGridItemSpan.FullLine) {
+                                    Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
+                                }
+                                items(pinnedNotes, key = { it.id }) { note ->
+                                    DismissibleNoteCard(
+                                        note = note,
+                                        modifier = Modifier.animateItem(),
+                                        isSelected = selectedNotes.contains(note.id),
+                                        selectedLabels = selectedLabels,
+                                        selectionMode = selectionMode,
+                                        sharedTransitionScope = sharedTransitionScope,
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        viewModel = viewModel,
+                                        parentScope = coroutineScope,
+                                        snackbarHostState = snackbarHostState,
+                                        onSelect = { 
+                                            if (selectionMode) { 
+                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                                if (selectedNotes.isEmpty()) selectionMode = false 
+                                            } else { onNoteClick(note.id) }
+                                        },
+                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                    )
+                                }
                             }
-                            items(pinnedNotes, key = { it.id }) { note ->
-                                DismissibleNoteCard(
-                                    note = note,
-                                    modifier = Modifier.animateItem(),
-                                    isSelected = selectedNotes.contains(note.id),
-                                    selectedLabels = selectedLabels,
-                                    selectionMode = selectionMode,
-                                    sharedTransitionScope = sharedTransitionScope,
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    viewModel = viewModel,
-                                    parentScope = coroutineScope,
-                                    snackbarHostState = snackbarHostState,
-                                    onSelect = { 
-                                        if (selectionMode) { 
-                                            selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                            if (selectedNotes.isEmpty()) selectionMode = false 
-                                        } else { onNoteClick(note.id) }
-                                    },
-                                    onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                )
-                            }
-                        }
 
-                        if (unpinnedNotes.isNotEmpty()) {
-                            item(span = StaggeredGridItemSpan.FullLine) {
-                                Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
+                            if (unpinnedNotes.isNotEmpty()) {
+                                item(span = StaggeredGridItemSpan.FullLine) {
+                                    Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
+                                }
+                                items(unpinnedNotes, key = { it.id }) { note ->
+                                    DismissibleNoteCard(
+                                        note = note,
+                                        modifier = Modifier.animateItem(),
+                                        isSelected = selectedNotes.contains(note.id),
+                                        selectedLabels = selectedLabels,
+                                        selectionMode = selectionMode,
+                                        sharedTransitionScope = sharedTransitionScope,
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                        viewModel = viewModel,
+                                        parentScope = coroutineScope,
+                                        snackbarHostState = snackbarHostState,
+                                        onSelect = { 
+                                            if (selectionMode) { 
+                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                                if (selectedNotes.isEmpty()) selectionMode = false 
+                                            } else { onNoteClick(note.id) }
+                                        },
+                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                    )
+                                }
                             }
-                            items(unpinnedNotes, key = { it.id }) { note ->
-                                DismissibleNoteCard(
-                                    note = note,
-                                    modifier = Modifier.animateItem(),
-                                    isSelected = selectedNotes.contains(note.id),
-                                    selectedLabels = selectedLabels,
-                                    selectionMode = selectionMode,
-                                    sharedTransitionScope = sharedTransitionScope,
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    viewModel = viewModel,
-                                    parentScope = coroutineScope,
-                                    snackbarHostState = snackbarHostState,
-                                    onSelect = { 
-                                        if (selectionMode) { 
-                                            selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                            if (selectedNotes.isEmpty()) selectionMode = false 
-                                        } else { onNoteClick(note.id) }
-                                    },
-                                    onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                )
-                            }
+                            item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
                         }
-                        item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
                     }
                 }
             }
@@ -685,7 +712,8 @@ fun MorphingSearchBar(
     isFocused: Boolean,
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    modifier: Modifier = Modifier // Parameter modifier ditambahin biar bisa nyuntik animasi dari parent
 ) {
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
@@ -694,7 +722,8 @@ fun MorphingSearchBar(
     val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
-        modifier = Modifier
+        // modifier dari parameter masuk ke paling luar
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
