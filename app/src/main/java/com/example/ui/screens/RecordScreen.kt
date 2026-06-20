@@ -100,7 +100,6 @@ fun RecordScreen(
         ) {
             Spacer(modifier = Modifier.height(topInsets + 40.dp))
 
-            // ANIMASI CHOREOGRAPHY: Teks Greeting dan Timer meluncur elegan
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -143,7 +142,7 @@ fun RecordScreen(
                 amplitude = amplitude,
                 modifier = Modifier
                     .padding(vertical = 32.dp)
-                    .animateEnterExit(enter = fadeIn()) // Waveform cukup masuk pudar aja
+                    .animateEnterExit(enter = fadeIn())
             )
 
             val scrollState = rememberScrollState()
@@ -152,7 +151,6 @@ fun RecordScreen(
             }
 
             Box(
-                // ANIMASI CHOREOGRAPHY: Kotak Live Teks Mekar Lembut
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
@@ -179,7 +177,6 @@ fun RecordScreen(
             val totalAreaWidth = 280.dp
 
             Box(
-                // ANIMASI CHOREOGRAPHY: Pusat jiwa dari layar record: Mekar berdetak!
                 modifier = Modifier
                     .widthIn(min = totalAreaWidth)
                     .height(80.dp)
@@ -323,33 +320,6 @@ fun RecordScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-        } // end Column
-
-        if (showLiveTextSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showLiveTextSheet = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        text = "Live Transcription",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(48.dp))
-                }
-            }
         }
     }
 }
