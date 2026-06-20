@@ -19,7 +19,10 @@ class BinotApplication : Application() {
 
 class AppContainer(private val application: Application) {
     val database: AppDatabase by lazy {
-        Room.databaseBuilder(application, AppDatabase::class.java, "binot_db").build()
+        Room.databaseBuilder(application, AppDatabase::class.java, "binot_db")
+            .addMigrations(AppDatabase.MIGRATION_3_4) // KUNCI: Jembatan migrasi buat fitur Trash
+            .fallbackToDestructiveMigration() // Pengaman: Kalau user punya database corrupt, bakal di-reset alih-alih Force Close
+            .build()
     }
     
     val noteRepository: NoteRepository by lazy {
