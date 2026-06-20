@@ -22,7 +22,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -472,7 +473,8 @@ fun ResultScreen(
                     }
 
                     if (note!!.audioPath != null) {
-                        var isPlayPressed by remember { mutableStateOf(false) }
+                        val playInteractionSource = remember { MutableInteractionSource() }
+                        val isPlayPressed by playInteractionSource.collectIsPressedAsState()
                         val playWidth by animateDpAsState(
                             targetValue = if (isPlayPressed) 130.dp else if (isPlaying) 120.dp else 110.dp,
                             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -482,12 +484,11 @@ fun ResultScreen(
                             modifier = Modifier
                                 .width(playWidth).height(48.dp).clip(CircleShape)
                                 .background(if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer)
-                                .pointerInput(Unit) {
-                                    detectTapGestures(onPress = {
-                                        isPlayPressed = true; tryAwaitRelease(); isPlayPressed = false
-                                        viewModel.toggleAudio()
-                                    })
-                                },
+                                .clickable(
+                                    interactionSource = playInteractionSource,
+                                    indication = null,
+                                    onClick = { viewModel.toggleAudio() }
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -593,7 +594,8 @@ private fun BouncyCapsule(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
 ) {
-    var isPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.90f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
@@ -605,14 +607,11 @@ private fun BouncyCapsule(
             .height(48.dp)
             .clip(CircleShape)
             .background(containerColor)
-            .pointerInput(Unit) {
-                detectTapGestures(onPress = {
-                    isPressed = true
-                    tryAwaitRelease()
-                    isPressed = false
-                    onClick()
-                })
-            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
