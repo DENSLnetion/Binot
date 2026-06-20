@@ -36,16 +36,20 @@ class RecordViewModel(
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
-    // Event flag: true = baru saja simpan, Screen reset setelah tampil snackbar
-    private val _noteSaved = MutableStateFlow(false)
-    val noteSaved: StateFlow<Boolean> = _noteSaved.asStateFlow()
+    // Event hasil saveNote(), dikirim sebagai token (counter) bukan Boolean,
+    // supaya setiap kejadian PASTI ter-collect oleh LaunchedEffect di UI
+    // walau dua event beruntun punya "isi" yang sama (Boolean true->true
+    // tidak memicu re-trigger LaunchedEffect, counter selalu unik).
+    sealed class SaveEvent {
+        object Idle : SaveEvent()
+        data class Saved(val token: Long) : SaveEvent()
+        data class Failed(val token: Long) : SaveEvent()
+    }
 
-    // Event flag: true = saveNote dipanggil tapi tidak ada teks untuk disimpan
-    private val _saveFailed = MutableStateFlow(false)
-    val saveFailed: StateFlow<Boolean> = _saveFailed.asStateFlow()
+    private val _saveEvent = MutableStateFlow<SaveEvent>(SaveEvent.Idle)
+    val saveEvent: StateFlow<SaveEvent> = _saveEvent.asStateFlow()
 
-    fun consumeNoteSaved() { _noteSaved.value = false }
-    fun consumeSaveFailed() { _saveFailed.value = false }
+    fun consumeSaveEvent() { _saveEvent.value = SaveEvent.Idle }
 
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
@@ -116,7 +120,7 @@ class RecordViewModel(
 
             val text = recognizedText.value.trim()
             if (text.isEmpty()) {
-                _saveFailed.value = true
+                _saveEvent.value = SaveEvent.Failed(System.nanoTime())
                 return@launch
             }
 
@@ -129,7 +133,7 @@ class RecordViewModel(
                 audioPath = null
             )
             val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
-            _noteSaved.value = true
+            _saveEvent.value = SaveEvent.Saved(System.nanoTime())
 
             // Generate AI title di background
             if (apiKey.isNotBlank()) {
