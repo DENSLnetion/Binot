@@ -50,8 +50,18 @@ fun RecordScreen(
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
     var showLiveTextSheet by remember { mutableStateOf(false) }
+
+    val noteSaved by viewModel.noteSaved.collectAsState()
+    LaunchedEffect(noteSaved) {
+        if (noteSaved) {
+            viewModel.consumeNoteSaved()
+            snackbarHostState.showSnackbar(
+                message = "Note saved",
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -295,15 +305,8 @@ fun RecordScreen(
                                         // Stop recording (juga reset isPaused di ViewModel)
                                         if (isRecording) viewModel.toggleRecording(isEmulator)
                                         else viewModel.stopFromPaused(isEmulator)
-                                        // Simpan + snackbar, tidak navigate
-                                        viewModel.saveNote {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    message = "Note saved",
-                                                    duration = SnackbarDuration.Short
-                                                )
-                                            }
-                                        }
+                                        // Simpan, snackbar akan muncul via LaunchedEffect
+                                        viewModel.saveNote()
                                     }
                                 )
                             },
