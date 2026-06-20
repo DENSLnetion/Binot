@@ -1,3 +1,4 @@
+```kotlin
 package com.example.ui.screens
 
 import android.content.Intent
@@ -337,7 +338,6 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        // Pake ScaleToBounds buat performa super mulus
                                         modifier = Modifier.sharedBounds(
                                             sharedContentState = rememberSharedContentState("note-${note.id}"),
                                             animatedVisibilityScope = animatedVisibilityScope,
@@ -361,7 +361,6 @@ fun HistoryScreen(
                                     NoteCard(
                                         note = note, isSelected = isSelected,
                                         selectedLabels = selectedLabels,
-                                        // Pake ScaleToBounds buat performa super mulus
                                         modifier = Modifier.sharedBounds(
                                             sharedContentState = rememberSharedContentState("note-${note.id}"),
                                             animatedVisibilityScope = animatedVisibilityScope,
@@ -649,8 +648,9 @@ fun NoteCard(
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            // KUNCI 1: Buang atribut copy(alpha = ...) biar warnanya murni solid
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                             else MaterialTheme.colorScheme.surfaceVariant
         ),
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
@@ -705,3 +705,5 @@ fun NoteCard(
     }
 }
 
+
+```
