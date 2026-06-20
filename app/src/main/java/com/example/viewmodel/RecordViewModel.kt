@@ -58,16 +58,14 @@ class RecordViewModel(
         if (!isRecording.value || _isPaused.value) return
         _isPaused.value = true
         stopTimer()
-        // Jika AudioRecorderManager punya pauseRecording(), panggil di sini:
-        // audioRecorderManager.pauseRecording()
+        audioRecorderManager.pauseRecording()
     }
 
     fun resumeRecording() {
         if (!isRecording.value || !_isPaused.value) return
         _isPaused.value = false
         resumeTimer()
-        // Jika AudioRecorderManager punya resumeRecording(), panggil di sini:
-        // audioRecorderManager.resumeRecording()
+        audioRecorderManager.resumeRecording()
     }
 
     // Dipanggil saat Stop ditekan dari keadaan paused (isRecording masih true, tapi timer berhenti)
