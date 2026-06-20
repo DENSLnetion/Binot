@@ -88,7 +88,6 @@ fun RecordScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // KUNCI WARNA SERASI: Pakai surfaceContainer buat latar layarnya
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -143,7 +142,6 @@ fun RecordScreen(
                 .fillMaxWidth()
                 .height(160.dp)
                 .clip(MaterialTheme.shapes.extraLarge)
-                // KUNCI KONTAS: Area text dibikin surface biar nyala kayak kertas
                 .background(MaterialTheme.colorScheme.surface)
                 .clickable { showLiveTextSheet = true }
                 .padding(24.dp)
@@ -188,13 +186,37 @@ fun RecordScreen(
             }
             val gapTarget = if (isSplit) 16.dp else 0.dp
 
-            val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
-            val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
-            val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
-            val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
-            val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
+            val leftButtonWidth by animateDpAsState(
+                targetValue = leftTargetWidth,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "leftWidth"
+            )
+            val rightButtonWidth by animateDpAsState(
+                targetValue = rightTargetWidth,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "rightWidth"
+            )
+            val rightButtonAlpha by animateFloatAsState(
+                targetValue = if (isSplit) 1f else 0f,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "rightAlpha"
+            )
+            val gapWidth by animateDpAsState(
+                targetValue = gapTarget,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "gap"
+            )
+            val leftIconScale by animateFloatAsState(
+                targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                label = "leftIconScale"
+            )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(gapWidth), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.wrapContentWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(gapWidth),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.wrapContentWidth()
+            ) {
                 Box(
                     modifier = Modifier
                         .width(leftButtonWidth)
@@ -210,11 +232,17 @@ fun RecordScreen(
                         .pointerInput(isSplit, isPaused) {
                             detectTapGestures(
                                 onPress = {
-                                    isLeftPressed = true; tryAwaitRelease(); isLeftPressed = false
+                                    isLeftPressed = true
+                                    tryAwaitRelease()
+                                    isLeftPressed = false
                                     when {
                                         !isSplit -> {
-                                            if (!hasPermission) launcher.launch(Manifest.permission.RECORD_AUDIO)
-                                            else { val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator"); viewModel.toggleRecording(isEmulator) }
+                                            if (!hasPermission) {
+                                                launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                            } else {
+                                                val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                viewModel.toggleRecording(isEmulator)
+                                            }
                                         }
                                         isPaused -> viewModel.resumeRecording()
                                         else     -> viewModel.pauseRecording()
@@ -241,11 +269,17 @@ fun RecordScreen(
                                 isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
                                 else                 -> MaterialTheme.colorScheme.onPrimary
                             },
-                            modifier = Modifier.size(32.dp).scale(leftIconScale)
+                            modifier = Modifier
+                                .size(32.dp)
+                                .scale(leftIconScale)
                         )
                         if (!isSplit) {
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("Record", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "Record",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.titleMedium
+                            )
                         }
                     }
                 }
@@ -261,18 +295,30 @@ fun RecordScreen(
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onPress = {
-                                        isStopPressed = true; tryAwaitRelease(); isStopPressed = false
+                                        isStopPressed = true
+                                        tryAwaitRelease()
+                                        isStopPressed = false
+
                                         viewModel.stopRecordingInstant()
+
                                         coroutineScope.launch {
                                             val saved = viewModel.saveNote()
-                                            snackbarHostState.showSnackbar(message = if (saved) "Note saved" else "No text to save", duration = SnackbarDuration.Short)
+                                            snackbarHostState.showSnackbar(
+                                                message = if (saved) "Note saved" else "No text to save",
+                                                duration = SnackbarDuration.Short
+                                            )
                                         }
                                     }
                                 )
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Stop, contentDescription = "Stop", tint = MaterialTheme.colorScheme.onTertiary, modifier = Modifier.size(32.dp))
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "Stop",
+                            tint = MaterialTheme.colorScheme.onTertiary,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
                 }
             }
@@ -282,14 +328,31 @@ fun RecordScreen(
     }
 
     if (showLiveTextSheet) {
-        ModalBottomSheet(onDismissRequest = { showLiveTextSheet = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(24.dp).verticalScroll(rememberScrollState())) {
-                Text("Live Transcription", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+        ModalBottomSheet(
+            onDismissRequest = { showLiveTextSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Live Transcription",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }
 }
+
 
