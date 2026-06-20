@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
-import com.example.viewmodel.RecordViewModel.SaveEvent
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,27 +51,6 @@ fun RecordScreen(
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
     var showLiveTextSheet by remember { mutableStateOf(false) }
-
-    val saveEvent by viewModel.saveEvent.collectAsState()
-    LaunchedEffect(saveEvent) {
-        when (saveEvent) {
-            is SaveEvent.Saved -> {
-                viewModel.consumeSaveEvent()
-                snackbarHostState.showSnackbar(
-                    message = "Note saved",
-                    duration = SnackbarDuration.Short
-                )
-            }
-            is SaveEvent.Failed -> {
-                viewModel.consumeSaveEvent()
-                snackbarHostState.showSnackbar(
-                    message = "Tidak ada teks untuk disimpan",
-                    duration = SnackbarDuration.Short
-                )
-            }
-            else -> Unit
-        }
-    }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -319,15 +297,15 @@ fun RecordScreen(
                                         isStopPressed = false
                                         val wasRecording = isRecording
                                         val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                        // Toast langsung di titik sentuh, tanpa lewat StateFlow/
-                                        // LaunchedEffect/Scaffold sama sekali. Ini sengaja paling
-                                        // primitif supaya tidak ada lapisan yang bisa "menelan" event.
+                                        // saveNote() suspend dipanggil langsung di sini (PointerInputScope
+                                        // sudah coroutine), hasilnya ditunggu, baru Toast ditembak sesuai
+                                        // hasil NYATA — tanpa StateFlow/LaunchedEffect/Scaffold di tengah.
+                                        val saved = viewModel.saveNote()
                                         android.widget.Toast.makeText(
                                             context,
-                                            "Note saved",
+                                            if (saved) "Note saved" else "Tidak ada teks untuk disimpan",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
-                                        viewModel.saveNote()
                                         if (wasRecording) viewModel.toggleRecording(isEmulator)
                                         else viewModel.stopFromPaused(isEmulator)
                                     }
