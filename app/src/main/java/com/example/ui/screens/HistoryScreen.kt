@@ -11,7 +11,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.renderInSharedTransitionScopeOverlay
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
@@ -301,6 +300,9 @@ fun HistoryScreen(
                     // digambar di overlay layer yang sama, tapi dikasih zIndexInOverlay lebih
                     // tinggi (1f vs default 0f punya sharedBounds) — jadi dia yang menang
                     // digambar paling atas, gak akan ketutupan box Result lagi.
+                    // CATATAN: ini member function di interface SharedTransitionScope,
+                    // BUKAN top-level function — jadi TIDAK di-import, cuma kepake di
+                    // dalam blok with(sharedTransitionScope) { ... } kayak di bawah ini.
                     with(sharedTransitionScope) {
                         MorphingSearchBar(
                             query = searchQuery,
