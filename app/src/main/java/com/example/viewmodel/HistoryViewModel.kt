@@ -234,7 +234,9 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         viewModelScope.launch {
             val notesToTrash = ids.mapNotNull { repository.getNoteById(it) }
             _recentlyDeleted.value = notesToTrash
-            notesToTrash.forEach { repository.update(it.copy(isTrashed = true, isPinned = false)) }
+            // FIX LOGIKA BUG: Jangan cabut status isPinned saat masuk tong sampah.
+            // Biarkan saja, query di DAO tetap tidak akan menampilkan karena isTrashed = true.
+            notesToTrash.forEach { repository.update(it.copy(isTrashed = true)) }
         }
     }
 
@@ -323,4 +325,3 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
             }
     }
 }
-
