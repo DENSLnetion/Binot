@@ -24,6 +24,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -149,7 +152,7 @@ fun ResultScreen(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SheetValue.Hidden && hasUnsavedChanges) {
                 showCancelConfirmDialog = true
-                false // Mencegah sheet ketutup otomatis
+                false 
             } else {
                 true
             }
@@ -345,7 +348,7 @@ fun ResultScreen(
                 Button(
                     onClick = {
                         showCancelConfirmDialog = false
-                        hasUnsavedChanges = false // Bypass supaya tutupnya lancar
+                        hasUnsavedChanges = false 
                         coroutineScope.launch { 
                             editSheetState.hide()
                             showEditSheet = false 
@@ -409,7 +412,11 @@ fun ResultScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(LocalConfiguration.current.screenHeightDp.dp * 0.8f)
+                    .fillMaxHeight(0.9f)
+                    .draggable(
+                        orientation = Orientation.Vertical,
+                        state = rememberDraggableState { } // Mati total! Consumes all swipe drags di bawah kepala bottom sheet
+                    )
                     .padding(horizontal = 24.dp)
             ) {
                 Row(
@@ -461,9 +468,7 @@ fun ResultScreen(
                             }
                             textValue = newValue
                         },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxSize(), 
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontFamily = selectedFont
@@ -494,7 +499,7 @@ fun ResultScreen(
                     BouncyCapsule(
                         onClick = {
                             viewModel.updateRawText(textValue.text)
-                            hasUnsavedChanges = false // Bypass supaya animasi tutupnya clean
+                            hasUnsavedChanges = false 
                             coroutineScope.launch { 
                                 editSheetState.hide()
                                 showEditSheet = false 
