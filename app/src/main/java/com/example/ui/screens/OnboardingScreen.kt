@@ -1,7 +1,9 @@
+```kotlin
 package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -147,7 +149,7 @@ fun OnboardingScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Choose your AI engine and paste the API Key. Groq is highly recommended for blazing fast speed!",
+                            text = "Choose your AI engine and paste the API Key to get started.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
@@ -164,10 +166,32 @@ fun OnboardingScreen(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                                 onClick = { aiProvider = 1 },
                                 selected = aiProvider == 1
-                            ) { Text("Groq (Recommended)", textAlign = TextAlign.Center) }
+                            ) { Text("Groq") }
                         }
                         
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Dynamic text yang elegan pengganti teks di dalam tombol
+                        AnimatedContent(targetState = aiProvider, label = "provider_info") { provider ->
+                            if (provider == 1) {
+                                Text(
+                                    text = "Highly recommended for fast speed!",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                            } else {
+                                Text(
+                                    text = "Great for summarizing massive audio files.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(20.dp))
                         OutlinedTextField(
                             value = apiKeyInput,
                             onValueChange = { apiKeyInput = it },
@@ -192,3 +216,4 @@ fun OnboardingScreen(
         }
     }
 }
+
