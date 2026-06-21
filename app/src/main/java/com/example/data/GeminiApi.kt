@@ -7,6 +7,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header // INI YANG BIKIN ERROR TADI (UDAH GW TAMBAHIN)
 import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -28,10 +29,9 @@ data class Content(
 
 data class Part(
     val text: String? = null,
-    val fileData: FileData? = null // Ganti InlineData jadi FileData
+    val fileData: FileData? = null
 )
 
-// Data class baru untuk sistem File API
 data class FileData(
     val mimeType: String,
     val fileUri: String 
@@ -50,18 +50,16 @@ data class GeminiError(
     val message: String? = null
 )
 
-// Response dari proses Upload File
 data class UploadResponse(
     val file: GeminiFile? = null,
     val error: GeminiError? = null
 )
 
-// Struktur metadata file di server Gemini
 data class GeminiFile(
     val name: String,
     val uri: String,
     val mimeType: String,
-    val state: String // Bisa "PROCESSING", "ACTIVE", atau "FAILED"
+    val state: String 
 )
 
 data class GithubRelease(
@@ -80,14 +78,12 @@ data class GithubAsset(
 
 interface GeminiApiService {
     
-    // 1. Endpoint Generate Content (Transkrip/Teks)
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
 
-    // 2. Endpoint Upload File (Raw Bytes)
     @POST("upload/v1beta/files")
     suspend fun uploadFile(
         @Query("key") apiKey: String,
@@ -98,14 +94,12 @@ interface GeminiApiService {
         @Body fileBytes: RequestBody
     ): UploadResponse
 
-    // 3. Endpoint Cek Status File (Polling)
     @GET("v1beta/{name}")
     suspend fun getFile(
         @Path("name", encoded = true) name: String,
         @Query("key") apiKey: String
     ): GeminiFile
 
-    // 4. Endpoint Delete File (Wajib buat hemat kuota)
     @DELETE("v1beta/{name}")
     suspend fun deleteFile(
         @Path("name", encoded = true) name: String,
@@ -123,7 +117,6 @@ object RetrofitClient {
     private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
 
-    // Timeout digedein biar upload file ukuran besar gak gampang putus
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(300, TimeUnit.SECONDS)
         .readTimeout(300, TimeUnit.SECONDS)
