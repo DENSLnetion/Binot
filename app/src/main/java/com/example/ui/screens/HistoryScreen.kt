@@ -128,8 +128,6 @@ fun HistoryScreen(
         catch (e: Exception) { "1.0.0" }
     }
 
-    // FIX GLITCH Z-INDEX LAYER MENU SAMPING: 
-    // Mengunci semua interaksi laci / side panel ketika SharedTransition (animasi mengecil/membesar) masih berjalan!
     val isTransitioning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
 
     LaunchedEffect(Unit) {
@@ -154,7 +152,7 @@ fun HistoryScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = !isTransitioning, // Laci tidak akan bisa di-swipe selama animasi transisi berjalan
+        gesturesEnabled = !isTransitioning, 
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -327,7 +325,6 @@ fun HistoryScreen(
                             onFocusChange = { isSearchFocused = it },
                             onClearFocus = { focusManager.clearFocus() },
                             onMenuClick = {
-                                // Tombol hamburger menu juga di-lock dari klik secara membabi-buta saat animasi berjalan
                                 if (!isTransitioning) {
                                     coroutineScope.launch { drawerState.open() }
                                 }
@@ -648,73 +645,70 @@ fun DismissibleNoteCard(
     onSelect: () -> Unit,
     onLongSelect: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { dismissValue ->
-            if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
-                viewModel.deleteMultiple(setOf(note.id))
-                parentScope.launch {
-                    val result = snackbarHostState.showSnackbar(
-                        message = "Note moved to Trash",
-                        actionLabel = "Undo",
-                        duration = SnackbarDuration.Short
-                    )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        viewModel.undoDelete()
-                    } else {
-                        viewModel.clearRecentlyDeleted()
+    // FIX LOGIKA COMPOSE: Gunakan key(note.id) agar saat note di-undo, 
+    // Compose membuat instance SwipeToDismissBoxState baru yang fresh, 
+    // bukan memakai instance lama yang nge-bug karena mikir dia masih lagi di-swipe.
+    key(note.id) {
+        val dismissState = rememberSwipeToDismissBoxState(
+            confirmValueChange = { dismissValue ->
+                if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                    viewModel.deleteMultiple(setOf(note.id))
+                    parentScope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Note moved to Trash",
+                            actionLabel = "Undo",
+                            duration = SnackbarDuration.Short
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.undoDelete()
+                        } else {
+                            viewModel.clearRecentlyDeleted()
+                        }
+                    }
+                    true
+                } else false
+            }
+        )
+
+        SwipeToDismissBox(
+            state = dismissState,
+            enableDismissFromStartToEnd = !selectionMode,
+            enableDismissFromEndToStart = !selectionMode,
+            backgroundContent = {
+                val color by animateColorAsState(
+                    targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
+                    label = "deleteColor"
+                )
+                val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(color, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = alignment
+                ) {
+                    if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
-                true
-            } else false
-        }
-    )
-
-    // FIX: Memaksa state swipe balik ke normal (Settled) tiap kali komponen ini masuk layar 
-    // (misalnya setelah Undo diklik dan item dirender ulang dari database).
-    LaunchedEffect(note.id) {
-        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-            dismissState.reset()
-        }
-    }
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = !selectionMode,
-        enableDismissFromEndToStart = !selectionMode,
-        backgroundContent = {
-            val color by animateColorAsState(
-                targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                label = "deleteColor"
-            )
-            val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(color, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 24.dp),
-                contentAlignment = alignment
-            ) {
-                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
-                }
+            },
+            modifier = modifier
+        ) {
+            with(sharedTransitionScope) {
+                NoteCard(
+                    note = note, 
+                    isSelected = isSelected,
+                    selectedLabels = selectedLabels,
+                    modifier = Modifier.sharedBounds(
+                        sharedContentState = rememberSharedContentState("note-${note.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    ),
+                    onLongClick = onLongSelect,
+                    onClick = onSelect,
+                    onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
+                )
             }
-        },
-        modifier = modifier
-    ) {
-        with(sharedTransitionScope) {
-            NoteCard(
-                note = note, 
-                isSelected = isSelected,
-                selectedLabels = selectedLabels,
-                modifier = Modifier.sharedBounds(
-                    sharedContentState = rememberSharedContentState("note-${note.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
-                ),
-                onLongClick = onLongSelect,
-                onClick = onSelect,
-                onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
-            )
         }
     }
 }
@@ -831,4 +825,3 @@ fun NoteCard(
         }
     }
 }
-
