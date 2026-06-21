@@ -45,6 +45,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
@@ -66,23 +68,36 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
 import kotlinx.coroutines.delay
@@ -100,7 +115,7 @@ fun ResultScreen(
     val context = LocalContext.current
     val note by viewModel.note.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val loadingMessage by viewModel.loadingMessage.collectAsState() // Observe pesan loading
+    val loadingMessage by viewModel.loadingMessage.collectAsState()
     val error by viewModel.error.collectAsState()
     
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -121,12 +136,28 @@ fun ResultScreen(
     var temporaryHighlight by remember { mutableStateOf("") }
     var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
+    // States for Highlights & AI Explain
+    var showHighlightDialog by remember { mutableStateOf(false) }
+    var currentHighlightWord by remember { mutableStateOf("") }
+    var highlightNoteInput by remember { mutableStateOf("") }
+
+    var showAiExplainSheet by remember { mutableStateOf(false) }
+    var aiExplainTargetWord by remember { mutableStateOf("") }
+
+    // States for Custom Selection Toolbar
+    var selectionRect by remember { mutableStateOf(Rect.Zero) }
+    var showCustomMenu by remember { mutableStateOf(false) }
+    var copyAction by remember { mutableStateOf<() -> Unit>({}) }
+    var selectAllAction by remember { mutableStateOf<() -> Unit>({}) }
+
     val listState = rememberLazyListState()
     val rawTextScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val focusManager = LocalFocusManager.current
+    val clipboardManager = LocalClipboardManager.current
+    val deviceLanguage = java.util.Locale.getDefault().displayLanguage
     var isTitleFocused by remember { mutableStateOf(false) }
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -165,7 +196,9 @@ fun ResultScreen(
     )
 
     BackHandler(enabled = true) {
-        if (showCancelConfirmDialog) {
+        if (showCustomMenu) {
+            showCustomMenu = false
+        } else if (showCancelConfirmDialog) {
             showCancelConfirmDialog = false
         } else if (showSidePanel) {
             showSidePanel = false
@@ -180,6 +213,46 @@ fun ResultScreen(
         } else {
             closeNote()
         }
+    }
+
+    // Custom Toolbar Logic Override
+    val customTextToolbar = remember {
+        object : TextToolbar {
+            override var status: TextToolbarStatus = TextToolbarStatus.Hidden
+
+            override fun hide() {
+                status = TextToolbarStatus.Hidden
+                showCustomMenu = false
+            }
+
+            override fun showMenu(
+                rect: Rect,
+                onCopyRequested: (() -> Unit)?,
+                onPasteRequested: (() -> Unit)?,
+                onCutRequested: (() -> Unit)?,
+                onSelectAllRequested: (() -> Unit)?
+            ) {
+                selectionRect = rect
+                copyAction = onCopyRequested ?: {}
+                selectAllAction = onSelectAllRequested ?: {}
+                status = TextToolbarStatus.Shown
+                showCustomMenu = true
+            }
+        }
+    }
+
+    // Clipboard Injection Hack (to securely steal the selected text without overriding user's clipboard permanently)
+    fun extractSelectedTextAndExecute(action: (String) -> Unit) {
+        val oldClip = clipboardManager.getText()
+        copyAction() 
+        val newClip = clipboardManager.getText()?.text ?: ""
+        if (oldClip != null) {
+            clipboardManager.setText(oldClip)
+        } else {
+            clipboardManager.setText(AnnotatedString(""))
+        }
+        showCustomMenu = false
+        action(newClip.trim())
     }
 
     with(sharedTransitionScope) {
@@ -283,61 +356,230 @@ fun ResultScreen(
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
-                SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        if (isLoading) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
+                    SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            if (isLoading) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                                 ) {
-                                    AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = loadingMessage.ifBlank { "Processing..." }, // Pesan loading dinamis
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = loadingMessage.ifBlank { "Processing..." },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        if (error != null) {
-                            Text(
-                                text = error!!,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
+                            if (error != null) {
+                                Text(
+                                    text = error!!,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
 
-                        if (!note!!.summary.isNullOrEmpty()) {
-                            MarkdownText(
-                                text = note!!.summary!!, 
-                                highlightQuery = temporaryHighlight,
-                                fontFamily = selectedFont,
-                                listState = listState,
-                                modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                            )
-                        } else if (!isLoading && note!!.rawText != "Pending Transcription") {
-                            Text(
-                                text = buildHighlightedString(
-                                    text = "Raw Transcript:\n\n${note!!.rawText}", 
-                                    query = temporaryHighlight,
-                                    highlightColor = Color.Yellow.copy(alpha = 0.5f),
-                                    textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                ),
-                                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
-                                    .verticalScroll(rawTextScrollState)
-                            )
+                            if (!note!!.summary.isNullOrEmpty()) {
+                                MarkdownText(
+                                    text = note!!.summary!!, 
+                                    listState = listState,
+                                    highlightsInfo = note!!.highlightsInfo,
+                                    onSavedHighlightClick = { word, noteText ->
+                                        currentHighlightWord = word
+                                        highlightNoteInput = noteText
+                                        showHighlightDialog = true
+                                    },
+                                    highlightQuery = temporaryHighlight,
+                                    fontFamily = selectedFont,
+                                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                                )
+                            } else if (!isLoading && note!!.rawText != "Pending Transcription") {
+                                Text(
+                                    text = buildHighlightedString(
+                                        text = "Raw Transcript:\n\n${note!!.rawText}", 
+                                        query = temporaryHighlight,
+                                        highlightColor = Color.Yellow.copy(alpha = 0.5f),
+                                        textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                        .verticalScroll(rawTextScrollState)
+                                )
+                            }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- MODAL DIALOG HIGHLIGHT NOTES ---
+    if (showHighlightDialog) {
+        AlertDialog(
+            onDismissRequest = { showHighlightDialog = false },
+            title = { Text("Highlight Note") },
+            text = {
+                Column {
+                    Text("\"$currentHighlightWord\"", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = highlightNoteInput,
+                        onValueChange = { highlightNoteInput = it },
+                        label = { Text("Your Note") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.saveHighlightNote(currentHighlightWord, highlightNoteInput)
+                    showHighlightDialog = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            viewModel.removeHighlight(currentHighlightWord)
+                            showHighlightDialog = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Remove")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { showHighlightDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
+
+    // --- BOTTOM SHEET AI EXPLAIN ---
+    if (showAiExplainSheet) {
+        val explainResult by viewModel.explainResult.collectAsState()
+        val isExplaining by viewModel.isExplaining.collectAsState()
+
+        ModalBottomSheet(
+            onDismissRequest = { 
+                showAiExplainSheet = false
+                viewModel.clearExplainResult()
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.6f)
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("AI Explain", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("\"$aiExplainTargetWord\"", style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic)
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+                
+                if (isExplaining) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    Text(
+                        text = explainResult ?: "No explanation available.",
+                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp)
+                    )
+                }
+                Spacer(Modifier.height(48.dp))
+            }
+        }
+    }
+
+    // --- CUSTOM BUBBLE MENU ---
+    if (showCustomMenu) {
+        val density = LocalDensity.current
+        Popup(
+            popupPositionProvider = object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize
+                ): IntOffset {
+                    var x = selectionRect.left.toInt() - (popupContentSize.width / 2) + (selectionRect.width.toInt() / 2)
+                    var y = selectionRect.top.toInt() - popupContentSize.height - with(density) { 8.dp.roundToPx() }
+                    
+                    if (x < 16) x = 16
+                    if (x + popupContentSize.width > windowSize.width - 16) {
+                        x = windowSize.width - popupContentSize.width - 16
+                    }
+                    if (y < 16) {
+                        y = selectionRect.bottom.toInt() + with(density) { 8.dp.roundToPx() }
+                    }
+                    return IntOffset(x, y)
+                }
+            },
+            onDismissRequest = { showCustomMenu = false }
+        ) {
+            Card(
+                shape = RoundedCornerShape(50),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { 
+                        extractSelectedTextAndExecute { text ->
+                            if (text.isNotBlank()) {
+                                currentHighlightWord = text
+                                highlightNoteInput = ""
+                                showHighlightDialog = true
+                            }
+                        }
+                    }) {
+                        Icon(Icons.Default.Brush, contentDescription = "Highlight", tint = MaterialTheme.colorScheme.inverseOnSurface)
+                    }
+                    IconButton(onClick = { 
+                        copyAction()
+                        showCustomMenu = false
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.inverseOnSurface)
+                    }
+                    IconButton(onClick = { 
+                        selectAllAction()
+                    }) {
+                        Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = MaterialTheme.colorScheme.inverseOnSurface)
+                    }
+                    IconButton(onClick = { 
+                        extractSelectedTextAndExecute { text ->
+                            if (text.isNotBlank()) {
+                                aiExplainTargetWord = text
+                                viewModel.explainText(text, deviceLanguage)
+                                showAiExplainSheet = true
+                            }
+                        }
+                    }) {
+                        Icon(Icons.Default.Search, contentDescription = "AI Explain", tint = MaterialTheme.colorScheme.inverseOnSurface)
                     }
                 }
             }
@@ -921,4 +1163,3 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
-
