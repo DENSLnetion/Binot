@@ -265,24 +265,30 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val prompt = """
-                    Explain the following term/sentence purely, briefly, and with high relevance. 
-                    STRICT RULE: The output language MUST follow: $deviceLanguage.
-                    DO NOT add pleasantries or conversational filler.
-                    
-                    Term to explain: "$selectedText"
+                val systemPrompt = """
+                    You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
+                    STRICT RULES YOU MUST OBEY:
+                    1. Output language MUST follow: $deviceLanguage.
+                    2. NO conversational filler, pleasantries, or introductions.
+                    3. Format nicely using Markdown if needed, but ABSOLUTELY NO BACKTICKS (`).
                 """.trimIndent()
+                
+                val userPrompt = "Term to explain: \"$selectedText\""
                 
                 val resultText = if (aiProvider == 1) { // Groq
                     val request = GroqChatRequest(
                         model = "llama-3.3-70b-versatile",
-                        messages = listOf(GroqMessage(role = "user", content = prompt))
+                        messages = listOf(
+                            GroqMessage(role = "system", content = systemPrompt),
+                            GroqMessage(role = "user", content = userPrompt)
+                        )
                     )
                     val response = RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request)
                     response.choices?.firstOrNull()?.message?.content
                 } else { // Gemini
                     val request = GenerateContentRequest(
-                        contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                        systemInstruction = Content(parts = listOf(Part(text = systemPrompt))),
+                        contents = listOf(Content(parts = listOf(Part(text = userPrompt))))
                     )
                     val response = RetrofitClient.service.generateContent(geminiApiKey, request)
                     response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
@@ -422,29 +428,20 @@ class ResultViewModel(
                     remoteFileName = uploadResponse.file.name
 
                     launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
-                    var fileState = uploadResponse.file.state
-                    var attempts = 0
-                    while (fileState == "PROCESSING" && attempts < 60) {
-                        delay(3000)
-                        fileState = RetrofitClient.service.getFile(remoteFileName, geminiApiKey).state
-                        attempts++
-                    }
-                    if (fileState != "ACTIVE") throw Exception("File processing timeout or failed at Google server.")
-
-                    launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing audio..." }
-                    val promptText = """
+                    val systemPrompt = """
                         You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
                         CRITICAL RULES:
-                        1. DO NOT hallucinate, guess, or make up words. If the audio is silent or contains no speech, output exactly "[No speech detected]".
+                        1. DO NOT hallucinate. If the audio is silent, output exactly "[No speech detected]".
                         2. DO NOT summarize. Output the exact raw transcript.
-                        3. DO NOT add conversational filler, AI pleasantries, or introductions.
-                        4. Automatically detect the spoken language and transcribe in that exact language.
-                        5. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols.
-                        6. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown formatting. Write equations naturally integrated within the sentence.
+                        3. DO NOT add conversational filler, introductions, or pleasantries.
+                        4. Automatically detect and transcribe in the spoken language.
+                        5. Convert mathematical concepts spelled in words into Mathematical Unicode Symbols.
+                        6. ABSOLUTELY NO BACKTICKS (`). Write equations as plain text naturally integrated within the sentence.
                     """.trimIndent()
                     
                     val request = GenerateContentRequest(
-                        contents = listOf(Content(parts = listOf(Part(text = promptText), Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri)))))
+                        systemInstruction = Content(parts = listOf(Part(text = systemPrompt))),
+                        contents = listOf(Content(parts = listOf(Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri)))))
                     )
                     val response = RetrofitClient.service.generateContent(geminiApiKey, request)
                     transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
@@ -480,20 +477,26 @@ class ResultViewModel(
     }
 
     private suspend fun generateTitleFromTranscript(note: NoteEntity, transcript: String) {
-        val titlePrompt = """
-            Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
-            RULES: Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
-            Teks: ${transcript.take(500)}
+        val systemPrompt = """
+            Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks yang diberikan pengguna.
+            RULES: Hanya output judulnya saja. Tanpa tanda kutip, tanpa titik di akhir, dan tanpa penjelasan apapun.
         """.trimIndent()
+        val userPrompt = "Teks:\n${transcript.take(500)}"
 
         val aiTitle = if (aiProvider == 1) { // Groq
             val request = GroqChatRequest(
                 model = "llama-3.1-8b-instant",
-                messages = listOf(GroqMessage(role = "user", content = titlePrompt))
+                messages = listOf(
+                    GroqMessage(role = "system", content = systemPrompt),
+                    GroqMessage(role = "user", content = userPrompt)
+                )
             )
             RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request).choices?.firstOrNull()?.message?.content?.trim()
         } else { // Gemini
-            val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = titlePrompt)))))
+            val request = GenerateContentRequest(
+                systemInstruction = Content(parts = listOf(Part(text = systemPrompt))),
+                contents = listOf(Content(parts = listOf(Part(text = userPrompt))))
+            )
             RetrofitClient.service.generateContent(geminiApiKey, request).candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
         }
         
@@ -521,44 +524,46 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val prompt = if (mode == "tidy") {
+                val systemPrompt = if (mode == "tidy") {
                     """
-                        You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
-                        CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols. 
-                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text.
-                        STRICT FORMATTING RULES:
-                        1. DO NOT summarize. Preserve every single detail.
-                        2. ONLY fix grammatical errors, remove filler words, and structure the text logically.
-                        3. MUST use neat Markdown formatting (# for H1, ## for H2, - for lists).
-                        4. STRICTLY NO conversational filler. Output ONLY the perfectly tidied up text.
-                        Raw Text:
-                        ${currentNote.rawText}
+                        You are an elite proofreader and document formatter. Clean up the provided raw voice transcript into $language WITHOUT summarizing or omitting details.
+                        
+                        CRITICAL RULES YOU MUST OBEY:
+                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols (e.g., +, -, =, %, ∑, √, ², ½).
+                        2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
+                        3. ELEGANT MARKDOWN: Use proper Markdown formatting to make it highly readable. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
+                        4. PRESERVE EVERYTHING: Do not summarize. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
+                        5. ZERO YAPPING: Output ONLY the final formatted text. Do not add introductory words like "Here is the text" or concluding remarks.
                     """.trimIndent()
                 } else {
                     """
-                        You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
-                        CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols. 
-                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text.
-                        STRICT FORMATTING RULES:
-                        1. Ignore filler words and fix broken sentence structures.
-                        2. Create a comprehensive summary without losing key points.
-                        3. MUST use neat Markdown formatting (# for H1, ## for H2, - for lists).
-                        4. STRICTLY NO conversational filler. Output ONLY the summarized text.
-                        Raw Text:
-                        ${currentNote.rawText}
+                        You are an elite meeting assistant and professional summarizer. Summarize the provided raw voice transcript into $language.
+                        
+                        CRITICAL RULES YOU MUST OBEY:
+                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols (e.g., +, -, =, %, ∑, √, ², ½).
+                        2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
+                        3. ELEGANT MARKDOWN: Structure the summary logically using neat Markdown. Use '#' for titles, '##' for section headers, and '-' for bullet lists to organize key points.
+                        4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
+                        5. ZERO YAPPING: Output ONLY the final summarized text. Do not add introductory words or conversational filler.
                     """.trimIndent()
                 }
+                
+                val userContent = currentNote.rawText
                 
                 val processedText = if (aiProvider == 1) { // Groq
                     val request = GroqChatRequest(
                         model = "llama-3.3-70b-versatile",
-                        messages = listOf(GroqMessage(role = "user", content = prompt))
+                        messages = listOf(
+                            GroqMessage(role = "system", content = systemPrompt),
+                            GroqMessage(role = "user", content = userContent)
+                        )
                     )
                     RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request).choices?.firstOrNull()?.message?.content
                 } else { // Gemini
-                    val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = prompt)))))
+                    val request = GenerateContentRequest(
+                        systemInstruction = Content(parts = listOf(Part(text = systemPrompt))),
+                        contents = listOf(Content(parts = listOf(Part(text = userContent))))
+                    )
                     RetrofitClient.service.generateContent(geminiApiKey, request).candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 }
                 
