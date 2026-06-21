@@ -93,7 +93,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
 
     val snackbarHostState = remember { SnackbarHostState() }
     
-    // Logic Fix: Observe status rekaman secara global biar SettingsScreen tahu
     val isRecordingGlobal by appContainer.audioRecorderManager.isRecording.collectAsState()
 
     Scaffold(
@@ -151,7 +150,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     OnboardingScreen(
                         onComplete = { name, key ->
                             settingsViewModel.saveUserName(name)
-                            settingsViewModel.saveApiKey(key)
+                            settingsViewModel.saveApiKey(key) 
+                            // PR buat lu: Tambahin form milih AI di onboarding nanti kalau mau
                             navController.navigate("record") {
                                 popUpTo("onboarding") { inclusive = true }
                             }
@@ -202,11 +202,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     SettingsScreen(
                         viewModel = settingsViewModel,
                         animatedVisibilityScope = this@composable,
-                        isRecording = isRecordingGlobal, // Pass status recording
+                        isRecording = isRecordingGlobal,
                         onDiscardRecording = { 
-                            // Buang recording langsung tanpa di-save
                             val path = appContainer.audioRecorderManager.stopRecording()
-                            // Hapus file fisik secara manual kalau ada (Accurate Mode)
                             if (path != null) {
                                 try { java.io.File(path).delete() } catch (e: Exception) {}
                             }
@@ -215,10 +213,14 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 }
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
-                    val apiKey by settingsViewModel.apiKey.collectAsState()
+                    
+                    // Tarik semua settingan krusial buat nge-render AI
+                    val aiProvider by settingsViewModel.aiProvider.collectAsState()
+                    val geminiKey by settingsViewModel.apiKey.collectAsState()
+                    val groqKey by settingsViewModel.groqApiKey.collectAsState()
                     
                     val resultViewModel: ResultViewModel = viewModel(
-                        factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, apiKey)
+                        factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, aiProvider, geminiKey, groqKey)
                     )
                     ResultScreen(
                         viewModel = resultViewModel,
@@ -232,4 +234,3 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
-
