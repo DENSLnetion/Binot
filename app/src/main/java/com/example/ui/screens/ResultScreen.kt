@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
@@ -99,6 +100,7 @@ fun ResultScreen(
     val context = LocalContext.current
     val note by viewModel.note.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val loadingMessage by viewModel.loadingMessage.collectAsState() // Observe pesan loading
     val error by viewModel.error.collectAsState()
     
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -295,8 +297,7 @@ fun ResultScreen(
                                     AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        // LOGIC FIX: Tampilkan pesan spesifik saat transkrip Gemini berjalan
-                                        text = if (note?.rawText == "Pending Transcription") "Transcribing your audio using Gemini..." else "AI is processing your text...",
+                                        text = loadingMessage.ifBlank { "Processing..." }, // Pesan loading dinamis
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         fontWeight = FontWeight.Medium
@@ -321,7 +322,6 @@ fun ResultScreen(
                                 listState = listState,
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
-                        // LOGIC FIX: Mencegah text "Pending Transcription" dirender ke UI secara harfiah. 
                         } else if (!isLoading && note!!.rawText != "Pending Transcription") {
                             Text(
                                 text = buildHighlightedString(
