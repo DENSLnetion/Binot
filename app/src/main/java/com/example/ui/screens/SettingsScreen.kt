@@ -146,8 +146,8 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showAiInfoDialog = false },
             title = { Text("AI Providers") },
-            text = { Text("Google Gemini:\nSangat handal untuk merangkum dan mampu menelan file audio raksasa (Berjam-jam). Kekurangannya, rate limit Google cukup ketat untuk API gratisan.\n\nGroq AI:\nJauh lebih cepat (Blazing Fast) dan rate limit tebal untuk teks. Kekurangannya, file audio dibatasi maksimal 25MB (sekitar 30 menit).") },
-            confirmButton = { TextButton(onClick = { showAiInfoDialog = false }) { Text("Paham") } }
+            text = { Text("Google Gemini:\nHighly reliable for summarizing and capable of processing massive audio files (hours long). The downside is Google's strict rate limits for free API keys.\n\nGroq AI (Recommended):\nBlazing fast processing and generous rate limits for text. The downside is audio files are limited to a maximum of 25MB (approx. 30 minutes).") },
+            confirmButton = { TextButton(onClick = { showAiInfoDialog = false }) { Text("Got it") } }
         )
     }
 
@@ -427,3 +427,4 @@ fun SettingsScreen(
         }
     }
 }
+
