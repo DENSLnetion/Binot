@@ -669,6 +669,14 @@ fun DismissibleNoteCard(
         }
     )
 
+    // FIX: Memaksa state swipe balik ke normal (Settled) tiap kali komponen ini masuk layar 
+    // (misalnya setelah Undo diklik dan item dirender ulang dari database).
+    LaunchedEffect(note.id) {
+        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+            dismissState.reset()
+        }
+    }
+
     SwipeToDismissBox(
         state = dismissState,
         enableDismissFromStartToEnd = !selectionMode,
