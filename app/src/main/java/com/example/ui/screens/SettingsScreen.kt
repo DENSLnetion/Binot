@@ -250,7 +250,7 @@ fun SettingsScreen(
                                 Column {
                                     OutlinedTextField(value = geminiKeyInput, onValueChange = { geminiKeyInput = it }, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Get key at: aistudio.google.com", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))) })
+                                    Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))) })
                                     Spacer(modifier = Modifier.height(12.dp))
                                     BouncyButton(onClick = { viewModel.saveApiKey(geminiKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
                                 }
@@ -258,7 +258,7 @@ fun SettingsScreen(
                                 Column {
                                     OutlinedTextField(value = groqKeyInput, onValueChange = { groqKeyInput = it }, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Get key at: console.groq.com/keys", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))) })
+                                    Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))) })
                                     Spacer(modifier = Modifier.height(12.dp))
                                     BouncyButton(onClick = { viewModel.saveGroqApiKey(groqKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Groq Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
                                 }
