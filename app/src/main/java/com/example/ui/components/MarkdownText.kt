@@ -46,7 +46,7 @@ data class HighlightItem(
 )
 
 /** Snapshot of one rendered line's text layout, window position, and how it maps back to the raw line. */
-private data class LineLayoutInfo(
+data class LineLayoutInfo(
     val layoutResult: TextLayoutResult,
     val boundsInWindow: Rect,
     val renderedText: String,
