@@ -435,7 +435,7 @@ class ResultViewModel(
                         2. DO NOT summarize. Output the exact raw transcript.
                         3. DO NOT add conversational filler, introductions, or pleasantries.
                         4. Automatically detect and transcribe in the spoken language.
-                        5. Convert mathematical concepts spelled in words into Mathematical Unicode Symbols.
+                        5. Convert mathematical concepts spelled in words into proper Unicode symbols. Examples: use '²' NOT '^2', use '°' NOT 'degrees', use '±' NOT '+-'.
                         6. ABSOLUTELY NO BACKTICKS (`). Write equations as plain text naturally integrated within the sentence.
                     """.trimIndent()
                     
@@ -443,6 +443,16 @@ class ResultViewModel(
                         systemInstruction = Content(parts = listOf(Part(text = systemPrompt))),
                         contents = listOf(Content(parts = listOf(Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri)))))
                     )
+                    
+                    var fileState = uploadResponse.file.state
+                    var attempts = 0
+                    while (fileState == "PROCESSING" && attempts < 60) {
+                        delay(3000)
+                        fileState = RetrofitClient.service.getFile(remoteFileName, geminiApiKey).state
+                        attempts++
+                    }
+                    if (fileState != "ACTIVE") throw Exception("File processing timeout or failed at Google server.")
+
                     val response = RetrofitClient.service.generateContent(geminiApiKey, request)
                     transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
                 }
@@ -529,7 +539,13 @@ class ResultViewModel(
                         You are an elite proofreader and document formatter. Clean up the provided raw voice transcript into $language WITHOUT summarizing or omitting details.
                         
                         CRITICAL RULES YOU MUST OBEY:
-                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols (e.g., +, -, =, %, ∑, √, ², ½).
+                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols. 
+                           MANDATORY: You must use actual superscript/subscript unicode characters. 
+                           - Use '²' NOT '^2' or '**2'. 
+                           - Use '³' NOT '^3'. 
+                           - Use '°' NOT 'degrees'. 
+                           - Use '±' NOT '+-'. 
+                           - Use fractions like '½', '¼', '¾' instead of '1/2', '1/4'.
                         2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
                         3. ELEGANT MARKDOWN: Use proper Markdown formatting to make it highly readable. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
                         4. PRESERVE EVERYTHING: Do not summarize. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
@@ -540,7 +556,13 @@ class ResultViewModel(
                         You are an elite meeting assistant and professional summarizer. Summarize the provided raw voice transcript into $language.
                         
                         CRITICAL RULES YOU MUST OBEY:
-                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols (e.g., +, -, =, %, ∑, √, ², ½).
+                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols. 
+                           MANDATORY: You must use actual superscript/subscript unicode characters. 
+                           - Use '²' NOT '^2' or '**2'. 
+                           - Use '³' NOT '^3'. 
+                           - Use '°' NOT 'degrees'. 
+                           - Use '±' NOT '+-'. 
+                           - Use fractions like '½', '¼', '¾' instead of '1/2', '1/4'.
                         2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
                         3. ELEGANT MARKDOWN: Structure the summary logically using neat Markdown. Use '#' for titles, '##' for section headers, and '-' for bullet lists to organize key points.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
@@ -620,3 +642,4 @@ class ResultViewModel(
             }
     }
 }
+
