@@ -25,6 +25,8 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 
 class ResultViewModel(
     private val noteId: Int,
@@ -38,7 +40,6 @@ class ResultViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // State baru buat pesan loading detail
     private val _loadingMessage = MutableStateFlow("")
     val loadingMessage: StateFlow<String> = _loadingMessage.asStateFlow()
 
@@ -56,6 +57,13 @@ class ResultViewModel(
 
     private val _allLabels = MutableStateFlow<List<String>>(emptyList())
     val allLabels: StateFlow<List<String>> = _allLabels.asStateFlow()
+
+    // AI Explain States
+    private val _explainResult = MutableStateFlow<String?>(null)
+    val explainResult: StateFlow<String?> = _explainResult.asStateFlow()
+
+    private val _isExplaining = MutableStateFlow(false)
+    val isExplaining: StateFlow<Boolean> = _isExplaining.asStateFlow()
 
     init {
         loadNote()
@@ -91,9 +99,7 @@ class ResultViewModel(
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(title = newTitle, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        viewModelScope.launch { 
-            noteRepository.update(updatedNote) 
-        }
+        viewModelScope.launch { noteRepository.update(updatedNote) }
     }
 
     fun updateRawText(newRawText: String) {
@@ -105,9 +111,7 @@ class ResultViewModel(
             timestamp = System.currentTimeMillis()
         )
         _note.value = updatedNote
-        viewModelScope.launch { 
-            noteRepository.update(updatedNote) 
-        }
+        viewModelScope.launch { noteRepository.update(updatedNote) }
     }
 
     fun toggleLabel(label: String) {
@@ -150,10 +154,7 @@ class ResultViewModel(
         
         val updatedNote = currentNote.copy(summary = null, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
-        
-        viewModelScope.launch { 
-            noteRepository.update(updatedNote) 
-        }
+        viewModelScope.launch { noteRepository.update(updatedNote) }
     }
 
     fun restoreOriginalRawText(onUndoAvailable: (NoteEntity) -> Unit) {
@@ -239,9 +240,7 @@ class ResultViewModel(
             try {
                 val sourceFile = File(path)
                 context.contentResolver.openOutputStream(uri)?.use { output ->
-                    sourceFile.inputStream().use { input -> 
-                        input.copyTo(output) 
-                    }
+                    sourceFile.inputStream().use { input -> input.copyTo(output) }
                 }
                 launch(Dispatchers.Main) { onResult("Audio exported successfully!") }
             } catch (e: Exception) { 
@@ -250,7 +249,108 @@ class ResultViewModel(
         }
     }
 
-    // Logic File API Utama
+    // AI EXPLAIN LOGIC
+    fun explainText(selectedText: String, deviceLanguage: String) {
+        if (apiKey.isBlank()) {
+            _explainResult.value = "API Key is missing. Please set it in Settings."
+            return
+        }
+        _isExplaining.value = true
+        _explainResult.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val prompt = """
+                    Explain the following term/sentence purely, briefly, and with high relevance. 
+                    STRICT RULE: The output language MUST follow: $deviceLanguage.
+                    DO NOT add pleasantries or conversational filler.
+                    
+                    Term to explain: "$selectedText"
+                """.trimIndent()
+                
+                val request = GenerateContentRequest(
+                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                )
+                val response = RetrofitClient.service.generateContent(apiKey, request)
+                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                
+                launch(Dispatchers.Main) {
+                    _explainResult.value = text?.trim() ?: "Failed to generate explanation. Empty response."
+                    _isExplaining.value = false
+                }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) {
+                    _explainResult.value = "Error explaining text: ${e.message}"
+                    _isExplaining.value = false
+                }
+            }
+        }
+    }
+
+    fun clearExplainResult() {
+        _explainResult.value = null
+    }
+
+    // HIGHLIGHT NOTES LOGIC
+    fun saveHighlightNote(highlightText: String, noteText: String) {
+        val currentNote = _note.value ?: return
+        val currentJson = currentNote.highlightsInfo ?: "[]"
+        
+        try {
+            val jsonArray = JSONArray(currentJson)
+            var found = false
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                if (obj.getString("text") == highlightText) {
+                    obj.put("note", noteText)
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                val newObj = JSONObject().apply {
+                    put("text", highlightText)
+                    put("note", noteText)
+                }
+                jsonArray.put(newObj)
+            }
+            
+            val updatedNote = currentNote.copy(
+                highlightsInfo = jsonArray.toString(), 
+                timestamp = System.currentTimeMillis()
+            )
+            _note.value = updatedNote
+            viewModelScope.launch { noteRepository.update(updatedNote) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun removeHighlight(highlightText: String) {
+        val currentNote = _note.value ?: return
+        val currentJson = currentNote.highlightsInfo ?: return
+        
+        try {
+            val jsonArray = JSONArray(currentJson)
+            val newArray = JSONArray()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                if (obj.getString("text") != highlightText) {
+                    newArray.put(obj)
+                }
+            }
+            val updatedString = if (newArray.length() == 0) null else newArray.toString()
+            val updatedNote = currentNote.copy(
+                highlightsInfo = updatedString, 
+                timestamp = System.currentTimeMillis()
+            )
+            _note.value = updatedNote
+            viewModelScope.launch { noteRepository.update(updatedNote) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun transcribeWithFileApi() {
         val currentNote = _note.value ?: return
         val audioPath = currentNote.audioPath ?: return
@@ -269,10 +369,9 @@ class ResultViewModel(
                 val file = File(audioPath)
                 if (!file.exists()) throw Exception("Audio file missing from device storage.")
 
-                // TAHAP 1: Upload File ke Server Google
                 launch(Dispatchers.Main) { _loadingMessage.value = "Uploading audio to secure server..." }
                 
-                val mimeType = "audio/mp4" // Sesuai dengan MediaRecorder.OutputFormat.MPEG_4
+                val mimeType = "audio/mp4"
                 val requestBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
                 
                 val uploadResponse = RetrofitClient.service.uploadFile(
@@ -290,14 +389,13 @@ class ResultViewModel(
                 val uploadedFileUri = uploadResponse.file.uri
                 remoteFileName = uploadResponse.file.name
 
-                // TAHAP 2: Polling Status (Tunggu sampai ACTIVE)
                 launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
                 var fileState = uploadResponse.file.state
                 var attempts = 0
-                val maxAttempts = 60 // Max nunggu 60 * 3 = 180 detik (3 menit)
+                val maxAttempts = 60
 
                 while (fileState == "PROCESSING" && attempts < maxAttempts) {
-                    delay(3000) // Polling tiap 3 detik
+                    delay(3000)
                     val statusResponse = RetrofitClient.service.getFile(remoteFileName, apiKey)
                     fileState = statusResponse.state
                     attempts++
@@ -307,7 +405,6 @@ class ResultViewModel(
                     throw Exception("File processing timeout or failed at Google server.")
                 }
 
-                // TAHAP 3: Request Transkripsi Pakai URI
                 launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing audio..." }
                 val promptText = """
                     You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
@@ -339,7 +436,6 @@ class ResultViewModel(
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
                         
-                        // Generate Judul AI
                         launch(Dispatchers.IO) {
                             try {
                                 val titlePrompt = """
@@ -358,9 +454,7 @@ class ResultViewModel(
                                     _note.value = finalNote
                                     noteRepository.update(finalNote)
                                 }
-                            } catch (e: Exception) {
-                                // Gagal generate title biarkan saja
-                            }
+                            } catch (e: Exception) {}
                         }
                     } else if (transcript?.contains("[No speech detected]") == true) {
                         _error.value = "No clear speech detected in the audio recording."
@@ -387,14 +481,8 @@ class ResultViewModel(
                     _isLoading.value = false 
                 } 
             } finally {
-                // TAHAP 4: CLEANUP. Hapus file dari server Google walau sukses atau gagal.
                 if (remoteFileName != null) {
-                    try {
-                        RetrofitClient.service.deleteFile(remoteFileName, apiKey)
-                    } catch (e: Exception) {
-                        // Kalau gagal hapus yaudah biarin aja nunggu auto-delete 48 jam.
-                        e.printStackTrace()
-                    }
+                    try { RetrofitClient.service.deleteFile(remoteFileName, apiKey) } catch (e: Exception) { e.printStackTrace() }
                 }
             }
         }
@@ -402,7 +490,6 @@ class ResultViewModel(
 
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
-        
         if (apiKey.isBlank()) { 
             _error.value = "AI processing requires an API Key. Please set your Gemini API Key in the Settings."
             return 
@@ -418,17 +505,13 @@ class ResultViewModel(
                     """
                         You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
+                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words, you MUST forcefully convert them into strict Mathematical Unicode Symbols. 
+                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text naturally integrated within the sentence.
                         STRICT FORMATTING RULES:
-                        1. DO NOT summarize. Preserve every single detail, thought, and information from the raw transcript.
-                        2. ONLY fix grammatical errors, remove filler words (e.g., "umm", "uh", repetitions), and structure the text logically with proper punctuation.
-                        3. MUST use neat Markdown formatting:
-                           - Use '# ' for Main Title (H1).
-                           - Use '## ' for Subtitles (H2) if the topic shifts naturally.
-                           - Use bullet points ('- ') for lists if the speaker is listing items.
-                           - Provide empty lines between paragraphs for readability.
-                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the perfectly tidied up text.
+                        1. DO NOT summarize. Preserve every single detail.
+                        2. ONLY fix grammatical errors, remove filler words, and structure the text logically.
+                        3. MUST use neat Markdown formatting (# for H1, ## for H2, - for lists).
+                        4. STRICTLY NO conversational filler. Output ONLY the perfectly tidied up text.
                         Raw Text:
                         ${currentNote.rawText}
                     """.trimIndent()
@@ -436,17 +519,13 @@ class ResultViewModel(
                     """
                         You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
-                        2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
+                        1. If the transcript contains mathematical concepts spelled out in words, you MUST forcefully convert them into strict Mathematical Unicode Symbols. 
+                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text naturally integrated within the sentence.
                         STRICT FORMATTING RULES:
-                        1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
+                        1. Ignore filler words and fix broken sentence structures.
                         2. Create a comprehensive summary without losing key points.
-                        3. MUST use neat Markdown formatting:
-                           - Use '# ' for Main Title (H1).
-                           - Use '## ' for Subtitles (H2).
-                           - Use bullet points ('- ') for lists.
-                           - Provide empty lines between paragraphs.
-                        4. STRICTLY NO conversational filler, introductions, or AI pleasantries. Output ONLY the summarized text.
+                        3. MUST use neat Markdown formatting (# for H1, ## for H2, - for lists).
+                        4. STRICTLY NO conversational filler. Output ONLY the summarized text.
                         Raw Text:
                         ${currentNote.rawText}
                     """.trimIndent()
