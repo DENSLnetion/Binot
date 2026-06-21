@@ -2,21 +2,24 @@ package com.example.data
 
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
+import okhttp3.MultipartBody
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
-import retrofit2.http.Header // INI YANG BIKIN ERROR TADI (UDAH GW TAMBAHIN)
+import retrofit2.http.Header
 import retrofit2.http.Headers
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
-// --- Common Data Classes for Gemini REST API ---
+// --- Gemini Models ---
 
 data class GenerateContentRequest(
     val contents: List<Content>,
@@ -62,6 +65,32 @@ data class GeminiFile(
     val state: String 
 )
 
+// --- Groq Models ---
+
+data class GroqChatRequest(
+    val model: String,
+    val messages: List<GroqMessage>
+)
+
+data class GroqMessage(
+    val role: String,
+    val content: String
+)
+
+data class GroqChatResponse(
+    val choices: List<GroqChoice>?
+)
+
+data class GroqChoice(
+    val message: GroqMessage?
+)
+
+data class GroqAudioResponse(
+    val text: String?
+)
+
+// --- GitHub Models ---
+
 data class GithubRelease(
     val tag_name: String,
     val name: String? = null,
@@ -74,10 +103,9 @@ data class GithubAsset(
     val browser_download_url: String? = null
 )
 
-// --- Retrofit Setup ---
+// --- Retrofit Services ---
 
 interface GeminiApiService {
-    
     @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
         @Query("key") apiKey: String,
@@ -107,6 +135,23 @@ interface GeminiApiService {
     )
 }
 
+interface GroqApiService {
+    @POST("openai/v1/chat/completions")
+    suspend fun generateContent(
+        @Header("Authorization") authHeader: String,
+        @Body request: GroqChatRequest
+    ): GroqChatResponse
+
+    @Multipart
+    @POST("openai/v1/audio/transcriptions")
+    suspend fun transcribeAudio(
+        @Header("Authorization") authHeader: String,
+        @Part file: MultipartBody.Part,
+        @Part("model") model: RequestBody,
+        @Part("response_format") responseFormat: RequestBody
+    ): GroqAudioResponse
+}
+
 interface GithubApiService {
     @Headers("User-Agent: BinotApp")
     @GET("repos/DENSLnetion/Binot/releases/latest")
@@ -116,6 +161,7 @@ interface GithubApiService {
 object RetrofitClient {
     private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/"
     private const val GITHUB_BASE_URL = "https://api.github.com/"
+    private const val GROQ_BASE_URL = "https://api.groq.com/"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(300, TimeUnit.SECONDS)
@@ -136,6 +182,15 @@ object RetrofitClient {
             .create(GeminiApiService::class.java)
     }
 
+    val groqService: GroqApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(GROQ_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(GroqApiService::class.java)
+    }
+
     val githubService: GithubApiService by lazy {
         Retrofit.Builder()
             .baseUrl(GITHUB_BASE_URL)
@@ -145,4 +200,3 @@ object RetrofitClient {
             .create(GithubApiService::class.java)
     }
 }
-
