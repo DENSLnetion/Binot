@@ -89,13 +89,15 @@ private fun BouncyOutlinedButton(
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    isRecording: Boolean = false, // Logic Fix: Nangkep status recording
+    onDiscardRecording: () -> Unit = {} // Logic Fix: Eksekusi force stop
 ) {
     val context = LocalContext.current
     val userName by viewModel.userName.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
-    val recordMode by viewModel.recordMode.collectAsState() // Observe State baru
+    val recordMode by viewModel.recordMode.collectAsState() 
     
     val updateState by viewModel.updateState.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
@@ -105,6 +107,8 @@ fun SettingsScreen(
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
 
     var showInfoDialog by remember { mutableStateOf(false) }
+    var showWarningDialog by remember { mutableStateOf(false) } // Dialog konfirmasi hapus rekaman
+    var pendingModeSelection by remember { mutableStateOf(-1) } // Nampung pilihan sementara user
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -127,11 +131,39 @@ fun SettingsScreen(
             onDismissRequest = { showInfoDialog = false },
             title = { Text("Recording Modes") },
             text = {
-                Text("Fast (Google):\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate (Gemini):\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.")
+                Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.")
             },
             confirmButton = {
                 TextButton(onClick = { showInfoDialog = false }) {
                     Text("Got it")
+                }
+            }
+        )
+    }
+
+    if (showWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showWarningDialog = false; pendingModeSelection = -1 },
+            title = { Text("Warning") },
+            text = { Text("Recording will be stopped and discarded. Continue?") }, // Teks sesuai request lo
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        onDiscardRecording() // Buang rekaman
+                        if (pendingModeSelection != -1) {
+                            viewModel.saveRecordMode(pendingModeSelection) // Ganti mode
+                        }
+                        showWarningDialog = false
+                        pendingModeSelection = -1
+                    }
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWarningDialog = false; pendingModeSelection = -1 }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -192,7 +224,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // Card baru untuk Mode Rekaman (Sesuai dengan instruksi lo)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
@@ -212,14 +243,32 @@ fun SettingsScreen(
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                onClick = { viewModel.saveRecordMode(0) },
+                                onClick = { 
+                                    if (recordMode != 0) {
+                                        if (isRecording) {
+                                            pendingModeSelection = 0
+                                            showWarningDialog = true
+                                        } else {
+                                            viewModel.saveRecordMode(0) 
+                                        }
+                                    }
+                                },
                                 selected = recordMode == 0
-                            ) { Text("Fast (Google)") }
+                            ) { Text("Fast") } // Text disederhanakan
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                onClick = { viewModel.saveRecordMode(1) },
+                                onClick = { 
+                                    if (recordMode != 1) {
+                                        if (isRecording) {
+                                            pendingModeSelection = 1
+                                            showWarningDialog = true
+                                        } else {
+                                            viewModel.saveRecordMode(1) 
+                                        }
+                                    }
+                                },
                                 selected = recordMode == 1
-                            ) { Text("Accurate (Gemini)") }
+                            ) { Text("Accurate") } // Text disederhanakan
                         }
                     }
                 }
@@ -298,3 +347,4 @@ fun SettingsScreen(
         }
     }
 }
+
