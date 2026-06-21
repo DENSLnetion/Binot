@@ -10,6 +10,8 @@ import com.example.data.Candidate
 import com.example.data.Content
 import com.example.data.FileData
 import com.example.data.GenerateContentRequest
+import com.example.data.GroqChatRequest
+import com.example.data.GroqMessage
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
 import com.example.data.Part
@@ -22,7 +24,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 import java.io.File
 import org.json.JSONArray
@@ -31,7 +35,9 @@ import org.json.JSONObject
 class ResultViewModel(
     private val noteId: Int,
     private val noteRepository: NoteRepository,
-    private val apiKey: String
+    private val aiProvider: Int, // 0 = Gemini, 1 = Groq
+    private val geminiApiKey: String,
+    private val groqApiKey: String
 ) : ViewModel() {
 
     private val _note = MutableStateFlow<NoteEntity?>(null)
@@ -58,7 +64,6 @@ class ResultViewModel(
     private val _allLabels = MutableStateFlow<List<String>>(emptyList())
     val allLabels: StateFlow<List<String>> = _allLabels.asStateFlow()
 
-    // AI Explain States
     private val _explainResult = MutableStateFlow<String?>(null)
     val explainResult: StateFlow<String?> = _explainResult.asStateFlow()
 
@@ -76,7 +81,7 @@ class ResultViewModel(
             _note.value = fetchedNote
             
             if (fetchedNote != null && (fetchedNote.rawText.isBlank() || fetchedNote.rawText == "Pending Transcription") && fetchedNote.audioPath != null) {
-                transcribeWithFileApi()
+                transcribeAudio()
             } else if (fetchedNote != null && fetchedNote.rawText == "Pending Transcription" && fetchedNote.audioPath == null) {
                 _error.value = "Gagal transkrip: File audio tidak ditemukan di database. Pastikan RecordViewModel menyimpan path audio."
             }
@@ -132,7 +137,6 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             noteRepository.update(updatedNote)
-
             if (label.isNotBlank()) {
                 val notes = noteRepository.getAllNotesSync()
                 val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
@@ -151,7 +155,6 @@ class ResultViewModel(
     fun restoreRawText() {
         val currentNote = _note.value ?: return
         if (currentNote.summary == null) return
-        
         val updatedNote = currentNote.copy(summary = null, timestamp = System.currentTimeMillis())
         _note.value = updatedNote
         viewModelScope.launch { noteRepository.update(updatedNote) }
@@ -160,7 +163,6 @@ class ResultViewModel(
     fun restoreOriginalRawText(onUndoAvailable: (NoteEntity) -> Unit) {
         val currentNote = _note.value ?: return
         if (currentNote.originalRawText == null) return
-
         val previousNote = currentNote.copy()
         val updatedNote = currentNote.copy(
             rawText = currentNote.originalRawText,
@@ -168,7 +170,6 @@ class ResultViewModel(
         )
         _note.value = updatedNote
         viewModelScope.launch { noteRepository.update(updatedNote) }
-        
         onUndoAvailable(previousNote)
     }
 
@@ -249,12 +250,16 @@ class ResultViewModel(
         }
     }
 
-    // AI EXPLAIN LOGIC
     fun explainText(selectedText: String, deviceLanguage: String) {
-        if (apiKey.isBlank()) {
-            _explainResult.value = "API Key is missing. Please set it in Settings."
+        if (aiProvider == 0 && geminiApiKey.isBlank()) {
+            _explainResult.value = "Gemini API Key is missing. Please set it in Settings."
             return
         }
+        if (aiProvider == 1 && groqApiKey.isBlank()) {
+            _explainResult.value = "Groq API Key is missing. Please set it in Settings."
+            return
+        }
+        
         _isExplaining.value = true
         _explainResult.value = null
 
@@ -268,19 +273,28 @@ class ResultViewModel(
                     Term to explain: "$selectedText"
                 """.trimIndent()
                 
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
-                )
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                val resultText = if (aiProvider == 1) { // Groq
+                    val request = GroqChatRequest(
+                        model = "llama-3.3-70b-versatile",
+                        messages = listOf(GroqMessage(role = "user", content = prompt))
+                    )
+                    val response = RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request)
+                    response.choices?.firstOrNull()?.message?.content
+                } else { // Gemini
+                    val request = GenerateContentRequest(
+                        contents = listOf(Content(parts = listOf(Part(text = prompt))))
+                    )
+                    val response = RetrofitClient.service.generateContent(geminiApiKey, request)
+                    response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                }
                 
                 launch(Dispatchers.Main) {
-                    _explainResult.value = text?.trim() ?: "Failed to generate explanation. Empty response."
+                    _explainResult.value = resultText?.trim() ?: "Failed to generate explanation. Empty response."
                     _isExplaining.value = false
                 }
             } catch (e: Exception) {
                 launch(Dispatchers.Main) {
-                    _explainResult.value = "Error explaining text: ${e.message}"
+                    _explainResult.value = handleExceptionError(e)
                     _isExplaining.value = false
                 }
             }
@@ -291,14 +305,6 @@ class ResultViewModel(
         _explainResult.value = null
     }
 
-    // HIGHLIGHT NOTES LOGIC
-    // startIndex/endIndex pin this highlight to ONE specific occurrence of the text
-    // (the exact spot the user selected), instead of matching every occurrence of
-    // the same word elsewhere in the note. startIndex = -1 means "no position info"
-    // (legacy data) and falls back to matching by text only.
-    // lineIndex distinguishes WHERE the position is measured from: -1 for raw text
-    // (start/end are offsets into the whole rawText), >= 0 for a markdown summary
-    // line (start/end are offsets within that specific line).
     fun saveHighlightNote(highlightText: String, noteText: String, lineIndex: Int = -1, startIndex: Int = -1, endIndex: Int = -1) {
         val currentNote = _note.value ?: return
         val currentJson = currentNote.highlightsInfo ?: "[]"
@@ -308,9 +314,7 @@ class ResultViewModel(
             var found = false
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val sameSpot = startIndex >= 0 &&
-                    obj.optInt("start", -1) == startIndex &&
-                    obj.optInt("line", -1) == lineIndex
+                val sameSpot = startIndex >= 0 && obj.optInt("start", -1) == startIndex && obj.optInt("line", -1) == lineIndex
                 val sameLegacyText = startIndex < 0 && obj.getString("text") == highlightText && obj.optInt("start", -1) < 0
                 if (sameSpot || sameLegacyText) {
                     obj.put("note", noteText)
@@ -336,54 +340,41 @@ class ResultViewModel(
                 }
                 jsonArray.put(newObj)
             }
-            
-            val updatedNote = currentNote.copy(
-                highlightsInfo = jsonArray.toString(), 
-                timestamp = System.currentTimeMillis()
-            )
+            val updatedNote = currentNote.copy(highlightsInfo = jsonArray.toString(), timestamp = System.currentTimeMillis())
             _note.value = updatedNote
             viewModelScope.launch { noteRepository.update(updatedNote) }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     fun removeHighlight(highlightText: String, lineIndex: Int = -1, startIndex: Int = -1) {
         val currentNote = _note.value ?: return
         val currentJson = currentNote.highlightsInfo ?: return
-        
         try {
             val jsonArray = JSONArray(currentJson)
             val newArray = JSONArray()
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                val sameSpot = startIndex >= 0 &&
-                    obj.optInt("start", -1) == startIndex &&
-                    obj.optInt("line", -1) == lineIndex
+                val sameSpot = startIndex >= 0 && obj.optInt("start", -1) == startIndex && obj.optInt("line", -1) == lineIndex
                 val sameLegacyText = startIndex < 0 && obj.getString("text") == highlightText && obj.optInt("start", -1) < 0
-                val shouldRemove = sameSpot || sameLegacyText
-                if (!shouldRemove) {
-                    newArray.put(obj)
-                }
+                if (!(sameSpot || sameLegacyText)) newArray.put(obj)
             }
             val updatedString = if (newArray.length() == 0) null else newArray.toString()
-            val updatedNote = currentNote.copy(
-                highlightsInfo = updatedString, 
-                timestamp = System.currentTimeMillis()
-            )
+            val updatedNote = currentNote.copy(highlightsInfo = updatedString, timestamp = System.currentTimeMillis())
             _note.value = updatedNote
             viewModelScope.launch { noteRepository.update(updatedNote) }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun transcribeWithFileApi() {
+    private fun transcribeAudio() {
         val currentNote = _note.value ?: return
         val audioPath = currentNote.audioPath ?: return
         
-        if (apiKey.isBlank()) { 
-            _error.value = "AI processing requires an API Key. Please set your Gemini API Key in the Settings."
+        if (aiProvider == 0 && geminiApiKey.isBlank()) { 
+            _error.value = "Gemini Processing requires an API Key. Please set it in Settings."
+            return 
+        }
+        if (aiProvider == 1 && groqApiKey.isBlank()) {
+            _error.value = "Groq Processing requires an API Key. Please set it in Settings."
             return 
         }
         
@@ -396,66 +387,68 @@ class ResultViewModel(
                 val file = File(audioPath)
                 if (!file.exists()) throw Exception("Audio file missing from device storage.")
 
-                launch(Dispatchers.Main) { _loadingMessage.value = "Uploading audio to secure server..." }
-                
-                val mimeType = "audio/mp4"
-                val requestBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
-                
-                val uploadResponse = RetrofitClient.service.uploadFile(
-                    apiKey = apiKey,
-                    contentLength = file.length(),
-                    contentType = mimeType,
-                    mimeType = mimeType,
-                    fileBytes = requestBody
-                )
+                var transcript: String? = null
 
-                if (uploadResponse.file == null) {
-                    throw Exception("Failed to upload file to Gemini server.")
-                }
+                if (aiProvider == 1) { // GROQ PROCESSING
+                    // Cek limit ukuran file untuk Groq (25 MB)
+                    if (file.length() > 25 * 1024 * 1024) {
+                        launch(Dispatchers.Main) {
+                            _error.value = "File audio terlalu besar untuk Groq (Maks 25MB). Silakan ganti penyedia AI ke Gemini di Pengaturan untuk memproses file berdurasi panjang."
+                            _isLoading.value = false
+                        }
+                        return@launch
+                    }
 
-                val uploadedFileUri = uploadResponse.file.uri
-                remoteFileName = uploadResponse.file.name
-
-                launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
-                var fileState = uploadResponse.file.state
-                var attempts = 0
-                val maxAttempts = 60
-
-                while (fileState == "PROCESSING" && attempts < maxAttempts) {
-                    delay(3000)
-                    val statusResponse = RetrofitClient.service.getFile(remoteFileName, apiKey)
-                    fileState = statusResponse.state
-                    attempts++
-                }
-
-                if (fileState != "ACTIVE") {
-                    throw Exception("File processing timeout or failed at Google server.")
-                }
-
-                launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing audio..." }
-                val promptText = """
-                    You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
+                    launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing blazingly fast with Groq..." }
                     
-                    CRITICAL RULES:
-                    1. DO NOT hallucinate, guess, or make up words. If the audio is silent or contains no speech, output exactly "[No speech detected]".
-                    2. DO NOT summarize. Output the exact raw transcript.
-                    3. DO NOT add conversational filler, AI pleasantries, or introductions like "Here is the transcript".
-                    4. Automatically detect the spoken language and transcribe in that exact language.
-                    5. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √).
-                    6. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
-                """.trimIndent()
-                
-                val request = GenerateContentRequest(
-                    contents = listOf(
-                        Content(parts = listOf(
-                            Part(text = promptText), 
-                            Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri))
-                        ))
+                    val requestFile = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
+                    val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
+                    val model = "whisper-large-v3-turbo".toRequestBody("text/plain".toMediaTypeOrNull())
+                    val format = "json".toRequestBody("text/plain".toMediaTypeOrNull())
+                    
+                    val response = RetrofitClient.groqService.transcribeAudio("Bearer $groqApiKey", body, model, format)
+                    transcript = response.text?.trim()
+
+                } else { // GEMINI PROCESSING
+                    launch(Dispatchers.Main) { _loadingMessage.value = "Uploading audio to Google secure server..." }
+                    val mimeType = "audio/mp4"
+                    val requestBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
+                    val uploadResponse = RetrofitClient.service.uploadFile(
+                        apiKey = geminiApiKey, contentLength = file.length(), contentType = mimeType, mimeType = mimeType, fileBytes = requestBody
                     )
-                )
-                
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                    if (uploadResponse.file == null) throw Exception("Failed to upload file to Gemini server.")
+                    
+                    val uploadedFileUri = uploadResponse.file.uri
+                    remoteFileName = uploadResponse.file.name
+
+                    launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
+                    var fileState = uploadResponse.file.state
+                    var attempts = 0
+                    while (fileState == "PROCESSING" && attempts < 60) {
+                        delay(3000)
+                        fileState = RetrofitClient.service.getFile(remoteFileName, geminiApiKey).state
+                        attempts++
+                    }
+                    if (fileState != "ACTIVE") throw Exception("File processing timeout or failed at Google server.")
+
+                    launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing audio..." }
+                    val promptText = """
+                        You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
+                        CRITICAL RULES:
+                        1. DO NOT hallucinate, guess, or make up words. If the audio is silent or contains no speech, output exactly "[No speech detected]".
+                        2. DO NOT summarize. Output the exact raw transcript.
+                        3. DO NOT add conversational filler, AI pleasantries, or introductions.
+                        4. Automatically detect the spoken language and transcribe in that exact language.
+                        5. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols.
+                        6. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown formatting. Write equations naturally integrated within the sentence.
+                    """.trimIndent()
+                    
+                    val request = GenerateContentRequest(
+                        contents = listOf(Content(parts = listOf(Part(text = promptText), Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri)))))
+                    )
+                    val response = RetrofitClient.service.generateContent(geminiApiKey, request)
+                    transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                }
 
                 launch(Dispatchers.Main) {
                     if (transcript != null && !transcript.contains("[No speech detected]")) {
@@ -464,61 +457,61 @@ class ResultViewModel(
                         noteRepository.update(updatedNote)
                         
                         launch(Dispatchers.IO) {
-                            try {
-                                val titlePrompt = """
-                                    Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
-                                    RULES:
-                                    - Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
-                                    - Maksimal 5 kata, padat dan informatif.
-                                    Teks: ${transcript.take(500)}
-                                """.trimIndent()
-                                val titleRequest = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = titlePrompt)))))
-                                val titleResponse = RetrofitClient.service.generateContent(apiKey, titleRequest)
-                                val aiTitle = titleResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-                                
-                                if (!aiTitle.isNullOrBlank()) {
-                                    val finalNote = updatedNote.copy(title = aiTitle)
-                                    _note.value = finalNote
-                                    noteRepository.update(finalNote)
-                                }
-                            } catch (e: Exception) {}
+                            try { generateTitleFromTranscript(updatedNote, transcript) } catch (e: Exception) {}
                         }
                     } else if (transcript?.contains("[No speech detected]") == true) {
                         _error.value = "No clear speech detected in the audio recording."
                     } else { 
-                        _error.value = "AI failed to process the transcript. The server response was empty." 
+                        _error.value = "AI failed to process the transcript. Server response was empty." 
                     }
                     _isLoading.value = false
                 }
-            } catch (e: HttpException) { 
-                launch(Dispatchers.Main) { 
-                    _error.value = when (e.code()) {
-                        400 -> "Bad Request (400). The audio format or data is unrecognized."
-                        401 -> "Invalid API Key (401). Please check your Gemini API Key in the Settings."
-                        403 -> "Access Denied (403). Your API Key does not have permission for this model."
-                        429 -> "API Rate Limit Exceeded (429). Please wait a moment or use a different API Key."
-                        500 -> "Gemini Server Error (500). Please try again later."
-                        else -> "HTTP Error: ${e.code()} - Please check your connection or API Key."
-                    }
-                    _isLoading.value = false 
-                }
             } catch (e: Exception) { 
                 launch(Dispatchers.Main) { 
-                    _error.value = "Processing failed: ${e.message}"
+                    _error.value = handleExceptionError(e)
                     _isLoading.value = false 
                 } 
             } finally {
                 if (remoteFileName != null) {
-                    try { RetrofitClient.service.deleteFile(remoteFileName, apiKey) } catch (e: Exception) { e.printStackTrace() }
+                    try { RetrofitClient.service.deleteFile(remoteFileName, geminiApiKey) } catch (e: Exception) { e.printStackTrace() }
                 }
             }
         }
     }
 
+    private suspend fun generateTitleFromTranscript(note: NoteEntity, transcript: String) {
+        val titlePrompt = """
+            Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
+            RULES: Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
+            Teks: ${transcript.take(500)}
+        """.trimIndent()
+
+        val aiTitle = if (aiProvider == 1) { // Groq
+            val request = GroqChatRequest(
+                model = "llama-3.1-8b-instant",
+                messages = listOf(GroqMessage(role = "user", content = titlePrompt))
+            )
+            RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request).choices?.firstOrNull()?.message?.content?.trim()
+        } else { // Gemini
+            val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = titlePrompt)))))
+            RetrofitClient.service.generateContent(geminiApiKey, request).candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+        }
+        
+        if (!aiTitle.isNullOrBlank()) {
+            val finalNote = note.copy(title = aiTitle)
+            _note.value = finalNote
+            noteRepository.update(finalNote)
+        }
+    }
+
     fun processText(language: String, mode: String) {
         val currentNote = _note.value ?: return
-        if (apiKey.isBlank()) { 
-            _error.value = "AI processing requires an API Key. Please set your Gemini API Key in the Settings."
+        if (aiProvider == 0 && geminiApiKey.isBlank()) { 
+            _error.value = "Gemini Processing requires an API Key. Please set it in Settings."
+            return 
+        }
+        if (aiProvider == 1 && groqApiKey.isBlank()) {
+            _error.value = "Groq Processing requires an API Key. Please set it in Settings."
             return 
         }
         
@@ -532,8 +525,8 @@ class ResultViewModel(
                     """
                         You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words, you MUST forcefully convert them into strict Mathematical Unicode Symbols. 
-                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text naturally integrated within the sentence.
+                        1. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols. 
+                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text.
                         STRICT FORMATTING RULES:
                         1. DO NOT summarize. Preserve every single detail.
                         2. ONLY fix grammatical errors, remove filler words, and structure the text logically.
@@ -546,8 +539,8 @@ class ResultViewModel(
                     """
                         You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts spelled out in words, you MUST forcefully convert them into strict Mathematical Unicode Symbols. 
-                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text naturally integrated within the sentence.
+                        1. If the transcript contains mathematical concepts spelled out in words, convert them into Mathematical Unicode Symbols. 
+                        2. ABSOLUTELY NO BACKTICKS (`). Write equations as plain normal text.
                         STRICT FORMATTING RULES:
                         1. Ignore filler words and fix broken sentence structures.
                         2. Create a comprehensive summary without losing key points.
@@ -558,11 +551,16 @@ class ResultViewModel(
                     """.trimIndent()
                 }
                 
-                val request = GenerateContentRequest(
-                    contents = listOf(Content(parts = listOf(Part(text = prompt))))
-                )
-                val response = RetrofitClient.service.generateContent(apiKey, request)
-                val processedText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                val processedText = if (aiProvider == 1) { // Groq
+                    val request = GroqChatRequest(
+                        model = "llama-3.3-70b-versatile",
+                        messages = listOf(GroqMessage(role = "user", content = prompt))
+                    )
+                    RetrofitClient.groqService.generateContent("Bearer $groqApiKey", request).choices?.firstOrNull()?.message?.content
+                } else { // Gemini
+                    val request = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = prompt)))))
+                    RetrofitClient.service.generateContent(geminiApiKey, request).candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                }
                 
                 launch(Dispatchers.Main) {
                     if (processedText != null) {
@@ -574,24 +572,29 @@ class ResultViewModel(
                     }
                     _isLoading.value = false
                 }
-            } catch (e: HttpException) { 
-                launch(Dispatchers.Main) {
-                    _error.value = when (e.code()) {
-                        400 -> "Bad Request (400). The text format is unrecognized."
-                        401 -> "Invalid API Key (401). Please check your Gemini API Key in the Settings."
-                        403 -> "Access Denied (403). Your API Key does not have permission for this model."
-                        429 -> "API Rate Limit Exceeded (429). Please wait a moment or use a different API Key."
-                        500 -> "Gemini Server Error (500). Please try again later."
-                        else -> "HTTP Error: ${e.code()} - Please check your connection or API Key."
-                    }
-                    _isLoading.value = false
-                }
             } catch (e: Exception) { 
                 launch(Dispatchers.Main) {
-                    _error.value = "Processing failed: ${e.message}"
+                    _error.value = handleExceptionError(e)
                     _isLoading.value = false
                 }
             }
+        }
+    }
+
+    private fun handleExceptionError(e: Exception): String {
+        return if (e is HttpException) {
+            when (e.code()) {
+                400 -> "Bad Request (400). File format or data is unrecognized."
+                401 -> "Invalid API Key (401). Please check your API Key in the Settings."
+                403 -> "Access Denied (403). Your API Key does not have permission."
+                413 -> "Payload Too Large (413). The file is too big for the server."
+                429 -> "API Rate Limit Exceeded (429). You are making too many requests. Please wait."
+                500 -> "Internal Server Error (500). Provider is having trouble. Please try again later."
+                503 -> "Service Unavailable (503). The AI Server is currently overloaded."
+                else -> "HTTP Error: ${e.code()} - Please check your connection or API Key."
+            }
+        } else {
+            "Processing failed: ${e.message}"
         }
     }
 
@@ -603,11 +606,11 @@ class ResultViewModel(
     }
 
     companion object {
-        fun provideFactory(noteId: Int, repository: NoteRepository, apiKey: String): ViewModelProvider.Factory = 
+        fun provideFactory(noteId: Int, repository: NoteRepository, aiProvider: Int, geminiApiKey: String, groqApiKey: String): ViewModelProvider.Factory = 
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST") 
                 override fun <T : ViewModel> create(modelClass: Class<T>): T { 
-                    return ResultViewModel(noteId, repository, apiKey) as T 
+                    return ResultViewModel(noteId, repository, aiProvider, geminiApiKey, groqApiKey) as T 
                 }
             }
     }
