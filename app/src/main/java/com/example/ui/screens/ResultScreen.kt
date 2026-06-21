@@ -25,6 +25,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -76,6 +77,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -167,11 +171,56 @@ fun ResultScreen(
     var showCustomMenu by remember { mutableStateOf(false) }
     var copyAction by remember { mutableStateOf<() -> Unit>({}) }
     var selectAllAction by remember { mutableStateOf<() -> Unit>({}) }
+    // Bumping this key forces SelectionContainer to recompose from scratch, which
+    // clears any active text selection. There's no public API to clear a selection
+    // programmatically, so this key-based reset is the standard workaround.
+    var selectionResetKey by remember { mutableStateOf(0) }
+    val clearSelection: () -> Unit = {
+        if (showCustomMenu) showCustomMenu = false
+        selectionResetKey++
+    }
 
     val listState = rememberLazyListState()
     val rawTextScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Auto-scroll-while-selecting support: tracks the live pointer Y (in window
+    // coordinates) while a finger is down inside the selectable content, plus the
+    // content area's own window bounds, so a LaunchedEffect can scroll the active
+    // list/column for as long as the finger stays near the top/bottom edge.
+    var selectionContentBounds by remember { mutableStateOf<Rect?>(null) }
+    var dragPointerWindowY by remember { mutableStateOf<Float?>(null) }
+    var isPointerDown by remember { mutableStateOf(false) }
+
+    // While the user is dragging a selection handle near the top/bottom edge of the
+    // visible content, keep scrolling in that direction so they can extend the
+    // selection past what's currently on screen, the same way native text fields do.
+    LaunchedEffect(isPointerDown) {
+        if (!isPointerDown) return@LaunchedEffect
+        val edgeThreshold = 72f // px from the edge that triggers scrolling
+        val maxScrollSpeedPx = 28f // px per tick at the very edge
+        while (isPointerDown) {
+            val pointerY = dragPointerWindowY
+            val bounds = selectionContentBounds
+            if (pointerY != null && bounds != null) {
+                val distanceFromTop = pointerY - bounds.top
+                val distanceFromBottom = bounds.bottom - pointerY
+                val usingMarkdown = note?.summary.isNullOrEmpty() == false
+                when {
+                    distanceFromTop in 0f..edgeThreshold -> {
+                        val speed = maxScrollSpeedPx * (1f - distanceFromTop / edgeThreshold)
+                        if (usingMarkdown) listState.scrollBy(-speed) else rawTextScrollState.scrollBy(-speed)
+                    }
+                    distanceFromBottom in 0f..edgeThreshold -> {
+                        val speed = maxScrollSpeedPx * (1f - distanceFromBottom / edgeThreshold)
+                        if (usingMarkdown) listState.scrollBy(speed) else rawTextScrollState.scrollBy(speed)
+                    }
+                }
+            }
+            delay(16L) // ~60fps tick
+        }
+    }
 
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
@@ -215,7 +264,7 @@ fun ResultScreen(
 
     BackHandler(enabled = true) {
         if (showCustomMenu) {
-            showCustomMenu = false
+            clearSelection()
         } else if (showCancelConfirmDialog) {
             showCancelConfirmDialog = false
         } else if (showSidePanel) {
@@ -230,6 +279,15 @@ fun ResultScreen(
             focusManager.clearFocus()
         } else {
             closeNote()
+        }
+    }
+
+    // Safety net: if the user navigates away from this screen entirely (switches
+    // tabs, backgrounds the app via a route change, etc.) while a selection is
+    // still active, make sure it's cleared so it doesn't persist when they return.
+    DisposableEffect(Unit) {
+        onDispose {
+            showCustomMenu = false
         }
     }
 
@@ -375,8 +433,48 @@ fun ResultScreen(
                 }
             } else {
                 CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
-                    SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                        Column(modifier = Modifier.fillMaxSize()) {
+                    // Re-keying on selectionResetKey forces this subtree to be torn down and
+                    // rebuilt, which is the only reliable way to clear an active selection
+                    // since SelectionContainer doesn't expose a way to do it programmatically.
+                    key(selectionResetKey) {
+                        SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned { coordinates ->
+                                    selectionContentBounds = coordinates.boundsInWindow()
+                                }
+                                .pointerInput(Unit) {
+                                    // Pass.Initial lets us observe the pointer's live position
+                                    // without consuming the event, so SelectionContainer's own
+                                    // drag-to-select handling underneath still works normally.
+                                    // We only need this to know where the finger is while it's
+                                    // down, to drive auto-scroll near the top/bottom edges.
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(pass = PointerEventPass.Initial)
+                                        isPointerDown = true
+                                        dragPointerWindowY = down.position.y + (selectionContentBounds?.top ?: 0f)
+                                        do {
+                                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                                            val change = event.changes.firstOrNull { it.id == down.id }
+                                            if (change != null) {
+                                                dragPointerWindowY = change.position.y + (selectionContentBounds?.top ?: 0f)
+                                            }
+                                        } while (event.changes.any { it.pressed })
+                                        isPointerDown = false
+                                        dragPointerWindowY = null
+                                    }
+                                }
+                                .pointerInput(showCustomMenu) {
+                                    // Tapping anywhere in the empty space around the text (i.e. not
+                                    // consumed by a child's own tap handler) dismisses an active
+                                    // selection, mirroring standard text-selection UX elsewhere on
+                                    // Android.
+                                    if (showCustomMenu) {
+                                        detectTapGestures { clearSelection() }
+                                    }
+                                }
+                        ) {
                             if (isLoading) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -535,6 +633,7 @@ fun ResultScreen(
                                     onTextLayout = { rawTextLayoutResult = it }
                                 )
                             }
+                        }
                         }
                     }
                 }
@@ -749,6 +848,7 @@ fun ResultScreen(
                     IconButton(onClick = { 
                         copyAction()
                         showCustomMenu = false
+                        coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
                     }) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.inverseOnSurface)
                     }
