@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">binot</string>
+    
+    <!-- New Strings for Recording Mode -->
+    <string name="recording_mode_title">Recording Mode</string>
+    <string name="mode_fast">Fast (Google)</string>
+    <string name="mode_accurate">Accurate (Gemini)</string>
+    <string name="mode_info_title">Recording Modes</string>
+    <string name="mode_info_desc">Fast (Google):\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate (Gemini):\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.</string>
+    <string name="direct_record_live_text">Direct recording mode is active.\nLive transcription is disabled.</string>
+    <string name="pending_transcription_text">Pending Transcription</string>
 </resources>
