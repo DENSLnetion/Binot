@@ -10,10 +10,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -25,6 +25,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -722,12 +723,12 @@ private fun AiThinkingAnimation(color: Color) {
 }
 
 /**
- * The "Edit" FAB. Visually it's the same capsule language as [BouncyCapsule] (pill shape,
- * icon + label, bouncy press scale) but its open/close animation is different from the
- * History screen's "import audio" FAB: instead of morphing into a circle on scroll, it
- * shrinks horizontally down to nothing and disappears, then expands back into the full
- * capsule. The same animation also plays when [visible] toggles (raw text shown/hidden).
+ * The "Edit" FAB. Same component and morph behavior as the History screen's
+ * "Import Audio" FAB (Material3 ExtendedFloatingActionButton — collapses to a circle
+ * on scroll, expands back to the full capsule). It only appears at all in raw,
+ * unprocessed text mode, and disappears once AI has produced a result.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditFab(
     visible: Boolean,
@@ -735,43 +736,18 @@ private fun EditFab(
     onClick: () -> Unit
 ) {
     AnimatedVisibility(
-        visible = visible && expanded,
-        enter = expandHorizontally(
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-            expandFrom = Alignment.Start
-        ) + fadeIn(),
-        exit = shrinkHorizontally(
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-            shrinkTowards = Alignment.Start
-        ) + fadeOut()
+        visible = visible,
+        enter = scaleIn(initialScale = 0.6f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+        exit = scaleOut(targetScale = 0.6f) + fadeOut()
     ) {
-        val interactionSource = remember { MutableInteractionSource() }
-        val isPressed by interactionSource.collectIsPressedAsState()
-        val scale by animateFloatAsState(
-            targetValue = if (isPressed) 0.90f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "editFabScale"
+        ExtendedFloatingActionButton(
+            onClick = onClick,
+            expanded = expanded,
+            icon = { Icon(Icons.Default.Edit, contentDescription = "Edit") },
+            text = { Text("Edit") },
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
-        Box(
-            modifier = Modifier
-                .scale(scale)
-                .height(56.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
-                )
-                .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Edit", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-            }
-        }
     }
 }
 
@@ -829,7 +805,7 @@ private fun CompactCapsule(
  * scrollable card inside that fixed area. Has its own local undo/redo history,
  * independent from the "Restore Original" (AI restore) feature elsewhere in the app.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun EditRawTextSheet(
     initialText: String,
