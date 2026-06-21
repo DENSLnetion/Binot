@@ -106,4 +106,3 @@ object RetrofitClient {
             .create(GithubApiService::class.java)
     }
 }
-
