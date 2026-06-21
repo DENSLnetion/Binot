@@ -26,7 +26,9 @@ class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var mediaRecorder: MediaRecorder? = null
-    private var currentAudioFilePath: String? = null // Logic Fix: Tambah state buat nangkep path fisik
+    private var currentAudioFilePath: String? = null
+    
+    private var currentRecordMode = 0 
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -42,7 +44,6 @@ class AudioRecorderManager(private val context: Context) {
 
     @Volatile
     private var isPaused = false
-
     private var lastIsEmulator = false
 
     private var originalMusicVolume = -1
@@ -51,7 +52,6 @@ class AudioRecorderManager(private val context: Context) {
     private var originalNotificationVolume = -1
     private var originalAlarmVolume = -1
     private var originalVoiceCallVolume = -1
-    
     private var originalRingerMode = -1
     private var originalHapticFeedbackStatus = -1
 
@@ -68,7 +68,6 @@ class AudioRecorderManager(private val context: Context) {
             }
 
             try { audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT } catch (e: Exception) {}
-
             try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0) } catch (e: Exception) {}
@@ -129,28 +128,29 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
-    fun startRecording(isEmulator: Boolean = false) {
+    fun startRecording(isEmulator: Boolean = false, mode: Int = 0) {
         if (_isRecording.value) return
         
         _isRecording.value = true
         _recognizedText.value = ""
         isPaused = false
         lastIsEmulator = isEmulator
+        currentRecordMode = mode
         
         forceMuteAllBeeps()
         
-        // Logic Fix: Siapkan file untuk rekaman fisik
-        prepareMediaRecorder()
-
-        if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
-            startSimulatedRecording()
-            return
+        if (mode == 1) { // Gemini Mode (Accurate): MediaRecorder nyimpen fisik
+            prepareMediaRecorder()
+            startFakeAmplitude() 
+        } else { // Google Mode (Fast): SpeechRecognizer nyimpen live text, GAK NYIMPEN fisik
+            if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
+                startSimulatedRecording()
+            } else {
+                initSpeechRecognizer()
+            }
         }
-
-        initSpeechRecognizer()
     }
     
-    // Logic Fix: Fungsi rekaman murni untuk bikin file mp4/mp3
     private fun prepareMediaRecorder() {
         val dir = File(context.filesDir, "audio_records")
         if (!dir.exists()) dir.mkdirs()
@@ -182,11 +182,15 @@ class AudioRecorderManager(private val context: Context) {
     fun pauseRecording() {
         if (!_isRecording.value || isPaused) return
         isPaused = true
-        speechRecognizer?.stopListening()
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            try { mediaRecorder?.pause() } catch (e: Exception) { e.printStackTrace() }
+        if (currentRecordMode == 1) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try { mediaRecorder?.pause() } catch (e: Exception) { e.printStackTrace() }
+            }
+        } else {
+            speechRecognizer?.stopListening()
         }
+        
         _amplitude.value = 0f
     }
 
@@ -194,14 +198,17 @@ class AudioRecorderManager(private val context: Context) {
         if (!_isRecording.value || !isPaused) return
         isPaused = false
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            try { mediaRecorder?.resume() } catch (e: Exception) { e.printStackTrace() }
-        }
-
-        if (lastIsEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
-            startSimulatedRecording()
+        if (currentRecordMode == 1) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try { mediaRecorder?.resume() } catch (e: Exception) { e.printStackTrace() }
+            }
+            startFakeAmplitude()
         } else {
-            initSpeechRecognizer()
+            if (lastIsEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
+                startSimulatedRecording()
+            } else {
+                initSpeechRecognizer()
+            }
         }
     }
 
@@ -256,6 +263,20 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
+    private fun startFakeAmplitude() {
+        coroutineScope.launch {
+            while (_isRecording.value && !isPaused && currentRecordMode == 1) {
+                _amplitude.value = if (mediaRecorder != null) {
+                     try { (mediaRecorder!!.maxAmplitude / 32767f).coerceIn(0.05f, 1f) } catch (e: Exception) { 0f }
+                } else {
+                     Random.nextFloat() * 0.5f 
+                }
+                delay(100) 
+            }
+            _amplitude.value = 0f
+        }
+    }
+
     private fun startSimulatedRecording() {
         val thread = Thread {
             val phrases = listOf("Ini adalah simulasi.", "Binot merekam.")
@@ -275,21 +296,23 @@ class AudioRecorderManager(private val context: Context) {
         thread.start()
     }
 
-    // Logic Fix: Stop return string path dari file yang barusan dibikin
     fun stopRecording(): String? {
         _isRecording.value = false
         isPaused = false
         
-        speechRecognizer?.stopListening()
-        
-        try {
-            mediaRecorder?.stop()
-            mediaRecorder?.release()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            currentAudioFilePath = null
+        if (currentRecordMode == 1) {
+            try {
+                mediaRecorder?.stop()
+                mediaRecorder?.release()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                currentAudioFilePath = null
+            }
+            mediaRecorder = null
+        } else {
+            speechRecognizer?.stopListening()
+            currentAudioFilePath = null // Pastikan null di mode Google
         }
-        mediaRecorder = null
         
         _amplitude.value = 0f
 
