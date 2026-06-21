@@ -8,8 +8,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.Candidate
 import com.example.data.Content
+import com.example.data.FileData
 import com.example.data.GenerateContentRequest
-import com.example.data.InlineData
 import com.example.data.NoteEntity
 import com.example.data.NoteRepository
 import com.example.data.Part
@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
 import java.io.File
 
@@ -35,6 +37,10 @@ class ResultViewModel(
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    // State baru buat pesan loading detail
+    private val _loadingMessage = MutableStateFlow("")
+    val loadingMessage: StateFlow<String> = _loadingMessage.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -61,11 +67,9 @@ class ResultViewModel(
             val fetchedNote = noteRepository.getNoteById(noteId)
             _note.value = fetchedNote
             
-            // LOGIC FIX: Tangani teks kosong atau "Pending Transcription" dari mode Gemini Record
             if (fetchedNote != null && (fetchedNote.rawText.isBlank() || fetchedNote.rawText == "Pending Transcription") && fetchedNote.audioPath != null) {
-                transcribeImportedAudio()
+                transcribeWithFileApi()
             } else if (fetchedNote != null && fetchedNote.rawText == "Pending Transcription" && fetchedNote.audioPath == null) {
-                // Warning jika sistem tidak menyimpan file audio (mencegah silent bug)
                 _error.value = "Gagal transkrip: File audio tidak ditemukan di database. Pastikan RecordViewModel menyimpan path audio."
             }
         }
@@ -246,7 +250,8 @@ class ResultViewModel(
         }
     }
 
-    private fun transcribeImportedAudio() {
+    // Logic File API Utama
+    private fun transcribeWithFileApi() {
         val currentNote = _note.value ?: return
         val audioPath = currentNote.audioPath ?: return
         
@@ -259,15 +264,51 @@ class ResultViewModel(
         _error.value = null
 
         viewModelScope.launch(Dispatchers.IO) {
+            var remoteFileName: String? = null
             try {
                 val file = File(audioPath)
                 if (!file.exists()) throw Exception("Audio file missing from device storage.")
+
+                // TAHAP 1: Upload File ke Server Google
+                launch(Dispatchers.Main) { _loadingMessage.value = "Uploading audio to secure server..." }
                 
-                val bytes = file.readBytes()
-                val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                val mimeType = "audio/mp3" // Gemini menoleransi berbagai mime audio standar
+                val mimeType = "audio/mp4" // Sesuai dengan MediaRecorder.OutputFormat.MPEG_4
+                val requestBody = file.asRequestBody(mimeType.toMediaTypeOrNull())
                 
-                // PROMPT FIX: Dirombak supaya sangat presisi, anti halusinasi, dan sesuai konteks transkripsi murni.
+                val uploadResponse = RetrofitClient.service.uploadFile(
+                    apiKey = apiKey,
+                    contentLength = file.length(),
+                    contentType = mimeType,
+                    mimeType = mimeType,
+                    fileBytes = requestBody
+                )
+
+                if (uploadResponse.file == null) {
+                    throw Exception("Failed to upload file to Gemini server.")
+                }
+
+                val uploadedFileUri = uploadResponse.file.uri
+                remoteFileName = uploadResponse.file.name
+
+                // TAHAP 2: Polling Status (Tunggu sampai ACTIVE)
+                launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
+                var fileState = uploadResponse.file.state
+                var attempts = 0
+                val maxAttempts = 60 // Max nunggu 60 * 3 = 180 detik (3 menit)
+
+                while (fileState == "PROCESSING" && attempts < maxAttempts) {
+                    delay(3000) // Polling tiap 3 detik
+                    val statusResponse = RetrofitClient.service.getFile(remoteFileName, apiKey)
+                    fileState = statusResponse.state
+                    attempts++
+                }
+
+                if (fileState != "ACTIVE") {
+                    throw Exception("File processing timeout or failed at Google server.")
+                }
+
+                // TAHAP 3: Request Transkripsi Pakai URI
+                launch(Dispatchers.Main) { _loadingMessage.value = "Transcribing audio..." }
                 val promptText = """
                     You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
                     
@@ -284,7 +325,7 @@ class ResultViewModel(
                     contents = listOf(
                         Content(parts = listOf(
                             Part(text = promptText), 
-                            Part(inlineData = InlineData(mimeType = mimeType, data = base64Audio))
+                            Part(fileData = FileData(mimeType = mimeType, fileUri = uploadedFileUri))
                         ))
                     )
                 )
@@ -298,7 +339,7 @@ class ResultViewModel(
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
                         
-                        // TITLE FIX: Generate AI Title setelah transkrip berhasil supaya nggak cuma pakai fallback.
+                        // Generate Judul AI
                         launch(Dispatchers.IO) {
                             try {
                                 val titlePrompt = """
@@ -318,7 +359,7 @@ class ResultViewModel(
                                     noteRepository.update(finalNote)
                                 }
                             } catch (e: Exception) {
-                                // Gagal generate title biarkan saja, yang penting transkrip udah disave.
+                                // Gagal generate title biarkan saja
                             }
                         }
                     } else if (transcript?.contains("[No speech detected]") == true) {
@@ -345,6 +386,16 @@ class ResultViewModel(
                     _error.value = "Processing failed: ${e.message}"
                     _isLoading.value = false 
                 } 
+            } finally {
+                // TAHAP 4: CLEANUP. Hapus file dari server Google walau sukses atau gagal.
+                if (remoteFileName != null) {
+                    try {
+                        RetrofitClient.service.deleteFile(remoteFileName, apiKey)
+                    } catch (e: Exception) {
+                        // Kalau gagal hapus yaudah biarin aja nunggu auto-delete 48 jam.
+                        e.printStackTrace()
+                    }
+                }
             }
         }
     }
@@ -359,6 +410,7 @@ class ResultViewModel(
         
         _isLoading.value = true
         _error.value = null
+        _loadingMessage.value = "AI is processing your text..."
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
