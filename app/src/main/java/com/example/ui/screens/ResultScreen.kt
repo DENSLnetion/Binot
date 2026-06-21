@@ -25,6 +25,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -74,6 +75,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -476,7 +478,10 @@ fun ResultScreen(
                                     }
                                     map
                                 }
-                                val rawAnnotatedString = remember(note!!.rawText, savedRawHighlights, legacyRawHighlights, temporaryHighlight) {
+                                val rawSavedHighlightColor = MaterialTheme.colorScheme.tertiaryContainer
+                                val rawSavedHighlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                val rawTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                val rawAnnotatedString = remember(note!!.rawText, savedRawHighlights, legacyRawHighlights, temporaryHighlight, rawSavedHighlightColor, rawSavedHighlightTextColor, rawTextColor) {
                                     buildHighlightedString(
                                         prefix = rawPrefix,
                                         text = note!!.rawText,
@@ -484,9 +489,9 @@ fun ResultScreen(
                                         savedHighlights = savedRawHighlights,
                                         legacyHighlights = legacyRawHighlights,
                                         highlightColor = Color.Yellow.copy(alpha = 0.5f),
-                                        savedHighlightColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        savedHighlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                        savedHighlightColor = rawSavedHighlightColor,
+                                        savedHighlightTextColor = rawSavedHighlightTextColor,
+                                        textColor = rawTextColor
                                     )
                                 }
                                 Text(
