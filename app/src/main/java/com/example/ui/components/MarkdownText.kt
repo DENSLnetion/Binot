@@ -8,13 +8,17 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
@@ -26,36 +30,135 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 
+/**
+ * A single saved highlight.
+ * [start]/[end] pin it to ONE exact occurrence of [text] within a specific line
+ * (line index = [line]). When start < 0 it's legacy data with no position info,
+ * and every occurrence of [text] in the whole note is highlighted (old behavior),
+ * which is the best we can do without knowing where the user originally selected it.
+ */
+data class HighlightItem(
+    val text: String,
+    val note: String,
+    val line: Int = -1,
+    val start: Int = -1,
+    val end: Int = -1
+)
+
+/** Snapshot of one rendered line's text layout, window position, and how it maps back to the raw line. */
+private data class LineLayoutInfo(
+    val layoutResult: TextLayoutResult,
+    val boundsInWindow: Rect,
+    val renderedText: String,
+    val prefixLen: Int
+)
+
+/**
+ * Given a selection Rect in window coordinates (from the custom selection toolbar)
+ * and the actual selected text, find which rendered line the selection START falls
+ * in, then locate the nearest occurrence of [selectedText] to that point within the
+ * raw line. Returns (lineIndex, rawStart, rawEnd), or null if it can't be resolved
+ * (selection spans multiple lines, etc).
+ */
+private fun resolveRectToPosition(
+    rect: Rect,
+    selectedText: String,
+    registry: Map<Int, LineLayoutInfo>,
+    rawLines: List<String>
+): Triple<Int, Int, Int>? {
+    if (selectedText.isBlank()) return null
+    val anchor = androidx.compose.ui.geometry.Offset(rect.left, rect.center.y)
+    val info = registry.values.firstOrNull { it.boundsInWindow.let { b -> anchor.y in b.top..b.bottom } }
+        ?: registry.values.minByOrNull { lineInfo ->
+            val b = lineInfo.boundsInWindow
+            when {
+                anchor.y < b.top -> b.top - anchor.y
+                anchor.y > b.bottom -> anchor.y - b.bottom
+                else -> 0f
+            }
+        }
+        ?: return null
+
+    val lineIndex = registry.entries.firstOrNull { it.value === info }?.key ?: return null
+    val rawLine = rawLines.getOrNull(lineIndex) ?: return null
+
+    val localX = (anchor.x - info.boundsInWindow.left).coerceIn(0f, info.boundsInWindow.width)
+    val approxLocalOffset = info.layoutResult.getOffsetForPosition(
+        androidx.compose.ui.geometry.Offset(localX, info.boundsInWindow.height / 2f)
+    ).coerceIn(0, info.renderedText.length)
+    val approxRawOffset = (approxLocalOffset + info.prefixLen).coerceIn(0, rawLine.length)
+
+    // The tap/selection point gives an approximate offset; snap to the nearest
+    // actual occurrence of the selected text on this line for exact start/end.
+    val lowerLine = rawLine.lowercase()
+    val lowerSel = selectedText.lowercase()
+    var bestStart = -1
+    var bestDist = Int.MAX_VALUE
+    var searchFrom = 0
+    while (true) {
+        val idx = lowerLine.indexOf(lowerSel, searchFrom)
+        if (idx == -1) break
+        val dist = kotlin.math.abs(idx - approxRawOffset)
+        if (dist < bestDist) {
+            bestDist = dist
+            bestStart = idx
+        }
+        searchFrom = idx + 1
+    }
+    if (bestStart == -1) return null
+    return Triple(lineIndex, bestStart, bestStart + selectedText.length)
+}
+
 @Composable
 fun MarkdownText(
     text: String, 
     listState: LazyListState,
     highlightsInfo: String? = null,
-    onSavedHighlightClick: (String, String) -> Unit = { _, _ -> },
+    onSavedHighlightClick: (text: String, note: String, line: Int, start: Int, end: Int) -> Unit = { _, _, _, _, _ -> },
+    onResolveSelection: (resolver: (Rect, String) -> Triple<Int, Int, Int>?) -> Unit = {},
     highlightQuery: String = "", 
     fontFamily: FontFamily = FontFamily.SansSerif, 
     modifier: Modifier = Modifier
 ) {
     val lines = text.split("\n")
     
-    val savedHighlightsMap = remember(highlightsInfo) {
-        val map = mutableMapOf<String, String>()
+    val savedHighlights = remember(highlightsInfo) {
+        val list = mutableListOf<HighlightItem>()
         if (!highlightsInfo.isNullOrBlank() && highlightsInfo != "[]") {
             try {
                 val array = JSONArray(highlightsInfo)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    map[obj.getString("text")] = obj.getString("note")
+                    list.add(
+                        HighlightItem(
+                            text = obj.getString("text"),
+                            note = obj.getString("note"),
+                            line = obj.optInt("line", -1),
+                            start = obj.optInt("start", -1),
+                            end = obj.optInt("end", -1)
+                        )
+                    )
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-        map
+        list
     }
 
     val highlightBgColor = MaterialTheme.colorScheme.tertiaryContainer
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
+
+    // Registry of every rendered line's layout + window bounds + raw-line prefix
+    // offset, so a window-space selection Rect (from the custom selection toolbar)
+    // can be resolved into an exact (lineIndex, rawStart, rawEnd) position.
+    val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
+
+    LaunchedEffect(text) {
+        onResolveSelection { rect, selectedText ->
+            resolveRectToPosition(rect, selectedText, lineRegistry, lines)
+        }
+    }
     
     LazyColumn(
         state = listState,
@@ -63,9 +166,16 @@ fun MarkdownText(
     ) {
         item { Spacer(modifier = Modifier.height(8.dp)) }
 
-        itemsIndexed(lines) { _, line ->
+        itemsIndexed(lines) { lineIndex, line ->
             val indentSpaces = line.takeWhile { it == ' ' || it == '\t' }.length
             val trimmedLine = line.trimStart()
+
+            val lineHighlights = remember(savedHighlights, lineIndex) {
+                savedHighlights.filter { it.line == lineIndex }
+            }
+            val legacyHighlights = remember(savedHighlights) {
+                savedHighlights.filter { it.start < 0 }
+            }
 
             when {
                 trimmedLine.startsWith("# ") -> {
@@ -94,6 +204,7 @@ fun MarkdownText(
                 }
                 trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ") -> {
                     val paddingStart = 16.dp + (indentSpaces * 6).dp
+                    val prefixLen = indentSpaces + 2
                     Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
                         Text(
                             text = if (indentSpaces > 0) "◦" else "•",
@@ -103,12 +214,16 @@ fun MarkdownText(
                         )
                         BasicMarkdownLine(
                             text = trimmedLine.substring(2).trim(), 
+                            lineIndex = lineIndex,
+                            prefixLen = prefixLen,
                             highlightQuery = highlightQuery,
-                            savedHighlightsMap = savedHighlightsMap,
+                            lineHighlights = lineHighlights,
+                            legacyHighlights = legacyHighlights,
                             onSavedHighlightClick = onSavedHighlightClick,
                             highlightBgColor = highlightBgColor,
                             highlightTextColor = highlightTextColor,
                             fontFamily = fontFamily,
+                            lineRegistry = lineRegistry,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -118,6 +233,8 @@ fun MarkdownText(
                     val number = trimmedLine.substring(0, dotIndex + 1)
                     val content = trimmedLine.substring(dotIndex + 1).trim()
                     val paddingStart = 16.dp + (indentSpaces * 6).dp
+                    val contentStartInTrimmed = trimmedLine.indexOf(content, dotIndex + 1)
+                    val prefixLen = indentSpaces + (if (contentStartInTrimmed >= 0) contentStartInTrimmed else dotIndex + 1)
                     
                     Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
                         Text(
@@ -128,12 +245,16 @@ fun MarkdownText(
                         )
                         BasicMarkdownLine(
                             text = content, 
+                            lineIndex = lineIndex,
+                            prefixLen = prefixLen,
                             highlightQuery = highlightQuery,
-                            savedHighlightsMap = savedHighlightsMap,
+                            lineHighlights = lineHighlights,
+                            legacyHighlights = legacyHighlights,
                             onSavedHighlightClick = onSavedHighlightClick,
                             highlightBgColor = highlightBgColor,
                             highlightTextColor = highlightTextColor,
                             fontFamily = fontFamily,
+                            lineRegistry = lineRegistry,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -141,12 +262,16 @@ fun MarkdownText(
                 trimmedLine.isBlank() -> Spacer(modifier = Modifier.height(16.dp))
                 else -> BasicMarkdownLine(
                     text = trimmedLine, 
+                    lineIndex = lineIndex,
+                    prefixLen = indentSpaces,
                     highlightQuery = highlightQuery,
-                    savedHighlightsMap = savedHighlightsMap,
+                    lineHighlights = lineHighlights,
+                    legacyHighlights = legacyHighlights,
                     onSavedHighlightClick = onSavedHighlightClick,
                     highlightBgColor = highlightBgColor,
                     highlightTextColor = highlightTextColor,
                     fontFamily = fontFamily,
+                    lineRegistry = lineRegistry,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -159,12 +284,16 @@ fun MarkdownText(
 @Composable
 fun BasicMarkdownLine(
     text: String, 
+    lineIndex: Int,
+    prefixLen: Int,
     highlightQuery: String,
-    savedHighlightsMap: Map<String, String>,
-    onSavedHighlightClick: (String, String) -> Unit,
+    lineHighlights: List<HighlightItem>,
+    legacyHighlights: List<HighlightItem>,
+    onSavedHighlightClick: (text: String, note: String, line: Int, start: Int, end: Int) -> Unit,
     highlightBgColor: Color,
     highlightTextColor: Color,
     fontFamily: FontFamily,
+    lineRegistry: MutableMap<Int, LineLayoutInfo>,
     modifier: Modifier = Modifier
 ) {
     val annotatedString = buildAnnotatedString {
@@ -191,11 +320,35 @@ fun BasicMarkdownLine(
         }
         append(text.substring(currentIndex))
         
-        val plainString = this.toAnnotatedString().text.lowercase()
+        val plainString = this.toAnnotatedString().text
+        val plainLength = plainString.length
 
-        savedHighlightsMap.forEach { (word, _) ->
-            val wordLower = word.lowercase()
-            var startIndex = plainString.indexOf(wordLower)
+        // Precise: highlight only the exact occurrence the user originally selected.
+        lineHighlights.forEach { item ->
+            val localStart = item.start - prefixLen
+            val localEnd = item.end - prefixLen
+            if (localStart in 0 until plainLength && localEnd in (localStart + 1)..plainLength) {
+                addStyle(
+                    style = SpanStyle(background = highlightBgColor, color = highlightTextColor, fontWeight = FontWeight.SemiBold),
+                    start = localStart,
+                    end = localEnd
+                )
+                addStringAnnotation(
+                    tag = "SAVED_HIGHLIGHT",
+                    annotation = "${item.text}@@KEY@@${item.line}:${item.start}:${item.end}",
+                    start = localStart,
+                    end = localEnd
+                )
+            }
+        }
+
+        // Legacy fallback: highlights saved before position tracking existed don't
+        // know where they came from, so the best we can still do is match by text.
+        val plainLower = plainString.lowercase()
+        legacyHighlights.forEach { item ->
+            val wordLower = item.text.lowercase()
+            if (wordLower.isBlank()) return@forEach
+            var startIndex = plainLower.indexOf(wordLower)
             while (startIndex >= 0) {
                 addStyle(
                     style = SpanStyle(background = highlightBgColor, color = highlightTextColor, fontWeight = FontWeight.SemiBold),
@@ -204,17 +357,17 @@ fun BasicMarkdownLine(
                 )
                 addStringAnnotation(
                     tag = "SAVED_HIGHLIGHT",
-                    annotation = word,
+                    annotation = "${item.text}@@KEY@@legacy:${item.text}",
                     start = startIndex,
                     end = startIndex + wordLower.length
                 )
-                startIndex = plainString.indexOf(wordLower, startIndex + 1)
+                startIndex = plainLower.indexOf(wordLower, startIndex + 1)
             }
         }
         
         if (highlightQuery.isNotBlank()) {
             val queryLower = highlightQuery.lowercase()
-            var startIndex = plainString.indexOf(queryLower)
+            var startIndex = plainLower.indexOf(queryLower)
             
             while (startIndex >= 0) {
                 addStyle(
@@ -222,30 +375,61 @@ fun BasicMarkdownLine(
                     start = startIndex,
                     end = startIndex + queryLower.length
                 )
-                startIndex = plainString.indexOf(queryLower, startIndex + 1)
+                startIndex = plainLower.indexOf(queryLower, startIndex + 1)
             }
         }
     }
     
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var windowBounds by remember { mutableStateOf<Rect?>(null) }
+
+    LaunchedEffect(textLayoutResult, windowBounds, text) {
+        val layout = textLayoutResult
+        val bounds = windowBounds
+        if (layout != null && bounds != null) {
+            lineRegistry[lineIndex] = LineLayoutInfo(
+                layoutResult = layout,
+                boundsInWindow = bounds,
+                renderedText = text,
+                prefixLen = prefixLen
+            )
+        }
+    }
 
     Text(
         text = annotatedString,
         style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp, fontFamily = fontFamily),
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = modifier.pointerInput(annotatedString) {
-            detectTapGestures { pos ->
-                textLayoutResult?.let { layoutResult ->
-                    val offset = layoutResult.getOffsetForPosition(pos)
-                    annotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
-                        .firstOrNull()?.let { annotation ->
-                            val word = annotation.item
-                            val note = savedHighlightsMap[word] ?: ""
-                            onSavedHighlightClick(word, note)
-                        }
-                }
+        modifier = modifier
+            .onGloballyPositioned { coordinates ->
+                windowBounds = coordinates.boundsInWindow()
             }
-        },
+            .pointerInput(annotatedString) {
+                detectTapGestures { pos ->
+                    textLayoutResult?.let { layoutResult ->
+                        val offset = layoutResult.getOffsetForPosition(pos)
+                        val noteByKey = mutableMapOf<String, String>()
+                        lineHighlights.forEach { noteByKey["${it.line}:${it.start}:${it.end}"] = it.note }
+                        legacyHighlights.forEach { noteByKey["legacy:${it.text}"] = it.note }
+                        annotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
+                            .firstOrNull()?.let { annotation ->
+                                val parts = annotation.item.split("@@KEY@@")
+                                val word = parts.getOrElse(0) { "" }
+                                val key = parts.getOrNull(1) ?: "legacy:$word"
+                                val note = noteByKey[key] ?: ""
+                                if (key.startsWith("legacy:")) {
+                                    onSavedHighlightClick(word, note, -1, -1, -1)
+                                } else {
+                                    val keyParts = key.split(":")
+                                    val kLine = keyParts.getOrNull(0)?.toIntOrNull() ?: -1
+                                    val kStart = keyParts.getOrNull(1)?.toIntOrNull() ?: -1
+                                    val kEnd = keyParts.getOrNull(2)?.toIntOrNull() ?: -1
+                                    onSavedHighlightClick(word, note, kLine, kStart, kEnd)
+                                }
+                            }
+                    }
+                }
+            },
         onTextLayout = { textLayoutResult = it }
     )
 }
