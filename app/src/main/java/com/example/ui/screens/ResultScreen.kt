@@ -432,6 +432,43 @@ fun ResultScreen(
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
+                // This Box sits ABOVE SelectionContainer in the hierarchy (not inside it),
+                // so its Pass.Initial pointer handling runs before SelectionContainer's own
+                // internal gesture detection gets a chance to consume the tap. Putting the
+                // same detection inside the Column under SelectionContainer only worked at
+                // the very edges of the screen, because everywhere else SelectionContainer
+                // (or a child's own tap handler, e.g. for highlights) intercepted the tap
+                // first.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { coordinates ->
+                            selectionContentBounds = coordinates.boundsInWindow()
+                        }
+                        .pointerInput(showCustomMenu) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(pass = PointerEventPass.Initial)
+                                isPointerDown = true
+                                dragPointerWindowY = down.position.y + (selectionContentBounds?.top ?: 0f)
+                                var totalMovement = 0f
+                                var lastPosition = down.position
+                                do {
+                                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                    if (change != null) {
+                                        dragPointerWindowY = change.position.y + (selectionContentBounds?.top ?: 0f)
+                                        totalMovement += (change.position - lastPosition).getDistance()
+                                        lastPosition = change.position
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                isPointerDown = false
+                                dragPointerWindowY = null
+                                if (showCustomMenu && totalMovement < 24f) {
+                                    clearSelection()
+                                }
+                            }
+                        }
+                ) {
                 CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
                     // Re-keying on selectionResetKey forces this subtree to be torn down and
                     // rebuilt, which is the only reliable way to clear an active selection
@@ -441,41 +478,6 @@ fun ResultScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .onGloballyPositioned { coordinates ->
-                                    selectionContentBounds = coordinates.boundsInWindow()
-                                }
-                                .pointerInput(showCustomMenu) {
-                                    // Pass.Initial lets us observe the pointer's live position
-                                    // without consuming the event, so SelectionContainer's own
-                                    // drag-to-select handling underneath still works normally.
-                                    // We use this both to drive auto-scroll near the edges while
-                                    // dragging, and to detect a plain tap (down+up with barely any
-                                    // movement) so tapping empty space can dismiss an active
-                                    // selection — a tap doesn't reliably reach a lower pointerInput
-                                    // here since SelectionContainer's own gesture handling runs
-                                    // first on the default pass and can swallow it.
-                                    awaitEachGesture {
-                                        val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                                        isPointerDown = true
-                                        dragPointerWindowY = down.position.y + (selectionContentBounds?.top ?: 0f)
-                                        var totalMovement = 0f
-                                        var lastPosition = down.position
-                                        do {
-                                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                                            val change = event.changes.firstOrNull { it.id == down.id }
-                                            if (change != null) {
-                                                dragPointerWindowY = change.position.y + (selectionContentBounds?.top ?: 0f)
-                                                totalMovement += (change.position - lastPosition).getDistance()
-                                                lastPosition = change.position
-                                            }
-                                        } while (event.changes.any { it.pressed })
-                                        isPointerDown = false
-                                        dragPointerWindowY = null
-                                        if (showCustomMenu && totalMovement < 24f) {
-                                            clearSelection()
-                                        }
-                                    }
-                                }
                         ) {
                             if (isLoading) {
                                 Card(
@@ -638,6 +640,7 @@ fun ResultScreen(
                         }
                         }
                     }
+                }
                 }
             }
         }
