@@ -444,34 +444,36 @@ fun ResultScreen(
                                 .onGloballyPositioned { coordinates ->
                                     selectionContentBounds = coordinates.boundsInWindow()
                                 }
-                                .pointerInput(Unit) {
+                                .pointerInput(showCustomMenu) {
                                     // Pass.Initial lets us observe the pointer's live position
                                     // without consuming the event, so SelectionContainer's own
                                     // drag-to-select handling underneath still works normally.
-                                    // We only need this to know where the finger is while it's
-                                    // down, to drive auto-scroll near the top/bottom edges.
+                                    // We use this both to drive auto-scroll near the edges while
+                                    // dragging, and to detect a plain tap (down+up with barely any
+                                    // movement) so tapping empty space can dismiss an active
+                                    // selection — a tap doesn't reliably reach a lower pointerInput
+                                    // here since SelectionContainer's own gesture handling runs
+                                    // first on the default pass and can swallow it.
                                     awaitEachGesture {
                                         val down = awaitFirstDown(pass = PointerEventPass.Initial)
                                         isPointerDown = true
                                         dragPointerWindowY = down.position.y + (selectionContentBounds?.top ?: 0f)
+                                        var totalMovement = 0f
+                                        var lastPosition = down.position
                                         do {
                                             val event = awaitPointerEvent(pass = PointerEventPass.Initial)
                                             val change = event.changes.firstOrNull { it.id == down.id }
                                             if (change != null) {
                                                 dragPointerWindowY = change.position.y + (selectionContentBounds?.top ?: 0f)
+                                                totalMovement += (change.position - lastPosition).getDistance()
+                                                lastPosition = change.position
                                             }
                                         } while (event.changes.any { it.pressed })
                                         isPointerDown = false
                                         dragPointerWindowY = null
-                                    }
-                                }
-                                .pointerInput(showCustomMenu) {
-                                    // Tapping anywhere in the empty space around the text (i.e. not
-                                    // consumed by a child's own tap handler) dismisses an active
-                                    // selection, mirroring standard text-selection UX elsewhere on
-                                    // Android.
-                                    if (showCustomMenu) {
-                                        detectTapGestures { clearSelection() }
+                                        if (showCustomMenu && totalMovement < 24f) {
+                                            clearSelection()
+                                        }
                                     }
                                 }
                         ) {
