@@ -101,11 +101,15 @@ class RecordViewModel(
         timerJob = null
     }
 
-    suspend fun saveNote(): Boolean {
+    // Ubah method saveNote untuk nerima parameter recordMode (0 = Google, 1 = Gemini)
+    suspend fun saveNote(recordMode: Int): Boolean {
         delay(300)
 
-        val text = recognizedText.value.trim()
-        if (text.isEmpty()) {
+        // Teks pakai placeholder kalau di mode Gemini, sebaliknya tetap ambil recognizedText
+        val text = if (recordMode == 1) "Pending Transcription" else recognizedText.value.trim()
+        
+        // Mencegah simpan jika teks kosong HANYA saat di mode Google
+        if (recordMode == 0 && text.isEmpty()) {
             return false
         }
 
@@ -115,11 +119,12 @@ class RecordViewModel(
             rawText = text,
             summary = null,
             isPinned = false,
-            audioPath = null
+            audioPath = null // AudioPath tetap null di sini, mengasumsikan sistem lo nyimpen file dari luar atau diubah di Result
         )
         val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
 
-        if (apiKey.isNotBlank()) {
+        // Skip AI Title generation kalau text-nya adalah "Pending Transcription" (Mode Gemini)
+        if (apiKey.isNotBlank() && recordMode == 0) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
                     val prompt = """
