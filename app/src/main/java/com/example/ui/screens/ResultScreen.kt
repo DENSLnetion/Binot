@@ -7,8 +7,13 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -29,6 +34,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,8 +44,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Label
@@ -55,6 +67,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -104,6 +118,23 @@ fun ResultScreen(
     val listState = rememberLazyListState()
     val rawTextScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+
+    var showEditSheet by remember { mutableStateOf(false) }
+    var isEditFabExpanded by remember { mutableStateOf(true) }
+    var previousRawScrollOffset by remember { mutableStateOf(0) }
+
+    // Tracks scroll direction on the raw text to drive the FAB capsule -> empty animation.
+    // Scrolling down closes the capsule, scrolling up (or reaching the top) reopens it.
+    LaunchedEffect(rawTextScrollState.value) {
+        val current = rawTextScrollState.value
+        val delta = current - previousRawScrollOffset
+        when {
+            current <= 0 -> isEditFabExpanded = true
+            delta > 4 -> isEditFabExpanded = false
+            delta < -4 -> isEditFabExpanded = true
+        }
+        previousRawScrollOffset = current
+    }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val focusManager = LocalFocusManager.current
@@ -217,6 +248,18 @@ fun ResultScreen(
                     },
                     scrollBehavior = scrollBehavior
                 )
+            },
+            floatingActionButton = {
+                if (showContent) {
+                    // FAB only exists for raw, unprocessed text. Once AI has produced a summary
+                    // (or while it's processing) it disappears; restoring raw text brings it back.
+                    val isRawTextMode = note != null && note!!.summary.isNullOrEmpty() && !isLoading
+                    EditFab(
+                        visible = isRawTextMode,
+                        expanded = isEditFabExpanded,
+                        onClick = { showEditSheet = true }
+                    )
+                }
             }
         ) { paddingValues ->
             if (note == null || !showContent) {
@@ -576,6 +619,18 @@ fun ResultScreen(
             }
         }
     }
+
+    if (showEditSheet && note != null) {
+        EditRawTextSheet(
+            initialText = note!!.rawText,
+            onDismiss = { showEditSheet = false },
+            onSave = { newText ->
+                viewModel.updateRawText(newText)
+                showEditSheet = false
+                coroutineScope.launch { snackbarHostState.showSnackbar("Raw text updated!") }
+            }
+        )
+    }
 }
 
 fun buildHighlightedString(text: String, query: String, highlightColor: Color, textColor: Color) = buildAnnotatedString {
@@ -665,5 +720,262 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
+
+/**
+ * The "Edit" FAB. Visually it's the same capsule language as [BouncyCapsule] (pill shape,
+ * icon + label, bouncy press scale) but its open/close animation is different from the
+ * History screen's "import audio" FAB: instead of morphing into a circle on scroll, it
+ * shrinks horizontally down to nothing and disappears, then expands back into the full
+ * capsule. The same animation also plays when [visible] toggles (raw text shown/hidden).
+ */
+@Composable
+private fun EditFab(
+    visible: Boolean,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible && expanded,
+        enter = expandHorizontally(
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            expandFrom = Alignment.Start
+        ) + fadeIn(),
+        exit = shrinkHorizontally(
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+            shrinkTowards = Alignment.Start
+        ) + fadeOut()
+    ) {
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (isPressed) 0.90f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "editFabScale"
+        )
+        Box(
+            modifier = Modifier
+                .scale(scale)
+                .height(56.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick
+                )
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Edit", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactCapsule(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "compactCapsuleScale"
+    )
+    Box(
+        modifier = Modifier
+            .scale(scale)
+            .height(40.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = if (enabled) 1f else 0.4f))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = if (enabled) 1f else 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = if (enabled) 1f else 0.6f),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/**
+ * Bottom sheet for editing raw text, visually consistent with the side panel sheet
+ * (same ModalBottomSheet style). Its size is fixed to a proportion of the screen and
+ * never grows with the amount of text typed — the editable text sits in its own
+ * scrollable card inside that fixed area. Has its own local undo/redo history,
+ * independent from the "Restore Original" (AI restore) feature elsewhere in the app.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditRawTextSheet(
+    initialText: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+
+    var editText by remember { mutableStateOf(initialText) }
+    val undoStack = remember { mutableStateListOf<String>() }
+    val redoStack = remember { mutableStateListOf<String>() }
+    var lastSnapshot by remember { mutableStateOf(initialText) }
+
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val focusRequester = remember { FocusRequester() }
+
+    // Debounced snapshot: ~600ms after the user stops typing, push the previous state
+    // onto the undo stack. Keeps the history from growing one entry per keystroke.
+    LaunchedEffect(editText) {
+        delay(600)
+        if (editText != lastSnapshot) {
+            undoStack.add(lastSnapshot)
+            if (undoStack.size > 50) undoStack.removeAt(0)
+            lastSnapshot = editText
+            redoStack.clear()
+        }
+    }
+
+    // Keeps the cursor visible above the keyboard as the user types, instead of making
+    // them scroll manually to find it.
+    LaunchedEffect(editText) {
+        bringIntoViewRequester.bringIntoView()
+    }
+
+    LaunchedEffect(Unit) {
+        delay(250)
+        focusRequester.requestFocus()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.7f)
+                .imePadding()
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp)) {
+                Text(
+                    "Edit Raw Text",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CompactCapsule(
+                        onClick = {
+                            if (undoStack.isNotEmpty()) {
+                                redoStack.add(editText)
+                                val previous = undoStack.removeAt(undoStack.size - 1)
+                                editText = previous
+                                lastSnapshot = previous
+                            }
+                        },
+                        enabled = undoStack.isNotEmpty(),
+                        icon = Icons.AutoMirrored.Filled.Undo,
+                        label = "Undo"
+                    )
+                    CompactCapsule(
+                        onClick = {
+                            if (redoStack.isNotEmpty()) {
+                                undoStack.add(editText)
+                                val next = redoStack.removeAt(redoStack.size - 1)
+                                editText = next
+                                lastSnapshot = next
+                            }
+                        },
+                        enabled = redoStack.isNotEmpty(),
+                        icon = Icons.AutoMirrored.Filled.Redo,
+                        label = "Redo"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Fixed-size card; this is what scrolls internally as text grows, the
+                // sheet itself never resizes.
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    val cardScrollState = rememberScrollState()
+                    BasicTextField(
+                        value = editText,
+                        onValueChange = { editText = it },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .verticalScroll(cardScrollState)
+                            .bringIntoViewRequester(bringIntoViewRequester)
+                            .focusRequester(focusRequester)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    BouncyCapsule(
+                        onClick = onDismiss,
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cancel", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                    }
+                    BouncyCapsule(
+                        onClick = {
+                            coroutineScope.launch { onSave(editText) }
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 
