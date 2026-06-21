@@ -36,10 +36,9 @@ class RecordViewModel(
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
-    // Variable sementara buat nangkep return string path audio pas stop dipencet duluan
     private var pendingAudioPath: String? = null
 
-    fun toggleRecording(isEmulator: Boolean) {
+    fun toggleRecording(isEmulator: Boolean, recordMode: Int) {
         if (isRecording.value) {
             pendingAudioPath = audioRecorderManager.stopRecording()
             stopTimer()
@@ -47,7 +46,7 @@ class RecordViewModel(
         } else {
             _isPaused.value = false
             pendingAudioPath = null
-            audioRecorderManager.startRecording(isEmulator)
+            audioRecorderManager.startRecording(isEmulator, recordMode)
             startTimer()
         }
     }
@@ -105,15 +104,14 @@ class RecordViewModel(
         timerJob = null
     }
 
-    // Logic Fix: Nyambungin recordMode dengan path file dari manager
     suspend fun saveNote(recordMode: Int): Boolean {
         delay(300)
 
         val text = if (recordMode == 1) "Pending Transcription" else recognizedText.value.trim()
-        val path = pendingAudioPath // Nangkep path yang di-pass pas tombol stopRecordingInstant dipencet
+        val path = pendingAudioPath 
         
-        // Mencegah simpan jika teks kosong HANYA saat di mode Google dan tidak ada audionya
-        if (recordMode == 0 && text.isEmpty() && path == null) {
+        // Mencegah save kalau mode Google tapi teksnya kosong
+        if (recordMode == 0 && text.isEmpty()) {
             return false
         }
 
@@ -123,12 +121,11 @@ class RecordViewModel(
             rawText = text,
             summary = null,
             isPinned = false,
-            audioPath = path // <-- PATH FISIK SEKARANG DI-SAVE KE DATABASE!
+            audioPath = path
         )
         
         val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
 
-        // Skip AI Title generation kalau text-nya adalah "Pending Transcription" (Mode Gemini)
         if (apiKey.isNotBlank() && recordMode == 0) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
