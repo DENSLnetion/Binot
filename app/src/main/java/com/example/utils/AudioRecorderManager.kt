@@ -3,6 +3,8 @@ package com.example.utils
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognitionListener
@@ -15,12 +17,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.IOException
 import kotlin.random.Random
 import java.util.Locale
 
 class AudioRecorderManager(private val context: Context) {
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private var mediaRecorder: MediaRecorder? = null
+    private var currentAudioFilePath: String? = null // Logic Fix: Tambah state buat nangkep path fisik
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -133,6 +139,9 @@ class AudioRecorderManager(private val context: Context) {
         
         forceMuteAllBeeps()
         
+        // Logic Fix: Siapkan file untuk rekaman fisik
+        prepareMediaRecorder()
+
         if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
             startSimulatedRecording()
             return
@@ -140,17 +149,54 @@ class AudioRecorderManager(private val context: Context) {
 
         initSpeechRecognizer()
     }
+    
+    // Logic Fix: Fungsi rekaman murni untuk bikin file mp4/mp3
+    private fun prepareMediaRecorder() {
+        val dir = File(context.filesDir, "audio_records")
+        if (!dir.exists()) dir.mkdirs()
+        
+        val file = File(dir, "RECORD_${System.currentTimeMillis()}.mp4")
+        currentAudioFilePath = file.absolutePath
+
+        mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(context)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+        }.apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setOutputFile(currentAudioFilePath)
+            
+            try {
+                prepare()
+                start()
+            } catch (e: IOException) {
+                e.printStackTrace()
+                currentAudioFilePath = null
+            }
+        }
+    }
 
     fun pauseRecording() {
         if (!_isRecording.value || isPaused) return
         isPaused = true
         speechRecognizer?.stopListening()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try { mediaRecorder?.pause() } catch (e: Exception) { e.printStackTrace() }
+        }
         _amplitude.value = 0f
     }
 
     fun resumeRecording() {
         if (!_isRecording.value || !isPaused) return
         isPaused = false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try { mediaRecorder?.resume() } catch (e: Exception) { e.printStackTrace() }
+        }
 
         if (lastIsEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
             startSimulatedRecording()
@@ -229,10 +275,22 @@ class AudioRecorderManager(private val context: Context) {
         thread.start()
     }
 
+    // Logic Fix: Stop return string path dari file yang barusan dibikin
     fun stopRecording(): String? {
         _isRecording.value = false
         isPaused = false
+        
         speechRecognizer?.stopListening()
+        
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            currentAudioFilePath = null
+        }
+        mediaRecorder = null
+        
         _amplitude.value = 0f
 
         coroutineScope.launch {
@@ -240,6 +298,9 @@ class AudioRecorderManager(private val context: Context) {
             restoreAllVolumes()
         }
         
-        return null
+        val finalPath = currentAudioFilePath
+        currentAudioFilePath = null
+        return finalPath
     }
 }
+
