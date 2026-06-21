@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -94,6 +95,7 @@ fun SettingsScreen(
     val userName by viewModel.userName.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val recordMode by viewModel.recordMode.collectAsState() // Observe State baru
     
     val updateState by viewModel.updateState.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
@@ -101,6 +103,8 @@ fun SettingsScreen(
 
     var nameInput by remember(userName) { mutableStateOf(userName) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
+
+    var showInfoDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -116,6 +120,21 @@ fun SettingsScreen(
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { viewModel.importBackup(context, it) { msg -> coroutineScope.launch { snackbarHostState.showSnackbar(msg) } } }
+    }
+
+    if (showInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            title = { Text("Recording Modes") },
+            text = {
+                Text("Fast (Google):\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate (Gemini):\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showInfoDialog = false }) {
+                    Text("Got it")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -169,6 +188,38 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         BouncyButton(onClick = { viewModel.saveApiKey(keyInput); coroutineScope.launch { snackbarHostState.showSnackbar("API Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) {
                             Text("Save Key")
+                        }
+                    }
+                }
+
+                // Card baru untuk Mode Rekaman (Sesuai dengan instruksi lo)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Recording Mode", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.weight(1f))
+                            IconButton(onClick = { showInfoDialog = true }) {
+                                Icon(Icons.Default.Info, contentDescription = "Mode Info", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                onClick = { viewModel.saveRecordMode(0) },
+                                selected = recordMode == 0
+                            ) { Text("Fast (Google)") }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                onClick = { viewModel.saveRecordMode(1) },
+                                selected = recordMode == 1
+                            ) { Text("Accurate (Gemini)") }
                         }
                     }
                 }
