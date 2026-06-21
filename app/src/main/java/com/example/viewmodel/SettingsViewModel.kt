@@ -64,6 +64,13 @@ class SettingsViewModel(
         initialValue = 0
     )
 
+    // State baru untuk Record Mode
+    val recordMode: StateFlow<Int> = settingsRepository.recordModeFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
     private val _updateState = MutableStateFlow(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
@@ -95,6 +102,13 @@ class SettingsViewModel(
     fun saveThemeMode(mode: Int) {
         viewModelScope.launch {
             settingsRepository.saveThemeMode(mode)
+        }
+    }
+
+    // Fungsi baru untuk save Record Mode
+    fun saveRecordMode(mode: Int) {
+        viewModelScope.launch {
+            settingsRepository.saveRecordMode(mode)
         }
     }
 
