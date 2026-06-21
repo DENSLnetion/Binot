@@ -65,8 +65,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.MarkdownText
 import com.example.viewmodel.ResultViewModel
@@ -409,13 +414,33 @@ fun ResultScreen(
             },
             sheetState = editSheetState
         ) {
+            // Tembok Anti Bocor: Menghentikan sisa tarikan (overscroll) agar tidak merambat ke Bottom Sheet
+            val scrollWall = remember {
+                object : NestedScrollConnection {
+                    override fun onPostScroll(
+                        consumed: Offset,
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset {
+                        return available // Konsumsi semua sisa scroll
+                    }
+                    override suspend fun onPostFling(
+                        consumed: Velocity,
+                        available: Velocity
+                    ): Velocity {
+                        return available // Konsumsi semua sisa lemparan (fling)
+                    }
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.9f)
+                    .nestedScroll(scrollWall) // Pasang tembok scroll di sini
                     .draggable(
                         orientation = Orientation.Vertical,
-                        state = rememberDraggableState { } // Mati total! Consumes all swipe drags di bawah kepala bottom sheet
+                        state = rememberDraggableState { } // Matikan sisa direct drag non-scroll
                     )
                     .padding(horizontal = 24.dp)
             ) {
@@ -897,3 +922,4 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
+
