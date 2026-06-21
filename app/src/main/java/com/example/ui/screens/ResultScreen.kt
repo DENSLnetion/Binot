@@ -149,16 +149,10 @@ fun ResultScreen(
     var showHighlightDialog by remember { mutableStateOf(false) }
     var currentHighlightWord by remember { mutableStateOf("") }
     var highlightNoteInput by remember { mutableStateOf("") }
-    // Exact position of the highlight currently open in the dialog.
-    // pendingHighlightLine == -1 means "raw text" (start/end are offsets into rawText).
-    // pendingHighlightLine >= 0 means "markdown line" (start/end are offsets within that line).
-    // start == -1 means no position could be resolved (falls back to legacy text-only matching).
     var pendingHighlightLine by remember { mutableStateOf(-1) }
     var pendingHighlightStart by remember { mutableStateOf(-1) }
     var pendingHighlightEnd by remember { mutableStateOf(-1) }
 
-    // Resolver supplied by MarkdownText to turn a selection Rect + selected text
-    // into an exact (lineIndex, start, end) position within the rendered summary.
     var resolveMarkdownSelection by remember { mutableStateOf<((Rect, String) -> Triple<Int, Int, Int>?)?>(null) }
     var rawTextLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     var rawTextWindowBounds by remember { mutableStateOf<Rect?>(null) }
@@ -169,14 +163,14 @@ fun ResultScreen(
     // States for Custom Selection Toolbar
     var selectionRect by remember { mutableStateOf(Rect.Zero) }
     var showCustomMenu by remember { mutableStateOf(false) }
+    var isTextSelected by remember { mutableStateOf(false) } // State baru untuk mendeteksi seleksi
     var copyAction by remember { mutableStateOf<() -> Unit>({}) }
     var selectAllAction by remember { mutableStateOf<() -> Unit>({}) }
-    // Bumping this key forces SelectionContainer to recompose from scratch, which
-    // clears any active text selection. There's no public API to clear a selection
-    // programmatically, so this key-based reset is the standard workaround.
     var selectionResetKey by remember { mutableStateOf(0) }
+    
     val clearSelection: () -> Unit = {
         if (showCustomMenu) showCustomMenu = false
+        isTextSelected = false
         selectionResetKey++
     }
 
@@ -185,21 +179,14 @@ fun ResultScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Auto-scroll-while-selecting support: tracks the live pointer Y (in window
-    // coordinates) while a finger is down inside the selectable content, plus the
-    // content area's own window bounds, so a LaunchedEffect can scroll the active
-    // list/column for as long as the finger stays near the top/bottom edge.
     var selectionContentBounds by remember { mutableStateOf<Rect?>(null) }
     var dragPointerWindowY by remember { mutableStateOf<Float?>(null) }
     var isPointerDown by remember { mutableStateOf(false) }
 
-    // While the user is dragging a selection handle near the top/bottom edge of the
-    // visible content, keep scrolling in that direction so they can extend the
-    // selection past what's currently on screen, the same way native text fields do.
     LaunchedEffect(isPointerDown) {
         if (!isPointerDown) return@LaunchedEffect
-        val edgeThreshold = 72f // px from the edge that triggers scrolling
-        val maxScrollSpeedPx = 28f // px per tick at the very edge
+        val edgeThreshold = 72f 
+        val maxScrollSpeedPx = 28f 
         while (isPointerDown) {
             val pointerY = dragPointerWindowY
             val bounds = selectionContentBounds
@@ -218,7 +205,7 @@ fun ResultScreen(
                     }
                 }
             }
-            delay(16L) // ~60fps tick
+            delay(16L) 
         }
     }
 
@@ -262,8 +249,9 @@ fun ResultScreen(
         }
     )
 
+    // Hardware Back Button Override
     BackHandler(enabled = true) {
-        if (showCustomMenu) {
+        if (isTextSelected || showCustomMenu) {
             clearSelection()
         } else if (showCancelConfirmDialog) {
             showCancelConfirmDialog = false
@@ -282,16 +270,13 @@ fun ResultScreen(
         }
     }
 
-    // Safety net: if the user navigates away from this screen entirely (switches
-    // tabs, backgrounds the app via a route change, etc.) while a selection is
-    // still active, make sure it's cleared so it doesn't persist when they return.
     DisposableEffect(Unit) {
         onDispose {
             showCustomMenu = false
+            isTextSelected = false
         }
     }
 
-    // Custom Toolbar Logic Override
     val customTextToolbar = remember {
         object : TextToolbar {
             override var status: TextToolbarStatus = TextToolbarStatus.Hidden
@@ -299,6 +284,8 @@ fun ResultScreen(
             override fun hide() {
                 status = TextToolbarStatus.Hidden
                 showCustomMenu = false
+                // Kita tidak men-set isTextSelected = false di sini agar 
+                // tap/kembali masih dapat membatalkan seleksi walaupun menu hilang sementara.
             }
 
             override fun showMenu(
@@ -313,11 +300,11 @@ fun ResultScreen(
                 selectAllAction = onSelectAllRequested ?: {}
                 status = TextToolbarStatus.Shown
                 showCustomMenu = true
+                isTextSelected = true
             }
         }
     }
 
-    // Clipboard Injection Hack (to securely steal the selected text without overriding user's clipboard permanently)
     fun extractSelectedTextAndExecute(action: (String) -> Unit) {
         val oldClip = clipboardManager.getText()
         copyAction() 
@@ -327,7 +314,7 @@ fun ResultScreen(
         } else {
             clipboardManager.setText(AnnotatedString(""))
         }
-        showCustomMenu = false
+        clearSelection()
         action(newClip.trim())
     }
 
@@ -432,20 +419,13 @@ fun ResultScreen(
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
-                // This Box sits ABOVE SelectionContainer in the hierarchy (not inside it),
-                // so its Pass.Initial pointer handling runs before SelectionContainer's own
-                // internal gesture detection gets a chance to consume the tap. Putting the
-                // same detection inside the Column under SelectionContainer only worked at
-                // the very edges of the screen, because everywhere else SelectionContainer
-                // (or a child's own tap handler, e.g. for highlights) intercepted the tap
-                // first.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .onGloballyPositioned { coordinates ->
                             selectionContentBounds = coordinates.boundsInWindow()
                         }
-                        .pointerInput(showCustomMenu) {
+                        .pointerInput(isTextSelected) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(pass = PointerEventPass.Initial)
                                 isPointerDown = true
@@ -463,16 +443,15 @@ fun ResultScreen(
                                 } while (event.changes.any { it.pressed })
                                 isPointerDown = false
                                 dragPointerWindowY = null
-                                if (showCustomMenu && totalMovement < 24f) {
+                                
+                                // Reset selection if tap distance is minimal
+                                if (isTextSelected && totalMovement < 24f) {
                                     clearSelection()
                                 }
                             }
                         }
                 ) {
                 CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
-                    // Re-keying on selectionResetKey forces this subtree to be torn down and
-                    // rebuilt, which is the only reliable way to clear an active selection
-                    // since SelectionContainer doesn't expose a way to do it programmatically.
                     key(selectionResetKey) {
                         SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                         Column(
@@ -528,7 +507,6 @@ fun ResultScreen(
                                 )
                             } else if (!isLoading && note!!.rawText != "Pending Transcription") {
                                 val rawPrefix = "Raw Transcript:\n\n"
-                                // Triple(text, start, end) for highlights with exact position; note text kept alongside in a parallel map.
                                 val savedRawHighlights = remember(note!!.highlightsInfo) {
                                     val list = mutableListOf<Triple<String, Int, Int>>()
                                     val json = note!!.highlightsInfo
@@ -545,7 +523,6 @@ fun ResultScreen(
                                     }
                                     list
                                 }
-                                // Maps "text" (legacy) or "start:end" (positioned) -> note content, for quick lookup on tap.
                                 val rawHighlightNotesByKey = remember(note!!.highlightsInfo) {
                                     val map = mutableMapOf<String, String>()
                                     val json = note!!.highlightsInfo
@@ -596,46 +573,52 @@ fun ResultScreen(
                                         textColor = rawTextColor
                                     )
                                 }
-                                Text(
-                                    text = rawAnnotatedString,
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                                
+                                // FIX RAW TEXT SCROLL DAN HIGHLIGHT: Pindahkan verticalScroll ke parent Column
+                                Column(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp)
                                         .verticalScroll(rawTextScrollState)
-                                        .onGloballyPositioned { coordinates ->
-                                            rawTextWindowBounds = coordinates.boundsInWindow()
-                                        }
-                                        .pointerInput(rawAnnotatedString) {
-                                            detectTapGestures { pos ->
-                                                rawTextLayoutResult?.let { layoutResult ->
-                                                    val offset = layoutResult.getOffsetForPosition(pos)
-                                                    rawAnnotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
-                                                        .firstOrNull()?.let { annotation ->
-                                                            // annotation.item carries "word@@KEY@@key" so we can resolve the exact note + position.
-                                                            val parts = annotation.item.split("@@KEY@@")
-                                                            val displayWord = parts.getOrElse(0) { "" }
-                                                            val key = parts.getOrNull(1) ?: "legacy:$displayWord"
-                                                            currentHighlightWord = displayWord
-                                                            highlightNoteInput = rawHighlightNotesByKey[key] ?: ""
-                                                            if (key.startsWith("legacy:")) {
-                                                                pendingHighlightLine = -1
-                                                                pendingHighlightStart = -1
-                                                                pendingHighlightEnd = -1
-                                                            } else {
-                                                                val (s, e) = key.split(":").map { it.toInt() }
-                                                                pendingHighlightLine = -1
-                                                                pendingHighlightStart = s
-                                                                pendingHighlightEnd = e
-                                                            }
-                                                            showHighlightDialog = true
-                                                        }
-                                                }
+                                ) {
+                                    Text(
+                                        text = rawAnnotatedString,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onGloballyPositioned { coordinates ->
+                                                rawTextWindowBounds = coordinates.boundsInWindow()
                                             }
-                                        },
-                                    onTextLayout = { rawTextLayoutResult = it }
-                                )
+                                            .pointerInput(rawAnnotatedString) {
+                                                detectTapGestures { pos ->
+                                                    rawTextLayoutResult?.let { layoutResult ->
+                                                        val offset = layoutResult.getOffsetForPosition(pos)
+                                                        rawAnnotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
+                                                            .firstOrNull()?.let { annotation ->
+                                                                val parts = annotation.item.split("@@KEY@@")
+                                                                val displayWord = parts.getOrElse(0) { "" }
+                                                                val key = parts.getOrNull(1) ?: "legacy:$displayWord"
+                                                                currentHighlightWord = displayWord
+                                                                highlightNoteInput = rawHighlightNotesByKey[key] ?: ""
+                                                                if (key.startsWith("legacy:")) {
+                                                                    pendingHighlightLine = -1
+                                                                    pendingHighlightStart = -1
+                                                                    pendingHighlightEnd = -1
+                                                                } else {
+                                                                    val (s, e) = key.split(":").map { it.toInt() }
+                                                                    pendingHighlightLine = -1
+                                                                    pendingHighlightStart = s
+                                                                    pendingHighlightEnd = e
+                                                                }
+                                                                showHighlightDialog = true
+                                                            }
+                                                    }
+                                                }
+                                            },
+                                        onTextLayout = { rawTextLayoutResult = it }
+                                    )
+                                }
                             }
                         }
                         }
@@ -646,7 +629,6 @@ fun ResultScreen(
         }
     }
 
-    // --- MODAL DIALOG HIGHLIGHT NOTES ---
     if (showHighlightDialog) {
         fun closeHighlightDialog() {
             showHighlightDialog = false
@@ -708,7 +690,6 @@ fun ResultScreen(
         )
     }
 
-    // --- BOTTOM SHEET AI EXPLAIN ---
     if (showAiExplainSheet) {
         val explainResult by viewModel.explainResult.collectAsState()
         val isExplaining by viewModel.isExplaining.collectAsState()
@@ -753,7 +734,6 @@ fun ResultScreen(
         }
     }
 
-    // --- CUSTOM BUBBLE MENU ---
     if (showCustomMenu) {
         val density = LocalDensity.current
         Popup(
@@ -852,7 +832,7 @@ fun ResultScreen(
                     }
                     IconButton(onClick = { 
                         copyAction()
-                        showCustomMenu = false
+                        clearSelection()
                         coroutineScope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
                     }) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = MaterialTheme.colorScheme.inverseOnSurface)
@@ -1384,7 +1364,6 @@ fun buildHighlightedString(
 
     val fullLength = prefix.length + text.length
 
-    // Precise: highlight only the exact saved occurrence (start/end are offsets into `text`, not `prefix+text`).
     savedHighlights.forEach { (word, start, end) ->
         val localStart = start + prefix.length
         val localEnd = end + prefix.length
@@ -1403,7 +1382,6 @@ fun buildHighlightedString(
         }
     }
 
-    // Legacy fallback: no position info, so highlight every occurrence of the word (old behavior).
     val fullLower = (prefix + text).lowercase()
     legacyHighlights.keys.forEach { word ->
         val wordLower = word.lowercase()
@@ -1502,4 +1480,3 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
-
