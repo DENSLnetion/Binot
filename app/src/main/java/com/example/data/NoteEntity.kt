@@ -14,5 +14,6 @@ data class NoteEntity(
     val audioPath: String? = null,
     val label: String? = null,
     val isTrashed: Boolean = false,
-    val originalRawText: String? = null
+    val originalRawText: String? = null,
+    val highlightsInfo: String? = null // Format: JSON Array String -> [{"text":"highlighted_word", "note":"user_note"}]
 )
