@@ -36,20 +36,24 @@ class RecordViewModel(
     private val _isPaused = MutableStateFlow(false)
     val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
+    // Variable sementara buat nangkep return string path audio pas stop dipencet duluan
+    private var pendingAudioPath: String? = null
+
     fun toggleRecording(isEmulator: Boolean) {
         if (isRecording.value) {
-            audioRecorderManager.stopRecording()
+            pendingAudioPath = audioRecorderManager.stopRecording()
             stopTimer()
             _isPaused.value = false
         } else {
             _isPaused.value = false
+            pendingAudioPath = null
             audioRecorderManager.startRecording(isEmulator)
             startTimer()
         }
     }
 
     fun stopRecordingInstant() {
-        audioRecorderManager.stopRecording()
+        pendingAudioPath = audioRecorderManager.stopRecording()
         stopTimer()
         _isPaused.value = false
         _recordingSeconds.value = 0
@@ -71,7 +75,7 @@ class RecordViewModel(
 
     fun stopFromPaused(isEmulator: Boolean) {
         if (!_isPaused.value) return
-        audioRecorderManager.stopRecording()
+        pendingAudioPath = audioRecorderManager.stopRecording()
         _isPaused.value = false
         _recordingSeconds.value = 0
     }
@@ -101,15 +105,15 @@ class RecordViewModel(
         timerJob = null
     }
 
-    // Ubah method saveNote untuk nerima parameter recordMode (0 = Google, 1 = Gemini)
+    // Logic Fix: Nyambungin recordMode dengan path file dari manager
     suspend fun saveNote(recordMode: Int): Boolean {
         delay(300)
 
-        // Teks pakai placeholder kalau di mode Gemini, sebaliknya tetap ambil recognizedText
         val text = if (recordMode == 1) "Pending Transcription" else recognizedText.value.trim()
+        val path = pendingAudioPath // Nangkep path yang di-pass pas tombol stopRecordingInstant dipencet
         
-        // Mencegah simpan jika teks kosong HANYA saat di mode Google
-        if (recordMode == 0 && text.isEmpty()) {
+        // Mencegah simpan jika teks kosong HANYA saat di mode Google dan tidak ada audionya
+        if (recordMode == 0 && text.isEmpty() && path == null) {
             return false
         }
 
@@ -119,8 +123,9 @@ class RecordViewModel(
             rawText = text,
             summary = null,
             isPinned = false,
-            audioPath = null // AudioPath tetap null di sini, mengasumsikan sistem lo nyimpen file dari luar atau diubah di Result
+            audioPath = path // <-- PATH FISIK SEKARANG DI-SAVE KE DATABASE!
         )
+        
         val id = withContext(Dispatchers.IO) { repository.insert(note).toInt() }
 
         // Skip AI Title generation kalau text-nya adalah "Pending Transcription" (Mode Gemini)
@@ -152,6 +157,7 @@ class RecordViewModel(
             }
         }
 
+        pendingAudioPath = null
         return true
     }
 
