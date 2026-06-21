@@ -47,7 +47,7 @@ import java.util.Calendar
 fun RecordScreen(
     viewModel: RecordViewModel,
     userName: String,
-    recordMode: Int, // Parameter recordMode ditambahkan di sini
+    recordMode: Int,
     snackbarHostState: SnackbarHostState,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -169,7 +169,7 @@ fun RecordScreen(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = displayLiveText, // Implementasi Teks State Dinamis
+                    text = displayLiveText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Start,
@@ -244,7 +244,8 @@ fun RecordScreen(
                                                     launcher.launch(Manifest.permission.RECORD_AUDIO)
                                                 } else {
                                                     val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                                    viewModel.toggleRecording(isEmulator)
+                                                    // Logic Fix: Panggil toggleRecording dengan parameter recordMode
+                                                    viewModel.toggleRecording(isEmulator, recordMode)
                                                 }
                                             }
                                             isPaused -> viewModel.resumeRecording()
@@ -305,7 +306,7 @@ fun RecordScreen(
                                             viewModel.stopRecordingInstant()
 
                                             coroutineScope.launch {
-                                                // Oper value recordMode ke method saveNote
+                                                // Logic Fix: Save data pake parameter recordMode
                                                 val saved = viewModel.saveNote(recordMode)
                                                 snackbarHostState.showSnackbar(
                                                     message = if (saved) "Note saved" else "No text to save",
@@ -318,7 +319,6 @@ fun RecordScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (isStopPressed && recordMode == 1) {
-                                // Memicu animasi loading kecil ketika Mode Gemini di Stop
                                 CircularProgressIndicator(
                                     color = MaterialTheme.colorScheme.onTertiary,
                                     strokeWidth = 2.dp,
@@ -368,3 +368,4 @@ fun RecordScreen(
         }
     }
 }
+
