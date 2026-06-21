@@ -71,8 +71,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
@@ -227,7 +225,7 @@ fun ResultScreen(
                         }
                     },
                     actions = {
-                        if (showContent) {
+                        if (showContent && note?.rawText != "Pending Transcription") {
                             Box {
                                 IconButton(onClick = { showLanguageMenu = true }) {
                                     Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
@@ -259,7 +257,7 @@ fun ResultScreen(
                 )
             },
             floatingActionButton = {
-                if (note != null && note!!.summary.isNullOrEmpty() && !isLoading && showContent) {
+                if (note != null && note!!.summary.isNullOrEmpty() && !isLoading && showContent && note!!.rawText != "Pending Transcription") {
                     val isFabExpanded by remember { derivedStateOf { rawTextScrollState.value == 0 } }
                     with(sharedTransitionScope) {
                         ExtendedFloatingActionButton(
@@ -297,7 +295,8 @@ fun ResultScreen(
                                     AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        "AI is processing your text...",
+                                        // LOGIC FIX: Tampilkan pesan spesifik saat transkrip Gemini berjalan
+                                        text = if (note?.rawText == "Pending Transcription") "Transcribing your audio using Gemini..." else "AI is processing your text...",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         fontWeight = FontWeight.Medium
@@ -322,7 +321,8 @@ fun ResultScreen(
                                 listState = listState,
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
-                        } else if (!isLoading) {
+                        // LOGIC FIX: Mencegah text "Pending Transcription" dirender ke UI secara harfiah. 
+                        } else if (!isLoading && note!!.rawText != "Pending Transcription") {
                             Text(
                                 text = buildHighlightedString(
                                     text = "Raw Transcript:\n\n${note!!.rawText}", 
@@ -398,7 +398,7 @@ fun ResultScreen(
         )
     }
 
-    if (showEditSheet && note != null) {
+    if (showEditSheet && note != null && note!!.rawText != "Pending Transcription") {
         var textValue by remember(note!!.id) { mutableStateOf(TextFieldValue(note!!.rawText)) }
         val undoStack = remember { mutableStateListOf<TextFieldValue>() }
         val redoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -414,7 +414,6 @@ fun ResultScreen(
             },
             sheetState = editSheetState
         ) {
-            // Tembok Anti Bocor: Menghentikan sisa tarikan (overscroll) agar tidak merambat ke Bottom Sheet
             val scrollWall = remember {
                 object : NestedScrollConnection {
                     override fun onPostScroll(
@@ -422,13 +421,13 @@ fun ResultScreen(
                         available: Offset,
                         source: NestedScrollSource
                     ): Offset {
-                        return available // Konsumsi semua sisa scroll
+                        return available 
                     }
                     override suspend fun onPostFling(
                         consumed: Velocity,
                         available: Velocity
                     ): Velocity {
-                        return available // Konsumsi semua sisa lemparan (fling)
+                        return available 
                     }
                 }
             }
@@ -437,10 +436,10 @@ fun ResultScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(0.9f)
-                    .nestedScroll(scrollWall) // Pasang tembok scroll di sini
+                    .nestedScroll(scrollWall) 
                     .draggable(
                         orientation = Orientation.Vertical,
-                        state = rememberDraggableState { } // Matikan sisa direct drag non-scroll
+                        state = rememberDraggableState { } 
                     )
                     .padding(horizontal = 24.dp)
             ) {
@@ -680,7 +679,7 @@ fun ResultScreen(
                             Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.onSecondaryContainer)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Audio unavailable. This note was created via Live Dictation mode which processes speech in real-time without saving audio files.",
+                                text = "Audio unavailable. This note was created without saving audio or the file has been moved.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
