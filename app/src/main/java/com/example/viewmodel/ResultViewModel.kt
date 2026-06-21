@@ -121,6 +121,18 @@ class ResultViewModel(
         }
     }
 
+    fun updateRawText(newText: String) {
+        val currentNote = _note.value ?: return
+        if (newText == currentNote.rawText) return
+
+        val updatedNote = currentNote.copy(rawText = newText, timestamp = System.currentTimeMillis())
+        _note.value = updatedNote
+
+        viewModelScope.launch {
+            noteRepository.update(updatedNote)
+        }
+    }
+
     fun restoreRawText() {
         val currentNote = _note.value ?: return
         if (currentNote.summary == null) return
