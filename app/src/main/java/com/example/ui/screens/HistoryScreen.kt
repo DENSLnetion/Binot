@@ -74,7 +74,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -661,12 +660,6 @@ fun DismissibleNoteCard(
                     )
                     if (result == SnackbarResult.ActionPerformed) {
                         viewModel.undoDelete()
-                        // FIX LOGIKA BUG UI SWIPE: Paksa UI swipe buat balik ke posisi awal saat Undo sukses
-                        try {
-                            dismissState.reset()
-                        } catch (e: CancellationException) {
-                            // Abaikan kalau Coroutine di-cancel
-                        }
                     } else {
                         viewModel.clearRecentlyDeleted()
                     }
@@ -830,3 +823,4 @@ fun NoteCard(
         }
     }
 }
+
