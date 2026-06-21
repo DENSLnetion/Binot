@@ -24,10 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
-    onComplete: (String, String) -> Unit
+    onComplete: (String, Int, String) -> Unit // name, aiProvider (0=Gemini, 1=Groq), apiKey
 ) {
     val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
@@ -35,6 +35,7 @@ fun OnboardingScreen(
 
     var nameInput by remember { mutableStateOf("") }
     var apiKeyInput by remember { mutableStateOf("") }
+    var aiProvider by remember { mutableStateOf(1) } // Default to Groq (1) since it's recommended
 
     Scaffold(
         bottomBar = {
@@ -68,7 +69,7 @@ fun OnboardingScreen(
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                             }
                         } else {
-                            onComplete(nameInput.trim(), apiKeyInput.trim())
+                            onComplete(nameInput.trim(), aiProvider, apiKeyInput.trim())
                         }
                     },
                     enabled = when(pagerState.currentPage) {
@@ -113,7 +114,7 @@ fun OnboardingScreen(
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "Your smart voice assistant that perfectly summarizes everything you say using Google Gemini AI.",
+                            text = "Your smart voice assistant that perfectly summarizes everything you say using advanced AI.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
@@ -137,7 +138,7 @@ fun OnboardingScreen(
                         )
                     }
                     2 -> {
-                        // Page 3: API Key
+                        // Page 3: API Key & AI Provider
                         Text(
                             text = "Unlock the Brain",
                             style = MaterialTheme.typography.headlineLarge,
@@ -146,16 +147,31 @@ fun OnboardingScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Binot needs a Gemini API Key to process your voice into neat summaries.",
+                            text = "Choose your AI engine and paste the API Key. Groq is highly recommended for blazing fast speed!",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(24.dp))
+                        
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                onClick = { aiProvider = 0 },
+                                selected = aiProvider == 0
+                            ) { Text("Gemini") }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                onClick = { aiProvider = 1 },
+                                selected = aiProvider == 1
+                            ) { Text("Groq (Recommended)", textAlign = TextAlign.Center) }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
                         OutlinedTextField(
                             value = apiKeyInput,
                             onValueChange = { apiKeyInput = it },
-                            label = { Text("Paste API Key here") },
+                            label = { Text(if (aiProvider == 0) "Paste Gemini API Key" else "Paste Groq API Key") },
                             visualTransformation = PasswordVisualTransformation(),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -163,11 +179,12 @@ fun OnboardingScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         TextButton(
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))
+                                val url = if (aiProvider == 0) "https://aistudio.google.com/app/apikey" else "https://console.groq.com/keys"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
                             }
                         ) {
-                            Text("Get free API Key from Google AI Studio")
+                            Text(if (aiProvider == 0) "Get free key from Google AI Studio" else "Get free key from Groq Console")
                         }
                     }
                 }
