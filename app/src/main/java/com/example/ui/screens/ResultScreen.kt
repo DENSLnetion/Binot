@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.LinearEasing
@@ -20,6 +21,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,9 +39,12 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.MoreVert
@@ -53,19 +58,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -95,6 +102,7 @@ fun ResultScreen(
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
     
     var searchHighlightQuery by remember { mutableStateOf("") }
@@ -135,6 +143,8 @@ fun ResultScreen(
     BackHandler(enabled = true) {
         if (showSidePanel) {
             showSidePanel = false
+        } else if (showEditSheet) {
+            showEditSheet = false
         } else if (isTitleFocused) {
             focusManager.clearFocus()
         } else {
@@ -217,6 +227,25 @@ fun ResultScreen(
                     },
                     scrollBehavior = scrollBehavior
                 )
+            },
+            floatingActionButton = {
+                if (note != null && note!!.summary.isNullOrEmpty() && !isLoading && showContent) {
+                    val isFabExpanded by remember { derivedStateOf { rawTextScrollState.value == 0 } }
+                    with(sharedTransitionScope) {
+                        ExtendedFloatingActionButton(
+                            onClick = { showEditSheet = true },
+                            expanded = isFabExpanded,
+                            icon = { Icon(Icons.Default.Edit, "Edit") },
+                            text = { Text("Edit") },
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier
+                                .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
+                                .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
+                                .then(with(animatedVisibilityScope) { Modifier.animateEnterExit(enter = scaleIn(initialScale = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))) })
+                        )
+                    }
+                }
             }
         ) { paddingValues ->
             if (note == null || !showContent) {
@@ -309,6 +338,102 @@ fun ResultScreen(
             },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
+    }
+
+    if (showEditSheet && note != null) {
+        var textValue by remember(note!!.id) { mutableStateOf(TextFieldValue(note!!.rawText)) }
+        val undoStack = remember { mutableStateListOf<TextFieldValue>() }
+        val redoStack = remember { mutableStateListOf<TextFieldValue>() }
+
+        ModalBottomSheet(
+            onDismissRequest = { showEditSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(LocalConfiguration.current.screenHeightDp.dp * 0.8f)
+                    .padding(horizontal = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Edit Transcript", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BouncyCapsule(
+                            onClick = {
+                                if (undoStack.isNotEmpty()) {
+                                    redoStack.add(textValue)
+                                    textValue = undoStack.removeLast()
+                                }
+                            },
+                            containerColor = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, "Undo", tint = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        BouncyCapsule(
+                            onClick = {
+                                if (redoStack.isNotEmpty()) {
+                                    undoStack.add(textValue)
+                                    textValue = redoStack.removeLast()
+                                }
+                            },
+                            containerColor = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Redo, "Redo", tint = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { newValue ->
+                        if (newValue.text != textValue.text) {
+                            undoStack.add(textValue)
+                            redoStack.clear()
+                        }
+                        textValue = newValue
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp)
+                        .imePadding(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    BouncyCapsule(
+                        onClick = { showEditSheet = false },
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Batal", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                    }
+                    BouncyCapsule(
+                        onClick = {
+                            viewModel.updateRawText(textValue.text)
+                            showEditSheet = false
+                            coroutineScope.launch { snackbarHostState.showSnackbar("Teks berhasil diperbarui!") }
+                        },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Simpan", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 
     if (showSidePanel && note != null) {
@@ -665,4 +790,3 @@ private fun AiThinkingAnimation(color: Color) {
         }
     }
 }
-
