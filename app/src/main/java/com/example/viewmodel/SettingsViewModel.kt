@@ -34,7 +34,6 @@ class SettingsViewModel(
     private val noteRepository: NoteRepository 
 ) : ViewModel() {
 
-    // KUNCI: Indikator absolut pendeteksi kapan data selesai dibaca dari storage (Fix Flash Onboarding)
     private val _isDataLoaded = MutableStateFlow(false)
     val isDataLoaded: StateFlow<Boolean> = _isDataLoaded.asStateFlow()
 
@@ -57,6 +56,12 @@ class SettingsViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ""
     )
+
+    val groqApiKey: StateFlow<String> = settingsRepository.groqApiKeyFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ""
+    )
     
     val themeMode: StateFlow<Int> = settingsRepository.themeModeFlow.stateIn(
         scope = viewModelScope,
@@ -64,11 +69,16 @@ class SettingsViewModel(
         initialValue = 0
     )
 
-    // State baru untuk Record Mode
     val recordMode: StateFlow<Int> = settingsRepository.recordModeFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 0
+    )
+
+    val aiProvider: StateFlow<Int> = settingsRepository.aiProviderFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0 // 0 = Gemini, 1 = Groq
     )
 
     private val _updateState = MutableStateFlow(UpdateState.Idle)
@@ -88,28 +98,27 @@ class SettingsViewModel(
     private val adapter = moshi.adapter<List<NoteEntity>>(type)
 
     fun saveUserName(name: String) {
-        viewModelScope.launch {
-            settingsRepository.saveUserName(name)
-        }
+        viewModelScope.launch { settingsRepository.saveUserName(name) }
     }
 
     fun saveApiKey(key: String) {
-        viewModelScope.launch {
-            settingsRepository.saveGeminiApiKey(key)
-        }
+        viewModelScope.launch { settingsRepository.saveGeminiApiKey(key) }
+    }
+
+    fun saveGroqApiKey(key: String) {
+        viewModelScope.launch { settingsRepository.saveGroqApiKey(key) }
     }
 
     fun saveThemeMode(mode: Int) {
-        viewModelScope.launch {
-            settingsRepository.saveThemeMode(mode)
-        }
+        viewModelScope.launch { settingsRepository.saveThemeMode(mode) }
     }
 
-    // Fungsi baru untuk save Record Mode
     fun saveRecordMode(mode: Int) {
-        viewModelScope.launch {
-            settingsRepository.saveRecordMode(mode)
-        }
+        viewModelScope.launch { settingsRepository.saveRecordMode(mode) }
+    }
+
+    fun saveAiProvider(provider: Int) {
+        viewModelScope.launch { settingsRepository.saveAiProvider(provider) }
     }
 
     fun exportBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
@@ -117,7 +126,6 @@ class SettingsViewModel(
             try {
                 val notes = noteRepository.getAllNotesSync()
                 val jsonStr = adapter.toJson(notes)
-                
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                     outputStream.write(jsonStr.toByteArray())
                 }
@@ -141,10 +149,8 @@ class SettingsViewModel(
                         }
                     }
                 }
-                
                 val jsonStr = stringBuilder.toString()
                 val notes = adapter.fromJson(jsonStr)
-                
                 if (notes != null) {
                     noteRepository.insertNotes(notes) 
                     onResult("Restore successful!")
@@ -162,12 +168,9 @@ class SettingsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val release = RetrofitClient.githubService.getLatestRelease()
-                
                 _latestVersionStr.value = release.tag_name
-                
                 if (isVersionGreater(release.tag_name, currentVersion)) {
                     apkDownloadUrl = release.assets?.firstOrNull()?.browser_download_url
-                    
                     if (apkDownloadUrl != null) {
                         _updateState.value = UpdateState.Available
                     } else {
@@ -180,13 +183,9 @@ class SettingsViewModel(
                 }
             } catch (e: HttpException) {
                 e.printStackTrace()
-                if (e.code() == 403) {
-                    _latestVersionStr.value = "Server Limit (Coba lagi 1 jam)" 
-                } else if (e.code() == 404) {
-                    _latestVersionStr.value = "Belum Ada Rilis Tersedia"
-                } else {
-                    _latestVersionStr.value = "HTTP Error: ${e.code()}" 
-                }
+                if (e.code() == 403) _latestVersionStr.value = "Server Limit (Coba lagi 1 jam)" 
+                else if (e.code() == 404) _latestVersionStr.value = "Belum Ada Rilis Tersedia"
+                else _latestVersionStr.value = "HTTP Error: ${e.code()}" 
                 _updateState.value = UpdateState.Error
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -199,7 +198,6 @@ class SettingsViewModel(
     private fun isVersionGreater(latest: String, current: String): Boolean {
         val l = latest.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
         val c = current.replace("v", "").replace("V", "").split(".").map { it.toIntOrNull() ?: 0 }
-        
         for (i in 0 until maxOf(l.size, c.size)) {
             val lVal = l.getOrNull(i) ?: 0
             val cVal = c.getOrNull(i) ?: 0
@@ -229,7 +227,6 @@ class SettingsViewModel(
             while (isDownloading) {
                 val query = DownloadManager.Query().setFilterById(downloadId)
                 val cursor = downloadManager.query(query)
-                
                 if (cursor != null && cursor.moveToFirst()) {
                     val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
                     val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
@@ -245,9 +242,7 @@ class SettingsViewModel(
                             downloadedApkUri = downloadManager.getUriForDownloadedFile(downloadId)
                             _updateState.value = UpdateState.Downloaded
                             isDownloading = false
-                            
                             downloadedApkUri?.let { uri -> promptInstall(context, uri) }
-                            
                         } else if (status == DownloadManager.STATUS_FAILED) {
                             _latestVersionStr.value = "Download Failed by System"
                             _updateState.value = UpdateState.Error
