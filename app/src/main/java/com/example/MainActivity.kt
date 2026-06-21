@@ -31,7 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember // KUNCI: Import ini dikembalikan
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -157,6 +157,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 }
                 composable("record") {
                     val apiKey by settingsViewModel.apiKey.collectAsState()
+                    val recordMode by settingsViewModel.recordMode.collectAsState()
+                    
                     val recordViewModel: RecordViewModel = viewModel(
                         factory = RecordViewModel.provideFactory(
                             appContainer.audioRecorderManager,
@@ -167,6 +169,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     RecordScreen(
                         viewModel = recordViewModel,
                         userName = userName,
+                        recordMode = recordMode, // INI YANG BIKIN ERROR TADI (UDAH GW TAMBAHIN)
                         snackbarHostState = snackbarHostState,
                         animatedVisibilityScope = this@composable
                     )
@@ -217,3 +220,4 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
         }
     }
 }
+
