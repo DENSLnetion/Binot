@@ -60,8 +60,13 @@ class ResultViewModel(
         viewModelScope.launch {
             val fetchedNote = noteRepository.getNoteById(noteId)
             _note.value = fetchedNote
-            if (fetchedNote != null && fetchedNote.rawText.isBlank() && fetchedNote.audioPath != null) {
+            
+            // LOGIC FIX: Tangani teks kosong atau "Pending Transcription" dari mode Gemini Record
+            if (fetchedNote != null && (fetchedNote.rawText.isBlank() || fetchedNote.rawText == "Pending Transcription") && fetchedNote.audioPath != null) {
                 transcribeImportedAudio()
+            } else if (fetchedNote != null && fetchedNote.rawText == "Pending Transcription" && fetchedNote.audioPath == null) {
+                // Warning jika sistem tidak menyimpan file audio (mencegah silent bug)
+                _error.value = "Gagal transkrip: File audio tidak ditemukan di database. Pastikan RecordViewModel menyimpan path audio."
             }
         }
     }
@@ -256,20 +261,23 @@ class ResultViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val file = File(audioPath)
-                if (!file.exists()) throw Exception("Audio file missing from cache.")
+                if (!file.exists()) throw Exception("Audio file missing from device storage.")
                 
                 val bytes = file.readBytes()
                 val base64Audio = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                val mimeType = "audio/mp3"
+                val mimeType = "audio/mp3" // Gemini menoleransi berbagai mime audio standar
                 
+                // PROMPT FIX: Dirombak supaya sangat presisi, anti halusinasi, dan sesuai konteks transkripsi murni.
                 val promptText = """
-                    You are an expert audio transcriber. Transcribe the following audio precisely.
-                    CRITICAL MATHEMATICAL RULES:
-                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √). 
-                    2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
-                    STRICT FORMATTING RULES:
-                    1. DO NOT summarize. Output the exact raw transcript word-for-word.
-                    2. DO NOT add conversational filler or AI pleasantries. Just output the text.
+                    You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
+                    
+                    CRITICAL RULES:
+                    1. DO NOT hallucinate, guess, or make up words. If the audio is silent or contains no speech, output exactly "[No speech detected]".
+                    2. DO NOT summarize. Output the exact raw transcript.
+                    3. DO NOT add conversational filler, AI pleasantries, or introductions like "Here is the transcript".
+                    4. Automatically detect the spoken language and transcribe in that exact language.
+                    5. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √).
+                    6. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
                 """.trimIndent()
                 
                 val request = GenerateContentRequest(
@@ -282,13 +290,39 @@ class ResultViewModel(
                 )
                 
                 val response = RetrofitClient.service.generateContent(apiKey, request)
-                val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                val transcript = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
 
                 launch(Dispatchers.Main) {
-                    if (transcript != null) {
-                        val updatedNote = currentNote.copy(rawText = transcript.trim(), timestamp = System.currentTimeMillis())
+                    if (transcript != null && !transcript.contains("[No speech detected]")) {
+                        val updatedNote = currentNote.copy(rawText = transcript, timestamp = System.currentTimeMillis())
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
+                        
+                        // TITLE FIX: Generate AI Title setelah transkrip berhasil supaya nggak cuma pakai fallback.
+                        launch(Dispatchers.IO) {
+                            try {
+                                val titlePrompt = """
+                                    Buat judul singkat 3-5 kata dalam bahasa yang sama dengan teks berikut.
+                                    RULES:
+                                    - Hanya output judulnya saja, tanpa tanda kutip, tanpa penjelasan apapun.
+                                    - Maksimal 5 kata, padat dan informatif.
+                                    Teks: ${transcript.take(500)}
+                                """.trimIndent()
+                                val titleRequest = GenerateContentRequest(contents = listOf(Content(parts = listOf(Part(text = titlePrompt)))))
+                                val titleResponse = RetrofitClient.service.generateContent(apiKey, titleRequest)
+                                val aiTitle = titleResponse.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
+                                
+                                if (!aiTitle.isNullOrBlank()) {
+                                    val finalNote = updatedNote.copy(title = aiTitle)
+                                    _note.value = finalNote
+                                    noteRepository.update(finalNote)
+                                }
+                            } catch (e: Exception) {
+                                // Gagal generate title biarkan saja, yang penting transkrip udah disave.
+                            }
+                        }
+                    } else if (transcript?.contains("[No speech detected]") == true) {
+                        _error.value = "No clear speech detected in the audio recording."
                     } else { 
                         _error.value = "AI failed to process the transcript. The server response was empty." 
                     }
