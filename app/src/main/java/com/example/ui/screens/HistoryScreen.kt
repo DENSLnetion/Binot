@@ -58,7 +58,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -169,7 +168,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -690,14 +689,11 @@ fun DismissibleNoteCard(
                 note = note, 
                 isSelected = isSelected,
                 selectedLabels = selectedLabels,
-                modifier = Modifier
-                    .zIndex(if (animatedVisibilityScope.transition.isRunning) 1f else 0f)
-                    .sharedBounds(
-                        sharedContentState = rememberSharedContentState("note-${note.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                        renderInOverlayDuringTransition = false
-                    ),
+                modifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState("note-${note.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
                 onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -774,7 +770,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
