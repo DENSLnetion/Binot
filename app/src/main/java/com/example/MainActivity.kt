@@ -148,10 +148,14 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
-                        onComplete = { name, key ->
+                        onComplete = { name, provider, key ->
                             settingsViewModel.saveUserName(name)
-                            settingsViewModel.saveApiKey(key) 
-                            // PR buat lu: Tambahin form milih AI di onboarding nanti kalau mau
+                            settingsViewModel.saveAiProvider(provider)
+                            if (provider == 0) {
+                                settingsViewModel.saveApiKey(key)
+                            } else {
+                                settingsViewModel.saveGroqApiKey(key)
+                            }
                             navController.navigate("record") {
                                 popUpTo("onboarding") { inclusive = true }
                             }
@@ -214,7 +218,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                     
-                    // Tarik semua settingan krusial buat nge-render AI
                     val aiProvider by settingsViewModel.aiProvider.collectAsState()
                     val geminiKey by settingsViewModel.apiKey.collectAsState()
                     val groqKey by settingsViewModel.groqApiKey.collectAsState()
