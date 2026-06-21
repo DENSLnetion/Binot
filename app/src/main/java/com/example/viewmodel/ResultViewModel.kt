@@ -87,6 +87,15 @@ class ResultViewModel(
         }
     }
 
+    fun updateRawText(newRawText: String) {
+        val currentNote = _note.value ?: return
+        val updatedNote = currentNote.copy(rawText = newRawText, timestamp = System.currentTimeMillis())
+        _note.value = updatedNote
+        viewModelScope.launch { 
+            noteRepository.update(updatedNote) 
+        }
+    }
+
     fun toggleLabel(label: String) {
         val currentNote = _note.value ?: return
         val currentLabels = currentNote.label
@@ -231,7 +240,7 @@ class ResultViewModel(
                 val promptText = """
                     You are an expert audio transcriber. Transcribe the following audio precisely.
                     CRITICAL MATHEMATICAL RULES:
-                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, âˆ‘, Â², âˆš). 
+                    1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √). 
                     2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting. Write equations as plain normal text naturally integrated within the sentence.
                     STRICT FORMATTING RULES:
                     1. DO NOT summarize. Output the exact raw transcript word-for-word.
@@ -298,7 +307,7 @@ class ResultViewModel(
                     """
                         You are a professional proofreader and editor. Your task is to clean up and perfectly format the following raw voice transcript into $language WITHOUT summarizing or omitting any details.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, âˆ‘, Â², âˆš, âˆ«, Â½, /, =, âˆž). 
+                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
                         2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
                         STRICT FORMATTING RULES:
                         1. DO NOT summarize. Preserve every single detail, thought, and information from the raw transcript.
@@ -316,7 +325,7 @@ class ResultViewModel(
                     """
                         You are a professional minutes assistant. Your task is to clean up and summarize the following raw voice transcript into $language.
                         CRITICAL MATHEMATICAL RULES:
-                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, âˆ‘, Â², âˆš, âˆ«, Â½, /, =, âˆž). 
+                        1. If the transcript contains mathematical concepts, equations, or symbols spelled out in words (e.g., "tambah", "kurang", "sigma", "kuadrat", "akar", "integral", "setengah", "per", "sama dengan", "tak hingga"), you MUST forcefully convert them into strict Mathematical Unicode Symbols (e.g., +, -, ∑, ², √, ∫, ½, /, =, ∞). 
                         2. ABSOLUTELY NO BACKTICKS (`). DO NOT use Markdown code blocks or inline code formatting for math formulas. NEVER output the ` character anywhere. Write equations as plain normal text naturally integrated within the sentence.
                         STRICT FORMATTING RULES:
                         1. Ignore filler words (e.g., "umm", "uh") and fix broken sentence structures.
