@@ -74,6 +74,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -141,6 +143,19 @@ fun ResultScreen(
     var showHighlightDialog by remember { mutableStateOf(false) }
     var currentHighlightWord by remember { mutableStateOf("") }
     var highlightNoteInput by remember { mutableStateOf("") }
+    // Exact position of the highlight currently open in the dialog.
+    // pendingHighlightLine == -1 means "raw text" (start/end are offsets into rawText).
+    // pendingHighlightLine >= 0 means "markdown line" (start/end are offsets within that line).
+    // start == -1 means no position could be resolved (falls back to legacy text-only matching).
+    var pendingHighlightLine by remember { mutableStateOf(-1) }
+    var pendingHighlightStart by remember { mutableStateOf(-1) }
+    var pendingHighlightEnd by remember { mutableStateOf(-1) }
+
+    // Resolver supplied by MarkdownText to turn a selection Rect + selected text
+    // into an exact (lineIndex, start, end) position within the rendered summary.
+    var resolveMarkdownSelection by remember { mutableStateOf<((Rect, String) -> Triple<Int, Int, Int>?)?>(null) }
+    var rawTextLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    var rawTextWindowBounds by remember { mutableStateOf<Rect?>(null) }
 
     var showAiExplainSheet by remember { mutableStateOf(false) }
     var aiExplainTargetWord by remember { mutableStateOf("") }
@@ -394,29 +409,125 @@ fun ResultScreen(
                                     text = note!!.summary!!, 
                                     listState = listState,
                                     highlightsInfo = note!!.highlightsInfo,
-                                    onSavedHighlightClick = { word, noteText ->
+                                    onSavedHighlightClick = { word, noteText, line, start, end ->
                                         currentHighlightWord = word
                                         highlightNoteInput = noteText
+                                        pendingHighlightLine = line
+                                        pendingHighlightStart = start
+                                        pendingHighlightEnd = end
                                         showHighlightDialog = true
                                     },
+                                    onResolveSelection = { resolver -> resolveMarkdownSelection = resolver },
                                     highlightQuery = temporaryHighlight,
                                     fontFamily = selectedFont,
                                     modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                                 )
                             } else if (!isLoading && note!!.rawText != "Pending Transcription") {
-                                Text(
-                                    text = buildHighlightedString(
-                                        text = "Raw Transcript:\n\n${note!!.rawText}", 
+                                val rawPrefix = "Raw Transcript:\n\n"
+                                // Triple(text, start, end) for highlights with exact position; note text kept alongside in a parallel map.
+                                val savedRawHighlights = remember(note!!.highlightsInfo) {
+                                    val list = mutableListOf<Triple<String, Int, Int>>()
+                                    val json = note!!.highlightsInfo
+                                    if (!json.isNullOrBlank() && json != "[]") {
+                                        try {
+                                            val array = org.json.JSONArray(json)
+                                            for (i in 0 until array.length()) {
+                                                val obj = array.getJSONObject(i)
+                                                if (obj.optInt("line", -1) == -1 && obj.optInt("start", -1) >= 0) {
+                                                    list.add(Triple(obj.getString("text"), obj.getInt("start"), obj.getInt("end")))
+                                                }
+                                            }
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    }
+                                    list
+                                }
+                                // Maps "text" (legacy) or "start:end" (positioned) -> note content, for quick lookup on tap.
+                                val rawHighlightNotesByKey = remember(note!!.highlightsInfo) {
+                                    val map = mutableMapOf<String, String>()
+                                    val json = note!!.highlightsInfo
+                                    if (!json.isNullOrBlank() && json != "[]") {
+                                        try {
+                                            val array = org.json.JSONArray(json)
+                                            for (i in 0 until array.length()) {
+                                                val obj = array.getJSONObject(i)
+                                                val isRaw = obj.optInt("line", -1) == -1
+                                                if (!isRaw) continue
+                                                val start = obj.optInt("start", -1)
+                                                val key = if (start >= 0) "${obj.getInt("start")}:${obj.getInt("end")}" else "legacy:${obj.getString("text")}"
+                                                map[key] = obj.getString("note")
+                                            }
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    }
+                                    map
+                                }
+                                val legacyRawHighlights = remember(note!!.highlightsInfo) {
+                                    val map = mutableMapOf<String, String>()
+                                    val json = note!!.highlightsInfo
+                                    if (!json.isNullOrBlank() && json != "[]") {
+                                        try {
+                                            val array = org.json.JSONArray(json)
+                                            for (i in 0 until array.length()) {
+                                                val obj = array.getJSONObject(i)
+                                                if (obj.optInt("line", -1) == -1 && obj.optInt("start", -1) < 0) {
+                                                    map[obj.getString("text")] = obj.getString("note")
+                                                }
+                                            }
+                                        } catch (e: Exception) { e.printStackTrace() }
+                                    }
+                                    map
+                                }
+                                val rawAnnotatedString = remember(note!!.rawText, savedRawHighlights, legacyRawHighlights, temporaryHighlight) {
+                                    buildHighlightedString(
+                                        prefix = rawPrefix,
+                                        text = note!!.rawText,
                                         query = temporaryHighlight,
+                                        savedHighlights = savedRawHighlights,
+                                        legacyHighlights = legacyRawHighlights,
                                         highlightColor = Color.Yellow.copy(alpha = 0.5f),
+                                        savedHighlightColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        savedHighlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                         textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                    ),
+                                    )
+                                }
+                                Text(
+                                    text = rawAnnotatedString,
                                     style = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp)
                                         .verticalScroll(rawTextScrollState)
+                                        .onGloballyPositioned { coordinates ->
+                                            rawTextWindowBounds = coordinates.boundsInWindow()
+                                        }
+                                        .pointerInput(rawAnnotatedString) {
+                                            detectTapGestures { pos ->
+                                                rawTextLayoutResult?.let { layoutResult ->
+                                                    val offset = layoutResult.getOffsetForPosition(pos)
+                                                    rawAnnotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
+                                                        .firstOrNull()?.let { annotation ->
+                                                            // annotation.item carries "word@@KEY@@key" so we can resolve the exact note + position.
+                                                            val parts = annotation.item.split("@@KEY@@")
+                                                            val displayWord = parts.getOrElse(0) { "" }
+                                                            val key = parts.getOrNull(1) ?: "legacy:$displayWord"
+                                                            currentHighlightWord = displayWord
+                                                            highlightNoteInput = rawHighlightNotesByKey[key] ?: ""
+                                                            if (key.startsWith("legacy:")) {
+                                                                pendingHighlightLine = -1
+                                                                pendingHighlightStart = -1
+                                                                pendingHighlightEnd = -1
+                                                            } else {
+                                                                val (s, e) = key.split(":").map { it.toInt() }
+                                                                pendingHighlightLine = -1
+                                                                pendingHighlightStart = s
+                                                                pendingHighlightEnd = e
+                                                            }
+                                                            showHighlightDialog = true
+                                                        }
+                                                }
+                                            }
+                                        },
+                                    onTextLayout = { rawTextLayoutResult = it }
                                 )
                             }
                         }
@@ -428,8 +539,14 @@ fun ResultScreen(
 
     // --- MODAL DIALOG HIGHLIGHT NOTES ---
     if (showHighlightDialog) {
+        fun closeHighlightDialog() {
+            showHighlightDialog = false
+            pendingHighlightLine = -1
+            pendingHighlightStart = -1
+            pendingHighlightEnd = -1
+        }
         AlertDialog(
-            onDismissRequest = { showHighlightDialog = false },
+            onDismissRequest = { closeHighlightDialog() },
             title = { Text("Highlight Note") },
             text = {
                 Column {
@@ -446,8 +563,14 @@ fun ResultScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.saveHighlightNote(currentHighlightWord, highlightNoteInput)
-                    showHighlightDialog = false
+                    viewModel.saveHighlightNote(
+                        currentHighlightWord,
+                        highlightNoteInput,
+                        lineIndex = pendingHighlightLine,
+                        startIndex = pendingHighlightStart,
+                        endIndex = pendingHighlightEnd
+                    )
+                    closeHighlightDialog()
                 }) {
                     Text("Save")
                 }
@@ -456,15 +579,19 @@ fun ResultScreen(
                 Row {
                     TextButton(
                         onClick = {
-                            viewModel.removeHighlight(currentHighlightWord)
-                            showHighlightDialog = false
+                            viewModel.removeHighlight(
+                                currentHighlightWord,
+                                lineIndex = pendingHighlightLine,
+                                startIndex = pendingHighlightStart
+                            )
+                            closeHighlightDialog()
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("Remove")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    TextButton(onClick = { showHighlightDialog = false }) {
+                    TextButton(onClick = { closeHighlightDialog() }) {
                         Text("Cancel")
                     }
                 }
@@ -550,10 +677,64 @@ fun ResultScreen(
             ) {
                 Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { 
+                        val capturedRect = selectionRect
                         extractSelectedTextAndExecute { text ->
                             if (text.isNotBlank()) {
                                 currentHighlightWord = text
                                 highlightNoteInput = ""
+                                if (!note!!.summary.isNullOrEmpty()) {
+                                    val resolved = resolveMarkdownSelection?.invoke(capturedRect, text)
+                                    if (resolved != null) {
+                                        pendingHighlightLine = resolved.first
+                                        pendingHighlightStart = resolved.second
+                                        pendingHighlightEnd = resolved.third
+                                    } else {
+                                        pendingHighlightLine = -1
+                                        pendingHighlightStart = -1
+                                        pendingHighlightEnd = -1
+                                    }
+                                } else {
+                                    val rawPrefix = "Raw Transcript:\n\n"
+                                    val layoutResult = rawTextLayoutResult
+                                    val bounds = rawTextWindowBounds
+                                    if (layoutResult != null && bounds != null) {
+                                        val localX = (capturedRect.left - bounds.left).coerceIn(0f, bounds.width)
+                                        val localY = (capturedRect.center.y - bounds.top).coerceIn(0f, bounds.height)
+                                        val approxOffset = try {
+                                            layoutResult.getOffsetForPosition(androidx.compose.ui.geometry.Offset(localX, localY))
+                                        } catch (e: Exception) { -1 }
+                                        val fullText = rawPrefix + note!!.rawText
+                                        val fullLower = fullText.lowercase()
+                                        val textLower = text.lowercase()
+                                        var bestStart = -1
+                                        var bestDist = Int.MAX_VALUE
+                                        var searchFrom = 0
+                                        while (true) {
+                                            val idx = fullLower.indexOf(textLower, searchFrom)
+                                            if (idx == -1) break
+                                            if (approxOffset >= 0) {
+                                                val dist = kotlin.math.abs(idx - approxOffset)
+                                                if (dist < bestDist) { bestDist = dist; bestStart = idx }
+                                            } else if (bestStart == -1) {
+                                                bestStart = idx
+                                            }
+                                            searchFrom = idx + 1
+                                        }
+                                        if (bestStart >= rawPrefix.length) {
+                                            pendingHighlightLine = -1
+                                            pendingHighlightStart = bestStart - rawPrefix.length
+                                            pendingHighlightEnd = bestStart - rawPrefix.length + text.length
+                                        } else {
+                                            pendingHighlightLine = -1
+                                            pendingHighlightStart = -1
+                                            pendingHighlightEnd = -1
+                                        }
+                                    } else {
+                                        pendingHighlightLine = -1
+                                        pendingHighlightStart = -1
+                                        pendingHighlightEnd = -1
+                                    }
+                                }
                                 showHighlightDialog = true
                             }
                         }
@@ -1077,27 +1258,74 @@ fun ResultScreen(
     }
 }
 
-fun buildHighlightedString(text: String, query: String, highlightColor: Color, textColor: Color) = buildAnnotatedString {
-    if (query.isBlank()) {
-        withStyle(SpanStyle(color = textColor)) { append(text) }
-        return@buildAnnotatedString
+fun buildHighlightedString(
+    prefix: String = "",
+    text: String,
+    query: String,
+    savedHighlights: List<Triple<String, Int, Int>> = emptyList(),
+    legacyHighlights: Map<String, String> = emptyMap(),
+    highlightColor: Color,
+    savedHighlightColor: Color = highlightColor,
+    savedHighlightTextColor: Color = Color.Black,
+    textColor: Color
+) = buildAnnotatedString {
+    withStyle(SpanStyle(color = textColor)) { append(prefix) }
+    withStyle(SpanStyle(color = textColor)) { append(text) }
+
+    val fullLength = prefix.length + text.length
+
+    // Precise: highlight only the exact saved occurrence (start/end are offsets into `text`, not `prefix+text`).
+    savedHighlights.forEach { (word, start, end) ->
+        val localStart = start + prefix.length
+        val localEnd = end + prefix.length
+        if (localStart in 0 until fullLength && localEnd in (localStart + 1)..fullLength) {
+            addStyle(
+                style = SpanStyle(background = savedHighlightColor, color = savedHighlightTextColor, fontWeight = FontWeight.SemiBold),
+                start = localStart,
+                end = localEnd
+            )
+            addStringAnnotation(
+                tag = "SAVED_HIGHLIGHT",
+                annotation = "$word@@KEY@@$start:$end",
+                start = localStart,
+                end = localEnd
+            )
+        }
     }
-    
-    var startIndex = 0
-    val lowerText = text.lowercase()
-    val lowerQuery = query.lowercase()
-    
-    while (startIndex < text.length) {
-        val index = lowerText.indexOf(lowerQuery, startIndex)
-        if (index == -1) {
-            withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex)) }
-            break
+
+    // Legacy fallback: no position info, so highlight every occurrence of the word (old behavior).
+    val fullLower = (prefix + text).lowercase()
+    legacyHighlights.keys.forEach { word ->
+        val wordLower = word.lowercase()
+        if (wordLower.isBlank()) return@forEach
+        var idx = fullLower.indexOf(wordLower)
+        while (idx >= 0) {
+            addStyle(
+                style = SpanStyle(background = savedHighlightColor, color = savedHighlightTextColor, fontWeight = FontWeight.SemiBold),
+                start = idx,
+                end = idx + wordLower.length
+            )
+            addStringAnnotation(
+                tag = "SAVED_HIGHLIGHT",
+                annotation = "$word@@KEY@@legacy:$word",
+                start = idx,
+                end = idx + wordLower.length
+            )
+            idx = fullLower.indexOf(wordLower, idx + 1)
         }
-        withStyle(SpanStyle(color = textColor)) { append(text.substring(startIndex, index)) }
-        withStyle(SpanStyle(background = highlightColor, color = Color.Black)) {
-            append(text.substring(index, index + query.length))
+    }
+
+    if (query.isNotBlank()) {
+        val queryLower = query.lowercase()
+        var idx = fullLower.indexOf(queryLower)
+        while (idx >= 0) {
+            addStyle(
+                style = SpanStyle(background = highlightColor, color = Color.Black),
+                start = idx,
+                end = idx + queryLower.length
+            )
+            idx = fullLower.indexOf(queryLower, idx + 1)
         }
-        startIndex = index + query.length
     }
 }
 
