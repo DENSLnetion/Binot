@@ -10,9 +10,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
-import retrofit2.http.Multipart
 import retrofit2.http.POST
-import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
@@ -142,13 +140,14 @@ interface GroqApiService {
         @Body request: GroqChatRequest
     ): GroqChatResponse
 
-    @Multipart
+    // Menggunakan pemanggilan eksplisit supaya tidak bentrok dengan data class Part Gemini
+    @retrofit2.http.Multipart
     @POST("openai/v1/audio/transcriptions")
     suspend fun transcribeAudio(
         @Header("Authorization") authHeader: String,
-        @Part file: MultipartBody.Part,
-        @Part("model") model: RequestBody,
-        @Part("response_format") responseFormat: RequestBody
+        @retrofit2.http.Part file: MultipartBody.Part,
+        @retrofit2.http.Part("model") model: RequestBody,
+        @retrofit2.http.Part("response_format") responseFormat: RequestBody
     ): GroqAudioResponse
 }
 
@@ -200,3 +199,4 @@ object RetrofitClient {
             .create(GithubApiService::class.java)
     }
 }
+
