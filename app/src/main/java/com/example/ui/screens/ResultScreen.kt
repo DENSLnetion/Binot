@@ -102,7 +102,11 @@ fun ResultScreen(
     var showLanguageMenu by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
+    
     var showEditSheet by remember { mutableStateOf(false) }
+    var hasUnsavedChanges by remember { mutableStateOf(false) }
+    var showCancelConfirmDialog by remember { mutableStateOf(false) }
+
     var newLabelInput by remember { mutableStateOf("") }
     
     var searchHighlightQuery by remember { mutableStateOf("") }
@@ -140,11 +144,29 @@ fun ResultScreen(
         onNavigateBack()
     }
 
+    val editSheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { dismissValue ->
+            if (dismissValue == SheetValue.Hidden && hasUnsavedChanges) {
+                showCancelConfirmDialog = true
+                false // Mencegah sheet ketutup otomatis
+            } else {
+                true
+            }
+        }
+    )
+
     BackHandler(enabled = true) {
-        if (showSidePanel) {
+        if (showCancelConfirmDialog) {
+            showCancelConfirmDialog = false
+        } else if (showSidePanel) {
             showSidePanel = false
         } else if (showEditSheet) {
-            showEditSheet = false
+            if (hasUnsavedChanges) {
+                showCancelConfirmDialog = true
+            } else {
+                coroutineScope.launch { editSheetState.hide(); showEditSheet = false }
+            }
         } else if (isTitleFocused) {
             focusManager.clearFocus()
         } else {
@@ -314,6 +336,34 @@ fun ResultScreen(
         }
     }
 
+    if (showCancelConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelConfirmDialog = false },
+            title = { Text("Cancel editing?") },
+            text = { Text("You have unsaved changes. Are you sure you want to discard them?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCancelConfirmDialog = false
+                        hasUnsavedChanges = false // Bypass supaya tutupnya lancar
+                        coroutineScope.launch { 
+                            editSheetState.hide()
+                            showEditSheet = false 
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelConfirmDialog = false }) {
+                    Text("Keep editing")
+                }
+            }
+        )
+    }
+
     if (showNewLabelDialog) {
         AlertDialog(
             onDismissRequest = { showNewLabelDialog = false },
@@ -345,9 +395,16 @@ fun ResultScreen(
         val undoStack = remember { mutableStateListOf<TextFieldValue>() }
         val redoStack = remember { mutableStateListOf<TextFieldValue>() }
 
+        LaunchedEffect(textValue.text) {
+            hasUnsavedChanges = textValue.text != note!!.rawText
+        }
+
         ModalBottomSheet(
-            onDismissRequest = { showEditSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            onDismissRequest = {
+                if (hasUnsavedChanges) showCancelConfirmDialog = true
+                else showEditSheet = false
+            },
+            sheetState = editSheetState
         ) {
             Column(
                 modifier = Modifier
@@ -387,24 +444,33 @@ fun ResultScreen(
                     }
                 }
 
-                OutlinedTextField(
-                    value = textValue,
-                    onValueChange = { newValue ->
-                        if (newValue.text != textValue.text) {
-                            undoStack.add(textValue)
-                            redoStack.clear()
-                        }
-                        textValue = newValue
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = selectedFont),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(16.dp)
+                ) {
+                    BasicTextField(
+                        value = textValue,
+                        onValueChange = { newValue ->
+                            if (newValue.text != textValue.text) {
+                                undoStack.add(textValue)
+                                redoStack.clear()
+                            }
+                            textValue = newValue
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontFamily = selectedFont
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
                     )
-                )
+                }
 
                 Row(
                     modifier = Modifier
@@ -414,22 +480,31 @@ fun ResultScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     BouncyCapsule(
-                        onClick = { showEditSheet = false },
+                        onClick = { 
+                            if (hasUnsavedChanges) showCancelConfirmDialog = true
+                            else {
+                                coroutineScope.launch { editSheetState.hide(); showEditSheet = false }
+                            }
+                        },
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Batal", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                        Text("Cancel", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                     }
                     BouncyCapsule(
                         onClick = {
                             viewModel.updateRawText(textValue.text)
-                            showEditSheet = false
-                            coroutineScope.launch { snackbarHostState.showSnackbar("Teks berhasil diperbarui!") }
+                            hasUnsavedChanges = false // Bypass supaya animasi tutupnya clean
+                            coroutineScope.launch { 
+                                editSheetState.hide()
+                                showEditSheet = false 
+                                snackbarHostState.showSnackbar("Text saved!") 
+                            }
                         },
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Simpan", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                        Text("Save", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -592,7 +667,7 @@ fun ResultScreen(
                             BouncyCapsule(
                                 onClick = {
                                     viewModel.restoreRawText()
-                                    coroutineScope.launch { snackbarHostState.showSnackbar("Original raw text restored!") }
+                                    coroutineScope.launch { snackbarHostState.showSnackbar("AI summary removed!") }
                                     showSidePanel = false
                                 },
                                 containerColor = MaterialTheme.colorScheme.errorContainer
@@ -600,6 +675,33 @@ fun ResultScreen(
                                 Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (note!!.originalRawText != null && note!!.originalRawText != note!!.rawText && note!!.summary == null) {
+                        item {
+                            BouncyCapsule(
+                                onClick = {
+                                    viewModel.restoreOriginalRawText { previousNote ->
+                                        coroutineScope.launch {
+                                            val result = snackbarHostState.showSnackbar(
+                                                message = "Original raw text restored!",
+                                                actionLabel = "Undo",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) {
+                                                viewModel.undoRestoreRawText(previousNote)
+                                            }
+                                        }
+                                    }
+                                    showSidePanel = false
+                                },
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Icon(Icons.Default.Restore, contentDescription = "Restore Raw", tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Restore Original Text", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
