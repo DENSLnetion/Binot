@@ -92,6 +92,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val startDestination = if (userName.isBlank()) "onboarding" else "record"
 
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Logic Fix: Observe status rekaman secara global biar SettingsScreen tahu
+    val isRecordingGlobal by appContainer.audioRecorderManager.isRecording.collectAsState()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -169,7 +172,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     RecordScreen(
                         viewModel = recordViewModel,
                         userName = userName,
-                        recordMode = recordMode, // INI YANG BIKIN ERROR TADI (UDAH GW TAMBAHIN)
+                        recordMode = recordMode, 
                         snackbarHostState = snackbarHostState,
                         animatedVisibilityScope = this@composable
                     )
@@ -198,7 +201,16 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 composable("settings") {
                     SettingsScreen(
                         viewModel = settingsViewModel,
-                        animatedVisibilityScope = this@composable
+                        animatedVisibilityScope = this@composable,
+                        isRecording = isRecordingGlobal, // Pass status recording
+                        onDiscardRecording = { 
+                            // Buang recording langsung tanpa di-save
+                            val path = appContainer.audioRecorderManager.stopRecording()
+                            // Hapus file fisik secara manual kalau ada (Accurate Mode)
+                            if (path != null) {
+                                try { java.io.File(path).delete() } catch (e: Exception) {}
+                            }
+                        }
                     )
                 }
                 composable("result/{noteId}") { backStackEntry ->
