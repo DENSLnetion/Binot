@@ -645,70 +645,75 @@ fun DismissibleNoteCard(
     onSelect: () -> Unit,
     onLongSelect: () -> Unit
 ) {
-    // FIX LOGIKA COMPOSE: Gunakan key(note.id) agar saat note di-undo, 
-    // Compose membuat instance SwipeToDismissBoxState baru yang fresh, 
-    // bukan memakai instance lama yang nge-bug karena mikir dia masih lagi di-swipe.
-    key(note.id) {
-        val dismissState = rememberSwipeToDismissBoxState(
-            confirmValueChange = { dismissValue ->
-                if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
-                    viewModel.deleteMultiple(setOf(note.id))
-                    parentScope.launch {
-                        val result = snackbarHostState.showSnackbar(
-                            message = "Note moved to Trash",
-                            actionLabel = "Undo",
-                            duration = SnackbarDuration.Short
-                        )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            viewModel.undoDelete()
-                        } else {
-                            viewModel.clearRecentlyDeleted()
-                        }
-                    }
-                    true
-                } else false
-            }
-        )
-
-        SwipeToDismissBox(
-            state = dismissState,
-            enableDismissFromStartToEnd = !selectionMode,
-            enableDismissFromEndToStart = !selectionMode,
-            backgroundContent = {
-                val color by animateColorAsState(
-                    targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                    label = "deleteColor"
-                )
-                val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(color, RoundedCornerShape(16.dp))
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = alignment
-                ) {
-                    if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+    // Kita BUANG key() yang bikin animasi freeze.
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                viewModel.deleteMultiple(setOf(note.id))
+                parentScope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Note moved to Trash",
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoDelete()
+                    } else {
+                        viewModel.clearRecentlyDeleted()
                     }
                 }
-            },
-            modifier = modifier
-        ) {
-            with(sharedTransitionScope) {
-                NoteCard(
-                    note = note, 
-                    isSelected = isSelected,
-                    selectedLabels = selectedLabels,
-                    modifier = Modifier.sharedBounds(
-                        sharedContentState = rememberSharedContentState("note-${note.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
-                    ),
-                    onLongClick = onLongSelect,
-                    onClick = onSelect,
-                    onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
-                )
+                true
+            } else false
+        }
+    )
+
+    // SOLUSI LOGIKA MURNI PENUMPAS AS* DAN MB*T:
+    // Gunakan snapTo() (teleportasi instan tanpa animasi) untuk menetralkan dosa offset masa lalu 
+    // tiap kali card ini dimunculkan ulang oleh Jetpack Compose.
+    LaunchedEffect(note.id) {
+        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled || dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+        }
+    }
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = !selectionMode,
+        enableDismissFromEndToStart = !selectionMode,
+        backgroundContent = {
+            val color by animateColorAsState(
+                targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
+                label = "deleteColor"
+            )
+            val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(color, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 24.dp),
+                contentAlignment = alignment
+            ) {
+                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+                }
             }
+        },
+        modifier = modifier
+    ) {
+        with(sharedTransitionScope) {
+            NoteCard(
+                note = note, 
+                isSelected = isSelected,
+                selectedLabels = selectedLabels,
+                modifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState("note-${note.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                ),
+                onLongClick = onLongSelect,
+                onClick = onSelect,
+                onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
+            )
         }
     }
 }
@@ -825,3 +830,4 @@ fun NoteCard(
         }
     }
 }
+
