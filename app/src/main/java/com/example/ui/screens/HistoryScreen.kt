@@ -692,7 +692,8 @@ fun DismissibleNoteCard(
                 modifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("note-${note.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                    renderInOverlayDuringTransition = false
                 ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
