@@ -645,7 +645,8 @@ fun DismissibleNoteCard(
     onSelect: () -> Unit,
     onLongSelect: () -> Unit
 ) {
-    // Kita BUANG key() yang bikin animasi freeze.
+    // FIX PALING LOGIS: Biarkan Compose nge-reset animasi visualnya ke tengah (Return FALSE).
+    // Data tetap kehapus kok karena viewModel.deleteMultiple() jalan duluan.
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
@@ -662,19 +663,14 @@ fun DismissibleNoteCard(
                         viewModel.clearRecentlyDeleted()
                     }
                 }
-                true
-            } else false
+                // RETURN FALSE!
+                // Supaya mesin Jetpack Compose langsung mutus status "kegeser" tanpa perlawanan.
+                false
+            } else {
+                false
+            }
         }
     )
-
-    // SOLUSI LOGIKA MURNI PENUMPAS AS* DAN MB*T:
-    // Gunakan snapTo() (teleportasi instan tanpa animasi) untuk menetralkan dosa offset masa lalu 
-    // tiap kali card ini dimunculkan ulang oleh Jetpack Compose.
-    LaunchedEffect(note.id) {
-        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled || dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-        }
-    }
 
     SwipeToDismissBox(
         state = dismissState,
@@ -830,4 +826,3 @@ fun NoteCard(
         }
     }
 }
-
