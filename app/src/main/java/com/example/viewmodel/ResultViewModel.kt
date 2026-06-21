@@ -89,7 +89,12 @@ class ResultViewModel(
 
     fun updateRawText(newRawText: String) {
         val currentNote = _note.value ?: return
-        val updatedNote = currentNote.copy(rawText = newRawText, timestamp = System.currentTimeMillis())
+        val original = currentNote.originalRawText ?: currentNote.rawText
+        val updatedNote = currentNote.copy(
+            rawText = newRawText,
+            originalRawText = original,
+            timestamp = System.currentTimeMillis()
+        )
         _note.value = updatedNote
         viewModelScope.launch { 
             noteRepository.update(updatedNote) 
@@ -140,6 +145,26 @@ class ResultViewModel(
         viewModelScope.launch { 
             noteRepository.update(updatedNote) 
         }
+    }
+
+    fun restoreOriginalRawText(onUndoAvailable: (NoteEntity) -> Unit) {
+        val currentNote = _note.value ?: return
+        if (currentNote.originalRawText == null) return
+
+        val previousNote = currentNote.copy()
+        val updatedNote = currentNote.copy(
+            rawText = currentNote.originalRawText,
+            timestamp = System.currentTimeMillis()
+        )
+        _note.value = updatedNote
+        viewModelScope.launch { noteRepository.update(updatedNote) }
+        
+        onUndoAvailable(previousNote)
+    }
+
+    fun undoRestoreRawText(previousNote: NoteEntity) {
+        _note.value = previousNote
+        viewModelScope.launch { noteRepository.update(previousNote) }
     }
 
     fun toggleAudio() {
