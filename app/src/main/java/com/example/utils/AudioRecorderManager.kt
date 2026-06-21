@@ -68,6 +68,7 @@ class AudioRecorderManager(private val context: Context) {
             }
 
             try { audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT } catch (e: Exception) {}
+
             try { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0) } catch (e: Exception) {}
             try { audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0) } catch (e: Exception) {}
@@ -139,10 +140,10 @@ class AudioRecorderManager(private val context: Context) {
         
         forceMuteAllBeeps()
         
-        if (mode == 1) { // Gemini Mode (Accurate): MediaRecorder nyimpen fisik
+        if (mode == 1) { 
             prepareMediaRecorder()
             startFakeAmplitude() 
-        } else { // Google Mode (Fast): SpeechRecognizer nyimpen live text, GAK NYIMPEN fisik
+        } else { 
             if (isEmulator || !SpeechRecognizer.isRecognitionAvailable(context)) {
                 startSimulatedRecording()
             } else {
@@ -263,15 +264,26 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
+    // Logic Murni: Perhitungan Amplitude MediaRecorder diubah ke skala Logaritmik (dB) dan Polling di-kencengin!
     private fun startFakeAmplitude() {
         coroutineScope.launch {
             while (_isRecording.value && !isPaused && currentRecordMode == 1) {
                 _amplitude.value = if (mediaRecorder != null) {
-                     try { (mediaRecorder!!.maxAmplitude / 32767f).coerceIn(0.05f, 1f) } catch (e: Exception) { 0f }
+                     try { 
+                         val amp = mediaRecorder!!.maxAmplitude
+                         if (amp > 0) {
+                             // Konversi raw linear ke decibel biar sensitif nangkap suara pelan
+                             val db = 20 * Math.log10(amp.toDouble() / 32767.0)
+                             // Mapping rentang -45dB (silence) s/d 0dB ke range 0.02 s/d 1.0
+                             ((db + 45) / 45).coerceIn(0.02, 1.0).toFloat()
+                         } else {
+                             0.02f
+                         }
+                     } catch (e: Exception) { 0.02f }
                 } else {
-                     Random.nextFloat() * 0.5f 
+                     0.02f 
                 }
-                delay(100) 
+                delay(30) // 30ms delay = ~33 FPS! Dijamin ngacir dan lincah grafiknya.
             }
             _amplitude.value = 0f
         }
@@ -311,7 +323,7 @@ class AudioRecorderManager(private val context: Context) {
             mediaRecorder = null
         } else {
             speechRecognizer?.stopListening()
-            currentAudioFilePath = null // Pastikan null di mode Google
+            currentAudioFilePath = null 
         }
         
         _amplitude.value = 0f
