@@ -58,6 +58,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -689,12 +690,14 @@ fun DismissibleNoteCard(
                 note = note, 
                 isSelected = isSelected,
                 selectedLabels = selectedLabels,
-                modifier = Modifier.sharedBounds(
-                    sharedContentState = rememberSharedContentState("note-${note.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    renderInOverlayDuringTransition = false
-                ),
+                modifier = Modifier
+                    .zIndex(if (animatedVisibilityScope.transition.isRunning) 1f else 0f)
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState("note-${note.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                        renderInOverlayDuringTransition = false
+                    ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
                 onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
