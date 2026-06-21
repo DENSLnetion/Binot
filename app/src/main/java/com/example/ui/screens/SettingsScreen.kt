@@ -98,18 +98,22 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val userName by viewModel.userName.collectAsState()
-    val apiKey by viewModel.apiKey.collectAsState()
+    val geminiApiKey by viewModel.apiKey.collectAsState()
+    val groqApiKey by viewModel.groqApiKey.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val recordMode by viewModel.recordMode.collectAsState() 
+    val aiProvider by viewModel.aiProvider.collectAsState() // 0 = Gemini, 1 = Groq
     
     val updateState by viewModel.updateState.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val latestVersionStr by viewModel.latestVersionStr.collectAsState()
 
     var nameInput by remember(userName) { mutableStateOf(userName) }
-    var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
+    var geminiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
+    var groqKeyInput by remember(groqApiKey) { mutableStateOf(groqApiKey) }
 
     var showInfoDialog by remember { mutableStateOf(false) }
+    var showAiInfoDialog by remember { mutableStateOf(false) }
     var showWarningDialog by remember { mutableStateOf(false) }
     var pendingModeSelection by remember { mutableStateOf(-1) }
 
@@ -133,14 +137,17 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showInfoDialog = false },
             title = { Text("Recording Modes") },
-            text = {
-                Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.")
-            },
-            confirmButton = {
-                TextButton(onClick = { showInfoDialog = false }) {
-                    Text("Got it")
-                }
-            }
+            text = { Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.") },
+            confirmButton = { TextButton(onClick = { showInfoDialog = false }) { Text("Got it") } }
+        )
+    }
+
+    if (showAiInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showAiInfoDialog = false },
+            title = { Text("AI Providers") },
+            text = { Text("Google Gemini:\nSangat handal untuk merangkum dan mampu menelan file audio raksasa (Berjam-jam). Kekurangannya, rate limit Google cukup ketat untuk API gratisan.\n\nGroq AI:\nJauh lebih cepat (Blazing Fast) dan rate limit tebal untuk teks. Kekurangannya, file audio dibatasi maksimal 25MB (sekitar 30 menit).") },
+            confirmButton = { TextButton(onClick = { showAiInfoDialog = false }) { Text("Paham") } }
         )
     }
 
@@ -160,15 +167,9 @@ fun SettingsScreen(
                         showWarningDialog = false
                         pendingModeSelection = -1
                     }
-                ) {
-                    Text("Continue")
-                }
+                ) { Text("Continue") }
             },
-            dismissButton = {
-                TextButton(onClick = { showWarningDialog = false; pendingModeSelection = -1 }) {
-                    Text("Cancel")
-                }
-            }
+            dismissButton = { TextButton(onClick = { showWarningDialog = false; pendingModeSelection = -1 }) { Text("Cancel") } }
         )
     }
 
@@ -217,12 +218,51 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Gemini API Key", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(value = keyInput, onValueChange = { keyInput = it }, label = { Text("Enter API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(12.dp))
-                        BouncyButton(onClick = { viewModel.saveApiKey(keyInput); coroutineScope.launch { snackbarHostState.showSnackbar("API Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) {
-                            Text("Save Key")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("AI Configuration", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.weight(1f))
+                            IconButton(onClick = { showAiInfoDialog = true }) {
+                                Icon(Icons.Default.Info, contentDescription = "AI Info", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                onClick = { viewModel.saveAiProvider(0) },
+                                selected = aiProvider == 0
+                            ) { Text("Gemini") }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                onClick = { viewModel.saveAiProvider(1) },
+                                selected = aiProvider == 1
+                            ) { Text("Groq") }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        AnimatedContent(targetState = aiProvider, label = "ApiKeyInput") { provider ->
+                            if (provider == 0) {
+                                Column {
+                                    OutlinedTextField(value = geminiKeyInput, onValueChange = { geminiKeyInput = it }, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Get key at: aistudio.google.com", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))) })
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    BouncyButton(onClick = { viewModel.saveApiKey(geminiKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
+                                }
+                            } else {
+                                Column {
+                                    OutlinedTextField(value = groqKeyInput, onValueChange = { groqKeyInput = it }, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Get key at: console.groq.com/keys", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))) })
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    BouncyButton(onClick = { viewModel.saveGroqApiKey(groqKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Groq Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
+                                }
+                            }
                         }
                     }
                 }
@@ -346,7 +386,6 @@ fun SettingsScreen(
                     }
                 }
                 
-                // Donation Card
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp),
@@ -365,7 +404,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // GitHub Repository Card
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp),
