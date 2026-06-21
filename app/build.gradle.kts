@@ -14,9 +14,8 @@ android {
     applicationId = "com.aistudio.binot.xrztp"
     minSdk = 24
     targetSdk = 36
-    // NAIKIN JADI VERSI 1.0.0
-    versionCode = 2 
-    versionName = "1.0.0"
+    versionCode = 3 
+    versionName = "1.0.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
