@@ -292,17 +292,34 @@ class ResultViewModel(
     }
 
     // HIGHLIGHT NOTES LOGIC
-    fun saveHighlightNote(highlightText: String, noteText: String) {
+    // startIndex/endIndex pin this highlight to ONE specific occurrence of the text
+    // (the exact spot the user selected), instead of matching every occurrence of
+    // the same word elsewhere in the note. startIndex = -1 means "no position info"
+    // (legacy data) and falls back to matching by text only.
+    // lineIndex distinguishes WHERE the position is measured from: -1 for raw text
+    // (start/end are offsets into the whole rawText), >= 0 for a markdown summary
+    // line (start/end are offsets within that specific line).
+    fun saveHighlightNote(highlightText: String, noteText: String, lineIndex: Int = -1, startIndex: Int = -1, endIndex: Int = -1) {
         val currentNote = _note.value ?: return
         val currentJson = currentNote.highlightsInfo ?: "[]"
-        
+
         try {
             val jsonArray = JSONArray(currentJson)
             var found = false
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                if (obj.getString("text") == highlightText) {
+                val sameSpot = startIndex >= 0 &&
+                    obj.optInt("start", -1) == startIndex &&
+                    obj.optInt("line", -1) == lineIndex
+                val sameLegacyText = startIndex < 0 && obj.getString("text") == highlightText && obj.optInt("start", -1) < 0
+                if (sameSpot || sameLegacyText) {
                     obj.put("note", noteText)
+                    obj.put("text", highlightText)
+                    if (startIndex >= 0) {
+                        obj.put("line", lineIndex)
+                        obj.put("start", startIndex)
+                        obj.put("end", endIndex)
+                    }
                     found = true
                     break
                 }
@@ -311,6 +328,11 @@ class ResultViewModel(
                 val newObj = JSONObject().apply {
                     put("text", highlightText)
                     put("note", noteText)
+                    if (startIndex >= 0) {
+                        put("line", lineIndex)
+                        put("start", startIndex)
+                        put("end", endIndex)
+                    }
                 }
                 jsonArray.put(newObj)
             }
@@ -326,7 +348,7 @@ class ResultViewModel(
         }
     }
 
-    fun removeHighlight(highlightText: String) {
+    fun removeHighlight(highlightText: String, lineIndex: Int = -1, startIndex: Int = -1) {
         val currentNote = _note.value ?: return
         val currentJson = currentNote.highlightsInfo ?: return
         
@@ -335,7 +357,12 @@ class ResultViewModel(
             val newArray = JSONArray()
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                if (obj.getString("text") != highlightText) {
+                val sameSpot = startIndex >= 0 &&
+                    obj.optInt("start", -1) == startIndex &&
+                    obj.optInt("line", -1) == lineIndex
+                val sameLegacyText = startIndex < 0 && obj.getString("text") == highlightText && obj.optInt("start", -1) < 0
+                val shouldRemove = sameSpot || sameLegacyText
+                if (!shouldRemove) {
                     newArray.put(obj)
                 }
             }
