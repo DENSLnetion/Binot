@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -20,7 +21,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -90,8 +93,8 @@ private fun BouncyOutlinedButton(
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    isRecording: Boolean = false, // Logic Fix: Nangkep status recording
-    onDiscardRecording: () -> Unit = {} // Logic Fix: Eksekusi force stop
+    isRecording: Boolean = false,
+    onDiscardRecording: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val userName by viewModel.userName.collectAsState()
@@ -107,8 +110,8 @@ fun SettingsScreen(
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
 
     var showInfoDialog by remember { mutableStateOf(false) }
-    var showWarningDialog by remember { mutableStateOf(false) } // Dialog konfirmasi hapus rekaman
-    var pendingModeSelection by remember { mutableStateOf(-1) } // Nampung pilihan sementara user
+    var showWarningDialog by remember { mutableStateOf(false) }
+    var pendingModeSelection by remember { mutableStateOf(-1) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -145,14 +148,14 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showWarningDialog = false; pendingModeSelection = -1 },
             title = { Text("Warning") },
-            text = { Text("Recording will be stopped and discarded. Continue?") }, // Teks sesuai request lo
+            text = { Text("Recording will be stopped and discarded. Continue?") },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     onClick = {
-                        onDiscardRecording() // Buang rekaman
+                        onDiscardRecording()
                         if (pendingModeSelection != -1) {
-                            viewModel.saveRecordMode(pendingModeSelection) // Ganti mode
+                            viewModel.saveRecordMode(pendingModeSelection)
                         }
                         showWarningDialog = false
                         pendingModeSelection = -1
@@ -254,7 +257,7 @@ fun SettingsScreen(
                                     }
                                 },
                                 selected = recordMode == 0
-                            ) { Text("Fast") } // Text disederhanakan
+                            ) { Text("Fast") }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                                 onClick = { 
@@ -268,7 +271,7 @@ fun SettingsScreen(
                                     }
                                 },
                                 selected = recordMode == 1
-                            ) { Text("Accurate") } // Text disederhanakan
+                            ) { Text("Accurate") }
                         }
                     }
                 }
@@ -342,9 +345,47 @@ fun SettingsScreen(
                         }
                     }
                 }
+                
+                // Donation Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://saweria.co/Densl"))
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("Support Development", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("Donate via Saweria", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                // GitHub Repository Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot"))
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("GitHub Repository", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("Star the repo or report an issue", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }
 }
-
