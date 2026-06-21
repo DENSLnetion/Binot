@@ -128,6 +128,10 @@ fun HistoryScreen(
         catch (e: Exception) { "1.0.0" }
     }
 
+    // FIX GLITCH Z-INDEX LAYER MENU SAMPING: 
+    // Mengunci semua interaksi laci / side panel ketika SharedTransition (animasi mengecil/membesar) masih berjalan!
+    val isTransitioning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
+
     LaunchedEffect(Unit) {
         viewModel.checkForAppUpdate(currentVersion)
     }
@@ -150,6 +154,7 @@ fun HistoryScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !isTransitioning, // Laci tidak akan bisa di-swipe selama animasi transisi berjalan
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -168,7 +173,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -321,7 +326,12 @@ fun HistoryScreen(
                             isFocused = isSearchFocused,
                             onFocusChange = { isSearchFocused = it },
                             onClearFocus = { focusManager.clearFocus() },
-                            onMenuClick = { coroutineScope.launch { drawerState.open() } },
+                            onMenuClick = {
+                                // Tombol hamburger menu juga di-lock dari klik secara membabi-buta saat animasi berjalan
+                                if (!isTransitioning) {
+                                    coroutineScope.launch { drawerState.open() }
+                                }
+                            },
                             modifier = Modifier.animateEnterExit(
                                 enter = scaleIn(initialScale = 0.9f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
                                 exit = scaleOut(targetScale = 0.9f) + fadeOut()
@@ -380,7 +390,6 @@ fun HistoryScreen(
                                     Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
                                 }
                                 items(pinnedNotes, key = { it.id }) { note ->
-                                    // KUNCI: Modifier.animateItem() diletakkan TANPA import bodong di atas
                                     DismissibleNoteCard(
                                         note = note,
                                         modifier = Modifier.animateItem(),
@@ -770,7 +779,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -814,3 +823,4 @@ fun NoteCard(
         }
     }
 }
+
