@@ -47,6 +47,7 @@ import java.util.Calendar
 fun RecordScreen(
     viewModel: RecordViewModel,
     userName: String,
+    recordMode: Int, // Parameter recordMode ditambahkan di sini
     snackbarHostState: SnackbarHostState,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -89,6 +90,13 @@ fun RecordScreen(
     val timeString = "$minutes:$seconds"
 
     val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    // Variabel penentu Teks di UI berdasarkan State Mode
+    val displayLiveText = if (recordMode == 1) {
+        "Direct recording mode is active.\nLive transcription is disabled."
+    } else {
+        if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText
+    }
 
     with(animatedVisibilityScope) {
         Column(
@@ -161,7 +169,7 @@ fun RecordScreen(
                     .padding(24.dp)
             ) {
                 Text(
-                    text = if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText,
+                    text = displayLiveText, // Implementasi Teks State Dinamis
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Start,
@@ -297,7 +305,8 @@ fun RecordScreen(
                                             viewModel.stopRecordingInstant()
 
                                             coroutineScope.launch {
-                                                val saved = viewModel.saveNote()
+                                                // Oper value recordMode ke method saveNote
+                                                val saved = viewModel.saveNote(recordMode)
                                                 snackbarHostState.showSnackbar(
                                                     message = if (saved) "Note saved" else "No text to save",
                                                     duration = SnackbarDuration.Short
@@ -308,12 +317,21 @@ fun RecordScreen(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "Stop",
-                                tint = MaterialTheme.colorScheme.onTertiary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                            if (isStopPressed && recordMode == 1) {
+                                // Memicu animasi loading kecil ketika Mode Gemini di Stop
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.onTertiary,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Stop",
+                                    tint = MaterialTheme.colorScheme.onTertiary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -341,7 +359,7 @@ fun RecordScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                    text = if (recordMode == 1) "Transcription will be processed by Gemini later." else if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
