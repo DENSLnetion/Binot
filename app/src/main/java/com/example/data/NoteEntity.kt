@@ -13,7 +13,6 @@ data class NoteEntity(
     val isPinned: Boolean = false,
     val audioPath: String? = null,
     val label: String? = null,
-    val isTrashed: Boolean = false
+    val isTrashed: Boolean = false,
+    val originalRawText: String? = null
 )
-
-
