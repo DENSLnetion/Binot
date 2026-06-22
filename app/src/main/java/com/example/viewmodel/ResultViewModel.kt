@@ -567,8 +567,8 @@ class ResultViewModel(
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
                     3. MATHEMATICS & UNIQUE SYMBOLS (CRITICAL RULE): You MUST wrap ALL mathematical symbols, scientific equations, formulas, and unique variables in SINGLE QUOTES ('). Use LaTeX format inside the single quotes.
-                       - Correct Example: The formula is '$$E = mc^2$$' and the variable is 'x'.
-                       - Incorrect Example: The formula is $$E = mc^2$$ and the variable is x.
+                       - Correct Example: The formula is '${'$'}${'$'}E = mc^2${'$'}${'$'}' and the variable is 'x'.
+                       - Incorrect Example: The formula is ${'$'}${'$'}E = mc^2${'$'}${'$'} and the variable is x.
                        ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
                 """.trimIndent()
                 
