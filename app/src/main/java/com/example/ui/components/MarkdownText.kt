@@ -115,6 +115,7 @@ fun KaTeXWebView(
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val hexColor = String.format("#%06X", 0xFFFFFF and textColor.toArgb())
     val cssFont = when (fontFamily) {
         FontFamily.Serif -> "serif"
@@ -122,9 +123,22 @@ fun KaTeXWebView(
         else -> "sans-serif"
     }
 
+    // Baca JS/CSS dari assets sekali, lalu inline ke HTML.
+    // Ini solusi paling reliable: tidak ada external request sama sekali,
+    // tidak perlu interceptor, tidak ada masalah CORS / same-origin.
+    val katexCss = remember {
+        try { context.assets.open("katex/katex.min.css").bufferedReader().readText() } catch (e: Exception) { "" }
+    }
+    val katexJs = remember {
+        try { context.assets.open("katex/katex.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+    }
+    val autoRenderJs = remember {
+        try { context.assets.open("katex/auto-render.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+    }
+
     val htmlContent = remember(mathContent, hexColor, cssFont) {
         var html = mathContent
-        
+
         // Basic Markdown Support
         html = html.replace(Regex("^### (.*)$", RegexOption.MULTILINE), "<h4>$1</h4>")
         html = html.replace(Regex("^## (.*)$", RegexOption.MULTILINE), "<h3>$1</h3>")
@@ -132,86 +146,83 @@ fun KaTeXWebView(
         html = html.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
         html = html.replace(Regex("^- (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
         html = html.replace(Regex("^[0-9]+\\. (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
-        
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            
-            <!-- Path via WebViewAssetLoader AssetsPathHandler -->
-            <link rel="stylesheet" href="/assets/katex/katex.min.css">
-            <script src="/assets/katex/katex.min.js"></script>
-            <script src="/assets/katex/auto-render.min.js"></script>
-            
-            <style>
-                body {
-                    background-color: transparent;
-                    color: $hexColor;
-                    font-family: $cssFont;
-                    font-size: 16px;
-                    line-height: 1.6;
-                    margin: 0;
-                    padding: 4px 0px;
-                    word-wrap: break-word;
-                    white-space: pre-wrap;
-                }
-                li { margin-bottom: 4px; }
-                #debug-console {
-                    background: #fff3cd; color: #856404;
-                    padding: 8px; border-radius: 6px; border: 1px solid #ffeeba;
-                    font-family: monospace; font-size: 11px;
-                    margin-bottom: 8px; display: none; word-wrap: break-word;
-                }
-            </style>
-        </head>
-        <body>
-            <div id="debug-console"></div>
-            <div id="math-content">$html</div>
-            
-            <script>
-                var dbg = document.getElementById('debug-console');
-                function logDebug(msg) {
-                    dbg.style.display = 'block';
-                    dbg.innerHTML += "⚠️ " + msg + "<br>";
-                }
-                
-                window.onerror = function(msg, url, line) { 
-                    logDebug("JS Crash: " + msg + " (Line: " + line + ")"); 
-                    return false;
-                };
 
-                document.addEventListener("DOMContentLoaded", function() {
-                    try {
-                        if (typeof katex === 'undefined') { logDebug("Fatal: katex object missing. Interceptor gagal nyuapin JS!"); return; }
-                        if (typeof renderMathInElement === 'undefined') { logDebug("Fatal: renderMathInElement missing!"); return; }
-                        
-                        var el = document.getElementById('math-content');
-                        renderMathInElement(el, {
-                            delimiters: [
-                                {left: "$$", right: "$$", display: true},
-                                {left: "\\[", right: "\\]", display: true},
-                                {left: "$", right: "$", display: false},
-                                {left: "\\(", right: "\\)", display: false}
-                            ],
-                            throwOnError: false,
-                            errorCallback: function(msg, err) {
-                                logDebug("KaTeX Syntax Error: " + msg);
-                            }
-                        });
-                        
-                        if (el.innerHTML.indexOf('class="katex"') === -1 && (el.innerHTML.indexOf('$$') !== -1 || el.innerHTML.indexOf('$') !== -1)) {
-                            logDebug("Script jalan, tapi KaTeX gagal nemuin rumus. Cek spasi di antara $$ lo.");
-                        }
-                    } catch(e) {
-                        logDebug("System Exception: " + e.message);
-                    }
-                });
-            </script>
-        </body>
-        </html>
-        """.trimIndent()
+        // Font KaTeX di-load via data URI dari assets supaya tidak butuh network request
+        // KaTeX CSS pakai url("fonts/KaTeX_*.woff2") — kita patch jadi base64 inline
+        // TAPI itu terlalu besar. Solusi: override font-face pakai file:///android_asset
+        // yang masih boleh diakses dari loadDataWithBaseURL dengan file:// base.
+        // Cara termudah: ganti url("fonts/...") di CSS jadi path absolut asset.
+        val patchedCss = katexCss.replace(
+            Regex("""url\(['"]?(fonts/[^'")]+)['"]?\)""")
+        ) { match ->
+            val fontPath = match.groupValues[1]
+            "url('file:///android_asset/katex/$fontPath')"
+        }
+
+        """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+$patchedCss
+body {
+    background-color: transparent;
+    color: $hexColor;
+    font-family: $cssFont;
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 4px 0px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+li { margin-bottom: 4px; }
+#debug-console {
+    background: #fff3cd; color: #856404;
+    padding: 8px; border-radius: 6px; border: 1px solid #ffeeba;
+    font-family: monospace; font-size: 11px;
+    margin-bottom: 8px; display: none; word-wrap: break-word;
+}
+</style>
+</head>
+<body>
+<div id="debug-console"></div>
+<div id="math-content">$html</div>
+<script>$katexJs</script>
+<script>$autoRenderJs</script>
+<script>
+var dbg = document.getElementById('debug-console');
+function logDebug(msg) {
+    dbg.style.display = 'block';
+    dbg.innerHTML += "⚠️ " + msg + "<br>";
+}
+window.onerror = function(msg, url, line) {
+    logDebug("JS Crash: " + msg + " (Line: " + line + ")");
+    return false;
+};
+document.addEventListener("DOMContentLoaded", function() {
+    try {
+        if (typeof katex === 'undefined') { logDebug("Fatal: katex object missing"); return; }
+        if (typeof renderMathInElement === 'undefined') { logDebug("Fatal: renderMathInElement missing"); return; }
+        var el = document.getElementById('math-content');
+        renderMathInElement(el, {
+            delimiters: [
+                {left: "${'$'}${'$'}", right: "${'$'}${'$'}", display: true},
+                {left: "\\[", right: "\\]", display: true},
+                {left: "${'$'}", right: "${'$'}", display: false},
+                {left: "\\(", right: "\\)", display: false}
+            ],
+            throwOnError: false,
+            errorCallback: function(msg, err) { logDebug("KaTeX Error: " + msg); }
+        });
+    } catch(e) {
+        logDebug("Exception: " + e.message);
+    }
+});
+</script>
+</body>
+</html>""".trimIndent()
     }
 
     AndroidView(
@@ -221,29 +232,27 @@ fun KaTeXWebView(
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
-                
+
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
-                
-                val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
-                    .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(ctx))
-                    .build()
+                // Izinkan WebView baca font dari file:///android_asset
+                @Suppress("DEPRECATION")
+                settings.allowFileAccessFromFileURLs = true
 
-                webViewClient = object : androidx.webkit.WebViewClientCompat() {
-                    override fun shouldInterceptRequest(
-                        view: android.webkit.WebView,
-                        request: android.webkit.WebResourceRequest
-                    ): android.webkit.WebResourceResponse? {
-                        return assetLoader.shouldInterceptRequest(request.url)
-                    }
-                }
-                
+                webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL("https://appassets.androidplatform.net/", htmlContent, "text/html", "UTF-8", null)
+            // loadDataWithBaseURL dengan base file:// supaya font woff2 bisa diakses
+            webView.loadDataWithBaseURL(
+                "file:///android_asset/katex/",
+                htmlContent,
+                "text/html",
+                "UTF-8",
+                null
+            )
         }
     )
 }
