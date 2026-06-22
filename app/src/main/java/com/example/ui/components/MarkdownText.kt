@@ -132,11 +132,6 @@ fun KaTeXWebView(
         else -> "sans-serif"
     }
 
-    // Mulai dari cached height jika tersedia, sehingga tidak ada layout jump
-    var webViewHeightPx by remember(htmlContent) {
-        mutableStateOf(heightCache[htmlContent] ?: 1)
-    }
-
     val patchedCss = remember(assets.css) {
         assets.css.replace(Regex("""url\(['"]?(fonts/[^'"")]+)['"]?\)""")) { match ->
             "url('file:///android_asset/katex/${match.groupValues[1]}')"
@@ -203,6 +198,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     val density = androidx.compose.ui.platform.LocalDensity.current
+    // Mulai dari cached height jika tersedia, sehingga tidak ada layout jump
+    var webViewHeightPx by remember(htmlContent) {
+        mutableStateOf(heightCache[htmlContent] ?: 1)
+    }
     val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(32.dp)
     val context = LocalContext.current
     AndroidView(
