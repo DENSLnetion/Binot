@@ -1,4 +1,3 @@
-```kotlin
 package com.example.ui.components
 
 import android.annotation.SuppressLint
@@ -752,6 +751,3 @@ fun BasicMarkdownLine(
         onTextLayout = { textLayoutResult = it }
     )
 }
-
-
-```
