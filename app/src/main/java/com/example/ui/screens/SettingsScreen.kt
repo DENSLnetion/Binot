@@ -129,6 +129,9 @@ fun SettingsScreen(
     var showWarningDialog by remember { mutableStateOf(false) }
     var pendingModeSelection by remember { mutableStateOf(-1) }
     
+    // Dialog untuk Save Apply to All
+    var showApplyAllDialog by remember { mutableStateOf(false) }
+
     // Bottom Sheet for Language Selection
     var showLanguageSheet by remember { mutableStateOf(false) }
     var languageSearchQuery by remember { mutableStateOf("") }
@@ -193,6 +196,28 @@ fun SettingsScreen(
                 ) { Text("Continue") }
             },
             dismissButton = { TextButton(onClick = { showWarningDialog = false; pendingModeSelection = -1 }) { Text("Cancel") } }
+        )
+    }
+    
+    if (showApplyAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showApplyAllDialog = false },
+            title = { Text("Apply to All Notes?") },
+            text = { Text("This action will reset the AI-generated results for all your previous notes. They will be re-processed using your new preferences the next time you open them. Your original raw transcripts are completely safe.\n\nContinue?") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    onClick = {
+                        showApplyAllDialog = false
+                        viewModel.applyAiPreferencesToAllNotes { msg ->
+                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }
+                    }
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApplyAllDialog = false }) { Text("Cancel") }
+            }
         )
     }
 
@@ -355,6 +380,17 @@ fun SettingsScreen(
                                 onClick = { viewModel.saveAiFormat(1) },
                                 selected = aiFormat == 1
                             ) { Text("Bullets") }
+                        }
+                        
+                        // FUNGSI BARU: Tombol Apply ke Seluruh Catatan
+                        Spacer(modifier = Modifier.height(24.dp))
+                        BouncyButton(
+                            onClick = { showApplyAllDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Save & Apply to All Notes")
                         }
                     }
                 }
