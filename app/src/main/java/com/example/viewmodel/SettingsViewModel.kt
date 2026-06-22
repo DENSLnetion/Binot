@@ -152,6 +152,18 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.saveAiFormat(format) }
     }
 
+    // FUNGSI BARU: Mengeksekusi query reset dan mengirim callback ke UI
+    fun applyAiPreferencesToAllNotes(onResult: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                noteRepository.resetAllSummaries()
+                launch(Dispatchers.Main) { onResult("Preferences applied! Old AI results have been reset.") }
+            } catch (e: Exception) {
+                launch(Dispatchers.Main) { onResult("Failed to apply preferences: ${e.message}") }
+            }
+        }
+    }
+
     fun exportBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
         viewModelScope.launch {
             try {
