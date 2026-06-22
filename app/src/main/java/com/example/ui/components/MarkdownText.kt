@@ -155,6 +155,8 @@ fun KaTeXWebView(
     assets: KaTeXAssets,
     textColor: Color,
     fontFamily: FontFamily,
+    // bitmapState dari MarkdownText — persisten, tidak ter-reset saat recomposition
+    bitmapStateMap: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Pair<Bitmap, Int>>,
     modifier: Modifier = Modifier
 ) {
     if (!assets.isReady) return
@@ -237,15 +239,18 @@ document.addEventListener("DOMContentLoaded", function() {
 </html>""".trimIndent()
     }
 
-    // Cek apakah bitmap sudah ada di cache
-    val cached = remember(htmlContent) { MathBitmapCache.get(htmlContent) }
-    var bitmap by remember(htmlContent) { mutableStateOf(cached?.first) }
-    var heightPx by remember(htmlContent) { mutableStateOf(cached?.second ?: 1) }
-    val heightDp = with(density) { heightPx.toDp() }.coerceAtLeast(1.dp)
-
     val capturedHtml = htmlContent
 
-    // Render offscreen WebView untuk capture bitmap — hanya jika belum ada di cache
+    // bitmapStateMap adalah SnapshotStateMap dari MarkdownText — recomposition-safe
+    // Mengambil entry: (bitmap, heightPx)
+    val entry = bitmapStateMap[capturedHtml] ?: MathBitmapCache.get(capturedHtml)?.also {
+        bitmapStateMap[capturedHtml] = it
+    }
+    val bitmap = entry?.first
+    val heightPx = entry?.second ?: 1
+    val heightDp = with(density) { heightPx.toDp() }.coerceAtLeast(1.dp)
+
+    // Render offscreen WebView untuk capture bitmap — hanya jika belum ada
     if (bitmap == null) {
         LaunchedEffect(capturedHtml) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -255,6 +260,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 val webView = android.webkit.WebView(ctx).apply {
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    scrollBarSize = 0
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.defaultTextEncodingName = "utf-8"
@@ -291,8 +299,9 @@ document.addEventListener("DOMContentLoaded", function() {
                                 val canvas = Canvas(bmp)
                                 webView.draw(canvas)
                                 MathBitmapCache.put(capturedHtml, bmp, px)
-                                bitmap = bmp
-                                heightPx = px
+                                // Simpan ke map yang di-share dengan MarkdownText
+                                // — trigger recomposition secara reaktif
+                                bitmapStateMap[capturedHtml] = Pair(bmp, px)
                             } catch (_: Exception) {
                             } finally {
                                 rootView?.removeView(webView)
@@ -316,7 +325,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // Tampilkan bitmap jika sudah siap, atau placeholder transparan jika masih loading
     if (bitmap != null) {
         Image(
-            bitmap = bitmap!!.asImageBitmap(),
+            bitmap = bitmap.asImageBitmap(),
             contentDescription = null,
             contentScale = ContentScale.FillWidth,
             modifier = modifier
@@ -431,10 +440,15 @@ fun MarkdownText(
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
 
+    // Map bitmap per htmlContent — di-share ke semua KaTeXWebView.
+    // Disimpan di level MarkdownText agar tidak ter-reset saat recomposition item.
+    val bitmapStateMap = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<String, Pair<Bitmap, Int>>() }
+
     // Deteksi dark/light mode — jika berubah, clear semua bitmap cache supaya re-render
     val isDarkTheme = isSystemInDarkTheme()
     LaunchedEffect(isDarkTheme) {
         MathBitmapCache.clearAll()
+        bitmapStateMap.clear()
     }
 
     LaunchedEffect(text) {
@@ -462,6 +476,7 @@ fun MarkdownText(
                         assets = katexAssets,
                         textColor = MaterialTheme.colorScheme.onBackground,
                         fontFamily = fontFamily,
+                        bitmapStateMap = bitmapStateMap,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
