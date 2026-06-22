@@ -150,28 +150,60 @@ fun KaTeXWebView(
                     margin: 0;
                     padding: 4px 0px;
                     word-wrap: break-word;
+                    white-space: pre-wrap; /* Mengamankan spasi antar teks dan rumus */
                 }
                 li { margin-bottom: 4px; }
+                #debug-console {
+                    background: #fff3cd; color: #856404;
+                    padding: 8px; border-radius: 6px; border: 1px solid #ffeeba;
+                    font-family: monospace; font-size: 11px;
+                    margin-bottom: 8px; display: none; word-wrap: break-word;
+                }
             </style>
         </head>
         <body>
+            <div id="debug-console"></div>
             <div id="math-content">$html</div>
+            
             <script>
-                // Eksekusi LANGSUNG tanpa nunggu window.onload karena loadDataWithBaseURL bypass onload event
-                var el = document.getElementById('math-content');
-                if (typeof renderMathInElement !== 'undefined') {
-                    renderMathInElement(el, {
-                        delimiters: [
-                            {left: '$$', right: '$$', display: true},
-                            {left: '\\[', right: '\\]', display: true},
-                            {left: '$', right: '$', display: false},
-                            {left: '\\(', right: '\\)', display: false}
-                        ],
-                        throwOnError: false
-                    });
-                } else {
-                    el.innerHTML = "<span style='color:#ff5555; font-size:12px; font-weight:bold;'>[Error: KaTeX Engine Failed to Load from Assets]</span><br>" + el.innerHTML;
+                var dbg = document.getElementById('debug-console');
+                function logDebug(msg) {
+                    dbg.style.display = 'block';
+                    dbg.innerHTML += "⚠️ " + msg + "<br>";
                 }
+                
+                window.onerror = function(msg, url, line) { 
+                    logDebug("JS Crash: " + msg + " (Line: " + line + ")"); 
+                    return false;
+                };
+
+                document.addEventListener("DOMContentLoaded", function() {
+                    try {
+                        if (typeof katex === 'undefined') { logDebug("Fatal: katex object missing. Cek file katex.min.js di assets!"); return; }
+                        if (typeof renderMathInElement === 'undefined') { logDebug("Fatal: renderMathInElement missing. Cek file auto-render.min.js!"); return; }
+                        
+                        var el = document.getElementById('math-content');
+                        renderMathInElement(el, {
+                            delimiters: [
+                                {left: "$$", right: "$$", display: true},
+                                {left: "\\[", right: "\\]", display: true},
+                                {left: "$", right: "$", display: false},
+                                {left: "\\(", right: "\\)", display: false}
+                            ],
+                            throwOnError: false,
+                            errorCallback: function(msg, err) {
+                                logDebug("KaTeX Syntax Error: " + msg);
+                            }
+                        });
+                        
+                        // Deteksi visual: kalau nggak ada tag class 'katex' yang tercipta, berarti gagal parse
+                        if (el.innerHTML.indexOf('class="katex"') === -1 && (el.innerHTML.indexOf('$$') !== -1 || el.innerHTML.indexOf('$') !== -1)) {
+                            logDebug("Script jalan, tapi KaTeX gagal nemuin rumus. Cek spasi di antara $$ lo.");
+                        }
+                    } catch(e) {
+                        logDebug("System Exception: " + e.message);
+                    }
+                });
             </script>
         </body>
         </html>
@@ -186,7 +218,8 @@ fun KaTeXWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 
-                // ChromeClient krusial untuk eksekusi JS di WebView modern
+                // Mencegah OS mengambil alih loading asset
+                webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
                 
                 settings.javaScriptEnabled = true
