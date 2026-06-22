@@ -161,9 +161,8 @@ body {
     font-size: 16px;
     line-height: 1.6;
     margin: 0;
-    padding: 4px 0px;
+    padding: 0;
     word-wrap: break-word;
-    white-space: pre-wrap;
     overflow: hidden;
 }
 li { margin-bottom: 4px; }
@@ -188,7 +187,8 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     // Report tinggi konten ke Kotlin setelah render selesai
     setTimeout(function() {
-        var h = document.body.scrollHeight;
+        var el = document.getElementById('math-content');
+        var h = el ? el.offsetHeight : document.body.scrollHeight;
         if (window.HeightBridge) window.HeightBridge.onHeightReady(h);
     }, 500);
 });
@@ -202,8 +202,13 @@ document.addEventListener("DOMContentLoaded", function() {
     var webViewHeightPx by remember(htmlContent) {
         mutableStateOf(heightCache[htmlContent] ?: 1)
     }
-    val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(32.dp)
-    val context = LocalContext.current
+    // coerceAtLeast(1) saja — jangan 32dp, agar tidak ada ruang kosong ekstra
+    val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
+
+    // Snapshot ke val lokal agar factory lambda bisa capture tanpa recomposition leak
+    val capturedHtmlContent = htmlContent
+    val capturedHeightCache = heightCache
+
     AndroidView(
         modifier = modifier
             .fillMaxWidth()
@@ -220,28 +225,27 @@ document.addEventListener("DOMContentLoaded", function() {
                 settings.allowFileAccessFromFileURLs = true
                 webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
+                // addJavascriptInterface di factory (hanya sekali), bukan di update
+                addJavascriptInterface(object : Any() {
+                    @android.webkit.JavascriptInterface
+                    fun onHeightReady(height: Int) {
+                        val d = ctx.resources.displayMetrics.density
+                        val px = (height * d).toInt().coerceAtLeast(1)
+                        capturedHeightCache[capturedHtmlContent] = px
+                        webViewHeightPx = px
+                    }
+                }, "HeightBridge")
                 // Tag digunakan sebagai guard agar tidak reload HTML yang sama
                 tag = ""
             }
         },
         update = { webView ->
-            // Pasang JavascriptInterface untuk terima tinggi konten dari JS
-            webView.addJavascriptInterface(object : Any() {
-                @android.webkit.JavascriptInterface
-                fun onHeightReady(height: Int) {
-                    val density = context.resources.displayMetrics.density
-                    val px = (height * density).toInt().coerceAtLeast(1)
-                    // Simpan ke cache supaya render berikutnya langsung pakai height ini
-                    heightCache[htmlContent] = px
-                    webViewHeightPx = px
-                }
-            }, "HeightBridge")
             // Guard: hanya load ulang jika HTML-nya berbeda
-            if (webView.tag != htmlContent) {
-                webView.tag = htmlContent
+            if (webView.tag != capturedHtmlContent) {
+                webView.tag = capturedHtmlContent
                 webView.loadDataWithBaseURL(
                     "file:///android_asset/katex/",
-                    htmlContent,
+                    capturedHtmlContent,
                     "text/html",
                     "UTF-8",
                     null
