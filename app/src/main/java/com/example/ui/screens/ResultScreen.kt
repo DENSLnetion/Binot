@@ -7,10 +7,12 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -21,7 +23,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -51,6 +56,7 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.MoreVert
@@ -60,7 +66,6 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,6 +73,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -96,6 +103,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
@@ -131,7 +139,6 @@ fun ResultScreen(
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     val allLabels by viewModel.allLabels.collectAsState()
 
-    var showLanguageMenu by remember { mutableStateOf(false) }
     var showSidePanel by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
     
@@ -163,7 +170,7 @@ fun ResultScreen(
     // States for Custom Selection Toolbar
     var selectionRect by remember { mutableStateOf(Rect.Zero) }
     var showCustomMenu by remember { mutableStateOf(false) }
-    var isTextSelected by remember { mutableStateOf(false) } // State baru untuk mendeteksi seleksi
+    var isTextSelected by remember { mutableStateOf(false) }
     var copyAction by remember { mutableStateOf<() -> Unit>({}) }
     var selectAllAction by remember { mutableStateOf<() -> Unit>({}) }
     var selectionResetKey by remember { mutableStateOf(0) }
@@ -212,7 +219,9 @@ fun ResultScreen(
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
     val deviceLanguage = java.util.Locale.getDefault().displayLanguage
+    
     var isTitleFocused by remember { mutableStateOf(false) }
+    val titleFocusRequester = remember { FocusRequester() }
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
@@ -284,8 +293,6 @@ fun ResultScreen(
             override fun hide() {
                 status = TextToolbarStatus.Hidden
                 showCustomMenu = false
-                // Kita tidak men-set isTextSelected = false di sini agar 
-                // tap/kembali masih dapat membatalkan seleksi walaupun menu hilang sementara.
             }
 
             override fun showMenu(
@@ -340,12 +347,26 @@ fun ResultScreen(
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
-                                singleLine = true,
                                 textStyle = MaterialTheme.typography.titleLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .onFocusChanged { isTitleFocused = it.isFocused }
+                                    .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                                    .focusRequester(titleFocusRequester)
+                                    .onFocusChanged { isTitleFocused = it.isFocused },
+                                decorationBox = { innerTextField ->
+                                    if (!isTitleFocused) {
+                                        Text(
+                                            text = note!!.title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    } else {
+                                        innerTextField()
+                                    }
+                                }
                             )
                         } else if (note != null) {
                             Text(
@@ -358,34 +379,18 @@ fun ResultScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = closeNote) {
+                        IconButton(onClick = {
+                            if (isTitleFocused) focusManager.clearFocus() else closeNote()
+                        }) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
-                        if (showContent && note?.rawText != "Pending Transcription") {
-                            Box {
-                                IconButton(onClick = { showLanguageMenu = true }) {
-                                    Icon(imageVector = Icons.Default.Translate, contentDescription = "Process Text")
-                                }
-                                DropdownMenu(
-                                    expanded = showLanguageMenu,
-                                    onDismissRequest = { showLanguageMenu = false }
-                                ) {
-                                    val languages = listOf("Indonesia", "English", "Spanish", "Chinese", "Japanese")
-                                    languages.forEachIndexed { index, lang ->
-                                        Text(
-                                            text = lang,
-                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        )
-                                        DropdownMenuItem(text = { Text("Tidy Up") }, onClick = { viewModel.processText(lang, "tidy"); showLanguageMenu = false })
-                                        DropdownMenuItem(text = { Text("Summarize") }, onClick = { viewModel.processText(lang, "summarize"); showLanguageMenu = false })
-                                        if (index < languages.size - 1) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                    }
-                                }
-                            }
+                        AnimatedVisibility(
+                            visible = !isTitleFocused && showContent && note?.rawText != "Pending Transcription",
+                            enter = fadeIn() + scaleIn(),
+                            exit = fadeOut() + scaleOut()
+                        ) {
                             IconButton(onClick = { showSidePanel = true }) {
                                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
                             }
@@ -444,7 +449,6 @@ fun ResultScreen(
                                 isPointerDown = false
                                 dragPointerWindowY = null
                                 
-                                // Reset selection if tap distance is minimal
                                 if (isTextSelected && totalMovement < 24f) {
                                     clearSelection()
                                 }
@@ -453,33 +457,118 @@ fun ResultScreen(
                 ) {
                 CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
                     key(selectionResetKey) {
-                        SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                        SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues).clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            if (isTitleFocused) focusManager.clearFocus()
+                        }) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
                         ) {
+                            // --- AI SKELETON LOADING ---
                             if (isLoading) {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+                                val alpha by infiniteTransition.animateFloat(
+                                    initialValue = 0.2f,
+                                    targetValue = 0.6f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(800, easing = LinearEasing),
+                                        repeatMode = RepeatMode.Reverse
+                                    ),
+                                    label = "shimmer_alpha"
+                                )
+                                val skeletonColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
+
+                                Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                                    Box(modifier = Modifier.fillMaxWidth(0.6f).height(28.dp).clip(RoundedCornerShape(8.dp)).background(skeletonColor))
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Box(modifier = Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(4.dp)).background(skeletonColor))
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Box(modifier = Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(4.dp)).background(skeletonColor))
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Box(modifier = Modifier.fillMaxWidth(0.8f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(skeletonColor))
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Box(modifier = Modifier.fillMaxWidth(0.4f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(skeletonColor))
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Box(modifier = Modifier.fillMaxWidth(0.9f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(skeletonColor))
+
+                                    Spacer(modifier = Modifier.height(48.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically, 
+                                        horizontalArrangement = Arrangement.Center, 
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        AiThinkingAnimation(color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(16.dp))
                                         Text(
-                                            text = loadingMessage.ifBlank { "Processing..." },
+                                            text = loadingMessage.ifBlank { "AI Engine is structuring your note..." },
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            fontWeight = FontWeight.Medium
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
                             }
 
-                            if (error != null) {
+                            // --- ERROR & AUDIO FALLBACK UI ---
+                            if (error != null && note!!.rawText == "Pending Transcription" && note!!.audioPath != null) {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    shape = RoundedCornerShape(24.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.ErrorOutline, contentDescription = "Error", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text("API Limit Reached", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(error!!, color = MaterialTheme.colorScheme.onErrorContainer, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+                                        Spacer(modifier = Modifier.height(32.dp))
+                                        
+                                        val playInteractionSource = remember { MutableInteractionSource() }
+                                        val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+                                        val playScale by animateFloatAsState(targetValue = if (isPlayPressed) 0.9f else 1f, label = "playScale")
+                                        
+                                        Box(
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .scale(playScale)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.error)
+                                                .clickable(interactionSource = playInteractionSource, indication = null) { viewModel.toggleAudio() },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = "Play/Pause",
+                                                tint = MaterialTheme.colorScheme.onError,
+                                                modifier = Modifier.size(40.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        Slider(
+                                            value = playbackProgress,
+                                            onValueChange = { viewModel.seekAudio(it) },
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = MaterialTheme.colorScheme.error,
+                                                activeTrackColor = MaterialTheme.colorScheme.error
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(modifier = Modifier.height(24.dp))
+                                        BouncyCapsule(
+                                            onClick = { exportAudioLauncher.launch("Binot_Audio_Fallback_${note!!.id}.mp4") },
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Icon(Icons.Default.Download, contentDescription = "Save Audio", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Save Original Audio", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            } else if (error != null) {
                                 Text(
                                     text = error!!,
                                     color = MaterialTheme.colorScheme.error,
@@ -487,7 +576,7 @@ fun ResultScreen(
                                 )
                             }
 
-                            if (!note!!.summary.isNullOrEmpty()) {
+                            if (!note!!.summary.isNullOrEmpty() && !isLoading) {
                                 MarkdownText(
                                     text = note!!.summary!!, 
                                     listState = listState,
@@ -574,7 +663,6 @@ fun ResultScreen(
                                     )
                                 }
                                 
-                                // FIX RAW TEXT SCROLL DAN HIGHLIGHT: Pindahkan verticalScroll ke parent Column
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
@@ -916,6 +1004,7 @@ fun ResultScreen(
         var textValue by remember(note!!.id) { mutableStateOf(TextFieldValue(note!!.rawText)) }
         val undoStack = remember { mutableStateListOf<TextFieldValue>() }
         val redoStack = remember { mutableStateListOf<TextFieldValue>() }
+        var showDestructiveConfirmDialog by remember { mutableStateOf(false) }
 
         LaunchedEffect(textValue.text) {
             hasUnsavedChanges = textValue.text != note!!.rawText
@@ -930,19 +1019,8 @@ fun ResultScreen(
         ) {
             val scrollWall = remember {
                 object : NestedScrollConnection {
-                    override fun onPostScroll(
-                        consumed: Offset,
-                        available: Offset,
-                        source: NestedScrollSource
-                    ): Offset {
-                        return available 
-                    }
-                    override suspend fun onPostFling(
-                        consumed: Velocity,
-                        available: Velocity
-                    ): Velocity {
-                        return available 
-                    }
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available 
+                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available 
                 }
             }
 
@@ -1036,20 +1114,44 @@ fun ResultScreen(
                     }
                     BouncyCapsule(
                         onClick = {
-                            viewModel.updateRawText(textValue.text)
-                            hasUnsavedChanges = false 
-                            coroutineScope.launch { 
-                                editSheetState.hide()
-                                showEditSheet = false 
-                                snackbarHostState.showSnackbar("Text saved!") 
-                            }
+                            showDestructiveConfirmDialog = true
                         },
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Save", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                        Text("Process", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+            
+            if (showDestructiveConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDestructiveConfirmDialog = false },
+                    title = { Text("Overwrite & Process?") },
+                    text = { Text("Original raw text will be permanently overwritten and processed by the AI Engine. Continue?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.updateRawText(textValue.text)
+                                hasUnsavedChanges = false
+                                showDestructiveConfirmDialog = false
+                                coroutineScope.launch { 
+                                    editSheetState.hide()
+                                    showEditSheet = false 
+                                    snackbarHostState.showSnackbar("AI Engine is processing...") 
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Process")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDestructiveConfirmDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
     }
@@ -1218,33 +1320,6 @@ fun ResultScreen(
                                 Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.onErrorContainer)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Restore Original", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    if (note!!.originalRawText != null && note!!.originalRawText != note!!.rawText && note!!.summary == null) {
-                        item {
-                            BouncyCapsule(
-                                onClick = {
-                                    viewModel.restoreOriginalRawText { previousNote ->
-                                        coroutineScope.launch {
-                                            val result = snackbarHostState.showSnackbar(
-                                                message = "Original raw text restored!",
-                                                actionLabel = "Undo",
-                                                duration = SnackbarDuration.Short
-                                            )
-                                            if (result == SnackbarResult.ActionPerformed) {
-                                                viewModel.undoRestoreRawText(previousNote)
-                                            }
-                                        }
-                                    }
-                                    showSidePanel = false
-                                },
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ) {
-                                Icon(Icons.Default.Restore, contentDescription = "Restore Raw", tint = MaterialTheme.colorScheme.onErrorContainer)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Restore Original Text", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
