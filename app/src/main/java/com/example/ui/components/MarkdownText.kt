@@ -123,20 +123,24 @@ fun KaTeXWebView(
         else -> "sans-serif"
     }
 
-    // Baca JS/CSS dari assets sekali, lalu inline ke HTML.
-    // Ini solusi paling reliable: tidak ada external request sama sekali,
-    // tidak perlu interceptor, tidak ada masalah CORS / same-origin.
-    val katexCss = remember {
-        try { context.assets.open("katex/katex.min.css").bufferedReader().readText() } catch (e: Exception) { "" }
-    }
-    val katexJs = remember {
-        try { context.assets.open("katex/katex.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
-    }
-    val autoRenderJs = remember {
-        try { context.assets.open("katex/auto-render.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+    // Baca JS/CSS dari assets secara async supaya tidak memblokir main thread.
+    // katex.min.js bisa ~900KB - terlalu besar untuk dibaca synchronous di remember{}.
+    var katexCss by remember { mutableStateOf("") }
+    var katexJs by remember { mutableStateOf("") }
+    var autoRenderJs by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            katexCss = try { context.assets.open("katex/katex.min.css").bufferedReader().readText() } catch (e: Exception) { "" }
+            katexJs = try { context.assets.open("katex/katex.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+            autoRenderJs = try { context.assets.open("katex/auto-render.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+        }
     }
 
-    val htmlContent = remember(mathContent, hexColor, cssFont) {
+    // Tunggu sampai JS selesai dibaca sebelum render WebView
+    if (katexJs.isEmpty()) return
+
+    val htmlContent = remember(mathContent, hexColor, cssFont, katexJs, katexCss, autoRenderJs) {
         var html = mathContent
 
         // Basic Markdown Support
