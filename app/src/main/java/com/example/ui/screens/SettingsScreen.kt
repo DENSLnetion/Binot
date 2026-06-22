@@ -327,17 +327,17 @@ fun SettingsScreen(
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                                 onClick = { viewModel.saveAiTask(0) },
                                 selected = aiTask == 0
-                            ) { Text("Tidy Up", fontSize = 13.sp) }
+                            ) { Text("Tidy Up", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                                 onClick = { viewModel.saveAiTask(1) },
                                 selected = aiTask == 1
-                            ) { Text("Summarize", fontSize = 13.sp) }
+                            ) { Text("Summary", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                 onClick = { viewModel.saveAiTask(2) },
                                 selected = aiTask == 2
-                            ) { Text("Analyze", fontSize = 13.sp) }
+                            ) { Text("Analyze", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
