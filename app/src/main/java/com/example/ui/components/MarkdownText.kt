@@ -144,9 +144,9 @@ fun KaTeXWebView(
         html = html.replace(Regex("^### (.*)$", RegexOption.MULTILINE), "<h4>$1</h4>")
         html = html.replace(Regex("^## (.*)$", RegexOption.MULTILINE), "<h3>$1</h3>")
         html = html.replace(Regex("^# (.*)$", RegexOption.MULTILINE), "<h2>$1</h2>")
-        html = html.replace(Regex("\*\*(.*?)\*\*"), "<b>$1</b>")
+        html = html.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
         html = html.replace(Regex("^- (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
-        html = html.replace(Regex("^[0-9]+\. (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
+        html = html.replace(Regex("^[0-9]+\\. (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
 
         """<!DOCTYPE html>
 <html>
