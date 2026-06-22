@@ -123,14 +123,11 @@ fun KaTeXWebView(
     val htmlContent = remember(mathContent, hexColor, cssFont) {
         var html = mathContent
         
-        // Basic Markdown Support (Tanpa mengganggu sintaks LaTeX)
+        // Basic Markdown Support
         html = html.replace(Regex("^### (.*)$", RegexOption.MULTILINE), "<h4>$1</h4>")
         html = html.replace(Regex("^## (.*)$", RegexOption.MULTILINE), "<h3>$1</h3>")
         html = html.replace(Regex("^# (.*)$", RegexOption.MULTILINE), "<h2>$1</h2>")
-        
-        // HANYA asterisks untuk bold/italic. Underscore DILARANG karena merusak Subscript LaTeX (_i dll)
         html = html.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-        
         html = html.replace(Regex("^- (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
         html = html.replace(Regex("^[0-9]+\\. (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
         
@@ -138,6 +135,7 @@ fun KaTeXWebView(
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             <link rel="stylesheet" href="katex.min.css">
             <script src="katex.min.js"></script>
@@ -151,8 +149,7 @@ fun KaTeXWebView(
                     line-height: 1.6;
                     margin: 0;
                     padding: 4px 0px;
-                    overflow-wrap: break-word;
-                    white-space: pre-wrap; /* Menggantikan perlunya tag <br> yang sering merusak KaTeX */
+                    word-wrap: break-word;
                 }
                 li { margin-bottom: 4px; }
             </style>
@@ -160,20 +157,21 @@ fun KaTeXWebView(
         <body>
             <div id="math-content">$html</div>
             <script>
-                window.onload = function() {
-                    var el = document.getElementById('math-content');
-                    if (window.renderMathInElement) {
-                        renderMathInElement(el, {
-                            delimiters: [
-                                {left: '$$', right: '$$', display: true},
-                                {left: '$', right: '$', display: false},
-                                {left: '\\(', right: '\\)', display: false},
-                                {left: '\\[', right: '\\]', display: true}
-                            ],
-                            throwOnError: false
-                        });
-                    }
-                };
+                // Eksekusi LANGSUNG tanpa nunggu window.onload karena loadDataWithBaseURL bypass onload event
+                var el = document.getElementById('math-content');
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(el, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '\\[', right: '\\]', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false}
+                        ],
+                        throwOnError: false
+                    });
+                } else {
+                    el.innerHTML = "<span style='color:#ff5555; font-size:12px; font-weight:bold;'>[Error: KaTeX Engine Failed to Load from Assets]</span><br>" + el.innerHTML;
+                }
             </script>
         </body>
         </html>
@@ -188,7 +186,9 @@ fun KaTeXWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 
-                // MENGIZINKAN WEBVIEW MEMBACA FILE DARI ASSETS (WAJIB UNTUK API 30+)
+                // ChromeClient krusial untuk eksekusi JS di WebView modern
+                webChromeClient = android.webkit.WebChromeClient()
+                
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = true 
                 settings.allowContentAccess = true
@@ -199,12 +199,11 @@ fun KaTeXWebView(
                     settings.allowFileAccessFromFileURLs = true
                     settings.allowUniversalAccessFromFileURLs = true
                 } catch (e: Exception) {
-                    // Safe catch for newer APIs where this is restricted but usually not strictly needed if base URL is correct
+                    // Safe catch
                 }
             }
         },
         update = { webView ->
-            // Pastikan URL dasar merujuk langsung ke folder katex
             webView.loadDataWithBaseURL("file:///android_asset/katex/", htmlContent, "text/html", "UTF-8", null)
         }
     )
@@ -589,4 +588,3 @@ fun BasicMarkdownLine(
         onTextLayout = { textLayoutResult = it }
     )
 }
-
