@@ -38,5 +38,8 @@ interface NoteDao {
     
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getNoteById(id: Int): NoteEntity?
-}
 
+    // FUNGSI BARU: Mereset semua hasil AI di seluruh catatan
+    @Query("UPDATE notes SET summary = null WHERE summary IS NOT NULL")
+    suspend fun resetAllSummaries()
+}
