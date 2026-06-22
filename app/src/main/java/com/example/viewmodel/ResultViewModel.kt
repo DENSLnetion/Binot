@@ -396,7 +396,7 @@ class ResultViewModel(
                 var transcript: String? = null
 
                 if (aiProvider == 1) { // GROQ PROCESSING
-                    // Cek limit ukuran file untuk Groq (25 MB)
+                    // Check file limit for Groq (25 MB)
                     if (file.length() > 25 * 1024 * 1024) {
                         launch(Dispatchers.Main) {
                             _error.value = "File audio terlalu besar untuk Groq (Maks 25MB). Silakan ganti penyedia AI ke Gemini di Pengaturan untuk memproses file berdurasi panjang."
@@ -428,15 +428,18 @@ class ResultViewModel(
                     remoteFileName = uploadResponse.file.name
 
                     launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
+                    
+                    // NEW TRANSCRIBE PROMPT (PHASE 1 - VERBATIM ONLY)
                     val systemPrompt = """
                         You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
-                        CRITICAL RULES:
-                        1. DO NOT hallucinate. If the audio is silent, output exactly "[No speech detected]".
-                        2. DO NOT summarize. Output the exact raw transcript.
-                        3. DO NOT add conversational filler, introductions, or pleasantries.
-                        4. Automatically detect and transcribe in the spoken language.
-                        5. Convert mathematical concepts spelled in words into proper Unicode symbols. Examples: use '²' NOT '^2', use '°' NOT 'degrees', use '±' NOT '+-'.
-                        6. ABSOLUTELY NO BACKTICKS (`). Write equations as plain text naturally integrated within the sentence.
+                        
+                        CRITICAL STRICT RULES:
+                        1. NO HALLUCINATION: If the audio is silent, output exactly "[No speech detected]".
+                        2. VERBATIM TRANSCRIBE: Transcribe exactly what is spoken word-by-word, including informal words, repeated words, and natural speech flow.
+                        3. KEEP PUNCTUATION & CAPITALIZATION: You MUST add accurate punctuation (periods, commas, question marks) and use proper capitalization to make it readable.
+                        4. NO GRAMMAR CORRECTION: Absolutely DO NOT fix the speaker's grammatical errors or restructure their sentences.
+                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use ², ^, $, or $$).
+                        6. Automatically detect and transcribe in the spoken language.
                     """.trimIndent()
                     
                     val request = GenerateContentRequest(
@@ -534,37 +537,32 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // NEW FORMATTING PROMPT (PHASE 2 - MARKDOWN & LATEX)
                 val systemPrompt = if (mode == "tidy") {
                     """
                         You are an elite proofreader and document formatter. Clean up the provided raw voice transcript into $language WITHOUT summarizing or omitting details.
                         
-                        CRITICAL RULES YOU MUST OBEY:
-                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols. 
-                           MANDATORY: You must use actual superscript/subscript unicode characters. 
-                           - Use '²' NOT '^2' or '**2'. 
-                           - Use '³' NOT '^3'. 
-                           - Use '°' NOT 'degrees'. 
-                           - Use '±' NOT '+-'. 
-                           - Use fractions like '½', '¼', '¾' instead of '1/2', '1/4'.
-                        2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
-                        3. ELEGANT MARKDOWN: Use proper Markdown formatting to make it highly readable. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
-                        4. PRESERVE EVERYTHING: Do not summarize. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
-                        5. ZERO YAPPING: Output ONLY the final formatted text. Do not add introductory words like "Here is the text" or concluding remarks.
+                        CRITICAL STRICT RULES YOU MUST OBEY:
+                        1. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
+                        2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
+                           - Use `$$` for block equations or standalone formulas (e.g., $$ x^2 + y^2 = z^2 $$).
+                           - Use `$` for inline math within sentences (e.g., The value of $x$ is $5$).
+                           - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \sum, \int, \alpha, \beta).
+                        3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
+                        4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
+                        5. ZERO YAPPING: Output ONLY the final formatted text. Do not add introductory words, pleasantries, or concluding remarks.
                     """.trimIndent()
                 } else {
                     """
                         You are an elite meeting assistant and professional summarizer. Summarize the provided raw voice transcript into $language.
                         
-                        CRITICAL RULES YOU MUST OBEY:
-                        1. MATHEMATICS & SYMBOLS: Convert all spoken math concepts to proper Unicode symbols. 
-                           MANDATORY: You must use actual superscript/subscript unicode characters. 
-                           - Use '²' NOT '^2' or '**2'. 
-                           - Use '³' NOT '^3'. 
-                           - Use '°' NOT 'degrees'. 
-                           - Use '±' NOT '+-'. 
-                           - Use fractions like '½', '¼', '¾' instead of '1/2', '1/4'.
-                        2. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text.
-                        3. ELEGANT MARKDOWN: Structure the summary logically using neat Markdown. Use '#' for titles, '##' for section headers, and '-' for bullet lists to organize key points.
+                        CRITICAL STRICT RULES YOU MUST OBEY:
+                        1. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
+                        2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
+                           - Use `$$` for block equations or standalone formulas.
+                           - Use `$` for inline math within sentences.
+                           - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \alpha).
+                        3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
                         5. ZERO YAPPING: Output ONLY the final summarized text. Do not add introductory words or conversational filler.
                     """.trimIndent()
@@ -642,4 +640,3 @@ class ResultViewModel(
             }
     }
 }
-
