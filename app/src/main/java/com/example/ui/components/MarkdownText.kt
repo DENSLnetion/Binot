@@ -161,10 +161,26 @@ body {
     font-size: 16px;
     line-height: 1.6;
     margin: 0;
-    /* Memberikan ruang bernapas 8px di atas/bawah agar simbol tidak kepotong */
     padding: 8px 4px;
     word-wrap: break-word;
-    overflow: hidden;
+    /* Ubah ini supaya bodi utama tidak menahan overflow horizontal */
+    overflow-x: hidden; 
+    overflow-y: hidden;
+}
+/* Tambahan ruleset khusus agar blok KaTeX (rumus) bisa digeser (horizontal scroll) */
+.katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px; /* Ruang bernapas buat scrollbar */
+    -webkit-overflow-scrolling: touch;
+}
+/* Styling scrollbar tipis agar UI tetap clean */
+.katex-display::-webkit-scrollbar {
+    height: 4px;
+}
+.katex-display::-webkit-scrollbar-thumb {
+    background: #88888888;
+    border-radius: 4px;
 }
 li { margin-bottom: 4px; }
 </style>
@@ -189,10 +205,9 @@ document.addEventListener("DOMContentLoaded", function() {
     // Report tinggi konten ke Kotlin setelah render selesai
     setTimeout(function() {
         var el = document.getElementById('math-content');
-        // getBoundingClientRect().height jauh lebih presisi untuk elemen kompleks KaTeX
         var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-        // Tambahkan buffer ~24px untuk mengamankan ruang yang mungkin tersembunyi
-        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 24);
+        // Tambahkan buffer ~30px karena ada tambahan scrollbar di bawah
+        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 30);
     }, 500);
 });
 </script>
@@ -201,14 +216,11 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     val density = androidx.compose.ui.platform.LocalDensity.current
-    // Mulai dari cached height jika tersedia, sehingga tidak ada layout jump
     var webViewHeightPx by remember(htmlContent) {
         mutableStateOf(heightCache[htmlContent] ?: 1)
     }
-    // coerceAtLeast(1) saja — jangan 32dp, agar tidak ada ruang kosong ekstra
     val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
 
-    // Snapshot ke val lokal agar factory lambda bisa capture tanpa recomposition leak
     val capturedHtmlContent = htmlContent
     val capturedHeightCache = heightCache
 
@@ -219,8 +231,9 @@ document.addEventListener("DOMContentLoaded", function() {
         factory = { ctx ->
             android.webkit.WebView(ctx).apply {
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                // Kita enable horizontal scrolling di level native Android supaya touch geser bisa diteruskan
                 isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false 
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
@@ -228,7 +241,6 @@ document.addEventListener("DOMContentLoaded", function() {
                 settings.allowFileAccessFromFileURLs = true
                 webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
-                // addJavascriptInterface di factory (hanya sekali), bukan di update
                 addJavascriptInterface(object : Any() {
                     @android.webkit.JavascriptInterface
                     fun onHeightReady(height: Int) {
@@ -238,12 +250,10 @@ document.addEventListener("DOMContentLoaded", function() {
                         webViewHeightPx = px
                     }
                 }, "HeightBridge")
-                // Tag digunakan sebagai guard agar tidak reload HTML yang sama
                 tag = ""
             }
         },
         update = { webView ->
-            // Guard: hanya load ulang jika HTML-nya berbeda
             if (webView.tag != capturedHtmlContent) {
                 webView.tag = capturedHtmlContent
                 webView.loadDataWithBaseURL(
@@ -271,8 +281,6 @@ fun MarkdownText(
 ) {
     val context = LocalContext.current
 
-    // Baca semua KaTeX assets SEKALI di sini, bukan per-WebView.
-    // Ini mencegah kelip-kelip karena tidak ada LaunchedEffect per item.
     var katexAssets by remember { mutableStateOf(KaTeXAssets("", "", "")) }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -285,7 +293,6 @@ fun MarkdownText(
 
     val lines = text.split("\n")
     
-    // Chunking the markdown into Native lines and WebView math blocks
     val markdownItems = remember(text) {
         val items = mutableListOf<MarkdownItem>()
         var inMathBlock = false
@@ -360,7 +367,6 @@ fun MarkdownText(
     val highlightBgColor = MaterialTheme.colorScheme.tertiaryContainer
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
-    // Cache height WebView per htmlContent — bertahan selama MarkdownText hidup
     val webViewHeightCache = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>() }
 
     LaunchedEffect(text) {
