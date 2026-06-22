@@ -36,7 +36,7 @@ import org.json.JSONObject
 class ResultViewModel(
     private val noteId: Int,
     private val noteRepository: NoteRepository,
-    private val settingsRepository: SettingsRepository // Akses langsung ke Settings
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _note = MutableStateFlow<NoteEntity?>(null)
@@ -85,7 +85,6 @@ class ResultViewModel(
                 } else if (fetchedNote.rawText == "Pending Transcription" && fetchedNote.audioPath == null) {
                     _error.value = "Failed: Audio file not found. Raw text is pending but no audio path exists."
                 } else if (fetchedNote.rawText.isNotBlank() && fetchedNote.rawText != "Pending Transcription") {
-                    // Pemicu Engine Reproses Otomatis
                     checkAndTriggerAutoProcess(fetchedNote)
                 }
             }
@@ -110,7 +109,6 @@ class ResultViewModel(
             val task = settingsRepository.aiTaskFlow.first()
             val format = settingsRepository.aiFormatFlow.first()
             
-            // Metadata Tag untuk mendeteksi perubahan preferensi
             val currentMeta = "<!--BINOT_META:${lang}_${task}_${format}-->"
             
             if (noteToProcess.summary == null || !noteToProcess.summary.contains(currentMeta)) {
@@ -126,13 +124,12 @@ class ResultViewModel(
         viewModelScope.launch { noteRepository.update(updatedNote) }
     }
 
-    // EDIT DESTRUKTIF: Teks mentah asli ditimpa selamanya, lalu di proses ulang
     fun updateRawText(newRawText: String) {
         val currentNote = _note.value ?: return
         val updatedNote = currentNote.copy(
             rawText = newRawText,
-            originalRawText = null, // Hapus jejak lama
-            summary = null, // Paksa engine memproses ulang
+            originalRawText = null, 
+            summary = null, 
             timestamp = System.currentTimeMillis()
         )
         _note.value = updatedNote
@@ -471,7 +468,6 @@ class ResultViewModel(
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
                         
-                        // Setelah mendapat transkrip, tembak ke Auto Process AI Engine
                         checkAndTriggerAutoProcess(updatedNote)
                         
                         launch(Dispatchers.IO) {
@@ -546,30 +542,37 @@ class ResultViewModel(
                     return@launch 
                 }
 
+                // ENGINE MODE: SUPER STRICT INSTRUCTIONS
                 val taskInstruction = when (task) {
-                    0 -> "TRANSLATE and TIDY UP the raw voice transcript. Fix grammatical errors, remove stuttering/filler words, but keep ALL information intact."
-                    1 -> "TRANSLATE and SUMMARIZE the raw voice transcript. Ignore filler words and fix broken structures. Make it comprehensive but concise."
-                    2 -> "TRANSLATE and ANALYZE the raw voice transcript. Extract the main points, underlying sentiments, and any action items."
-                    else -> "TRANSLATE and TIDY UP the raw voice transcript."
+                    0 -> "Task: TIDY UP. Your ONLY job is to fix grammatical errors, remove stuttering/filler words, and make the text readable. DO NOT analyze. DO NOT summarize. DO NOT add new information. Keep the original meaning perfectly intact."
+                    1 -> "Task: SUMMARIZE. Extract the core information and make a concise summary. Ignore filler words."
+                    2 -> "Task: ANALYZE. Extract the main points, underlying sentiments, and any action items."
+                    else -> "Task: TIDY UP."
                 }
 
                 val formatInstruction = when (format) {
-                    0 -> "Format the output using beautiful Markdown with well-structured PARAGRAPHS. DO NOT use bullet points for the main content unless absolutely necessary for a short list."
-                    1 -> "Format the output using beautiful Markdown with clear BULLET POINTS for easy reading. Group related ideas into bulleted sections."
+                    0 -> "Format: PARAGRAPHS ONLY. DO NOT use bullet points."
+                    1 -> "Format: BULLET POINTS. Use strictly the minus sign '-' for bullet points. NEVER use asterisks ('*')."
                     else -> ""
                 }
 
                 val systemPrompt = """
-                    You are an elite AI engine. Your strict task is to $taskInstruction The target output language is EXACTLY: $language.
+                    [SYSTEM: ENGINE MODE ENABLED]
+                    You are a strict data processing compiler. You DO NOT converse.
+                    TARGET LANGUAGE: $language. You MUST translate the output to $language regardless of the input language.
+                    
+                    $taskInstruction
+                    $formatInstruction
                     
                     CRITICAL STRICT RULES YOU MUST OBEY:
-                    1. MANDATORY TRANSLATION: The entire output MUST be in $language. No exceptions.
-                    2. FORMATTING: $formatInstruction Use '#' for main titles and '##' for headers.
-                    3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol.
-                    4. ZERO YAPPING & NO QUOTES: Output ONLY the final processed text. DO NOT add conversational filler, introductions, or conclusions. DO NOT wrap your response in single quotes (') or double quotes ("). DO NOT use markdown code blocks (```) to enclose the entire response.
+                    1. MANDATORY TRANSLATION: You MUST output strictly in $language.
+                    2. ZERO YAPPING: Output EXACTLY the final processed text. NO introductions, NO conclusions, NO conversational filler.
+                    3. NO QUOTES: DO NOT wrap your output in quotes or markdown code blocks (```).
+                    4. LATEX MATH: Convert ALL math, numbers, and scientific symbols to LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math.
                 """.trimIndent()
                 
-                val userContent = currentNote.rawText
+                // Menambahkan command penegas di User Content agar Llama/Gemini tidak lupa instruksi bahasanya
+                val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
                 
                 val processedText = if (provider == 1) { // Groq
                     val request = GroqChatRequest(
@@ -590,7 +593,6 @@ class ResultViewModel(
                 
                 launch(Dispatchers.Main) {
                     if (processedText != null) {
-                        // Menghilangkan kutip (rules pengaman ekstra) dan menyisipkan Hidden Metadata Tag di ujung bawah
                         val cleanedText = processedText.trim().removeSurrounding("'", "'").removeSurrounding("\"", "\"")
                         val finalOutput = cleanedText + "\n\n" + metaTag
                         
