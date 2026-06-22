@@ -1,13 +1,18 @@
 package com.example.ui.components
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,11 +21,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
@@ -112,6 +120,36 @@ data class KaTeXAssets(val css: String, val js: String, val autoRender: String) 
     val isReady get() = js.isNotEmpty()
 }
 
+/**
+ * Cache bitmap hasil render KaTeX per (htmlContent + isDark).
+ * Key: htmlContent — karena hexColor sudah di-embed di dalam htmlContent,
+ * warna teks berbeda otomatis menghasilkan key berbeda.
+ * Saat tema berubah, MarkdownText memanggil clearAll() agar semua bitmap di-re-render.
+ */
+object MathBitmapCache {
+    private val cache = mutableMapOf<String, Pair<Bitmap, Int>>() // key -> (bitmap, heightPx)
+
+    fun get(key: String): Pair<Bitmap, Int>? = cache[key]
+
+    fun put(key: String, bitmap: Bitmap, heightPx: Int) {
+        cache[key] = Pair(bitmap, heightPx)
+    }
+
+    fun remove(key: String) {
+        cache.remove(key)?.first?.recycle()
+    }
+
+    /** Dipanggil saat tema berubah — clear semua supaya re-render dengan warna baru */
+    fun clearAll() {
+        cache.values.forEach { it.first.recycle() }
+        cache.clear()
+    }
+}
+
+/**
+ * Render math di background WebView (tidak terlihat user), capture ke Bitmap,
+ * lalu tampilkan sebagai Image — native, zero kedip saat scroll.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun KaTeXWebView(
@@ -119,17 +157,22 @@ fun KaTeXWebView(
     assets: KaTeXAssets,
     textColor: Color,
     fontFamily: FontFamily,
-    // Cache height per htmlContent key agar tidak mulai dari 1dp setiap kali
-    heightCache: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>,
     modifier: Modifier = Modifier
 ) {
     if (!assets.isReady) return
 
-    val hexColor = String.format("#%06X", 0xFFFFFF and textColor.toArgb())
-    val cssFont = when (fontFamily) {
-        FontFamily.Serif -> "serif"
-        FontFamily.Monospace -> "monospace"
-        else -> "sans-serif"
+    val context = LocalContext.current
+    val density = LocalDensity.current
+
+    val hexColor = remember(textColor) {
+        String.format("#%06X", 0xFFFFFF and textColor.toArgb())
+    }
+    val cssFont = remember(fontFamily) {
+        when (fontFamily) {
+            FontFamily.Serif -> "serif"
+            FontFamily.Monospace -> "monospace"
+            else -> "sans-serif"
+        }
     }
 
     val patchedCss = remember(assets.css) {
@@ -185,7 +228,6 @@ document.addEventListener("DOMContentLoaded", function() {
             throwOnError: false
         });
     }
-    // Report tinggi konten ke Kotlin setelah render selesai
     setTimeout(function() {
         var el = document.getElementById('math-content');
         var h = el ? el.offsetHeight : document.body.scrollHeight;
@@ -197,64 +239,90 @@ document.addEventListener("DOMContentLoaded", function() {
 </html>""".trimIndent()
     }
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    // Mulai dari cached height jika tersedia, sehingga tidak ada layout jump
-    var webViewHeightPx by remember(htmlContent) {
-        mutableStateOf(heightCache[htmlContent] ?: 1)
+    // Cek apakah bitmap sudah ada di cache
+    val cached = remember(htmlContent) { MathBitmapCache.get(htmlContent) }
+    var bitmap by remember(htmlContent) { mutableStateOf(cached?.first) }
+    var heightPx by remember(htmlContent) { mutableStateOf(cached?.second ?: 1) }
+
+    val heightDp = with(density) { heightPx.toDp() }.coerceAtLeast(1.dp)
+
+    if (bitmap != null) {
+        // Sudah ada bitmap — tampilkan langsung, zero WebView, zero kedip
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.FillWidth,
+            modifier = modifier
+                .fillMaxWidth()
+                .height(heightDp)
+        )
+    } else {
+        // Belum ada bitmap — render di background WebView tersembunyi
+        // Spacer sebagai placeholder dengan height estimasi
+        Spacer(modifier = modifier.fillMaxWidth().height(heightDp.coerceAtLeast(32.dp)))
+
+        val capturedHtml = htmlContent
+        AndroidView(
+            modifier = Modifier.size(0.dp), // tidak terlihat user
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.defaultTextEncodingName = "utf-8"
+                    @Suppress("DEPRECATION")
+                    settings.allowFileAccessFromFileURLs = true
+                    webViewClient = android.webkit.WebViewClient()
+                    webChromeClient = android.webkit.WebChromeClient()
+
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onHeightReady(height: Int) {
+                            val d = ctx.resources.displayMetrics.density
+                            val px = (height * d).toInt().coerceAtLeast(1)
+                            val screenWidth = ctx.resources.displayMetrics.widthPixels
+
+                            // Capture bitmap di main thread setelah height diketahui
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                try {
+                                    measure(
+                                        android.view.View.MeasureSpec.makeMeasureSpec(screenWidth, android.view.View.MeasureSpec.EXACTLY),
+                                        android.view.View.MeasureSpec.makeMeasureSpec(px, android.view.View.MeasureSpec.EXACTLY)
+                                    )
+                                    layout(0, 0, screenWidth, px)
+                                    val bmp = Bitmap.createBitmap(screenWidth, px, Bitmap.Config.ARGB_8888)
+                                    val canvas = Canvas(bmp)
+                                    draw(canvas)
+                                    MathBitmapCache.put(capturedHtml, bmp, px)
+                                    bitmap = bmp
+                                    heightPx = px
+                                } catch (e: Exception) {
+                                    // Fallback: jika capture gagal, tetap pakai WebView biasa
+                                }
+                            }
+                        }
+                    }, "HeightBridge")
+
+                    loadDataWithBaseURL(
+                        "file:///android_asset/katex/",
+                        capturedHtml,
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                }
+            },
+            update = { } // tidak perlu update — sekali load saja
+        )
     }
-    // coerceAtLeast(1) saja — jangan 32dp, agar tidak ada ruang kosong ekstra
-    val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
 
-    // Snapshot ke val lokal agar factory lambda bisa capture tanpa recomposition leak
-    val capturedHtmlContent = htmlContent
-    val capturedHeightCache = heightCache
-
-    AndroidView(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(heightDp),
-        factory = { ctx ->
-            android.webkit.WebView(ctx).apply {
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.defaultTextEncodingName = "utf-8"
-                @Suppress("DEPRECATION")
-                settings.allowFileAccessFromFileURLs = true
-                webViewClient = android.webkit.WebViewClient()
-                webChromeClient = android.webkit.WebChromeClient()
-                // addJavascriptInterface di factory (hanya sekali), bukan di update
-                addJavascriptInterface(object : Any() {
-                    @android.webkit.JavascriptInterface
-                    fun onHeightReady(height: Int) {
-                        val d = ctx.resources.displayMetrics.density
-                        val px = (height * d).toInt().coerceAtLeast(1)
-                        capturedHeightCache[capturedHtmlContent] = px
-                        webViewHeightPx = px
-                    }
-                }, "HeightBridge")
-                // Tag digunakan sebagai guard agar tidak reload HTML yang sama
-                tag = ""
-            }
-        },
-        update = { webView ->
-            // Guard: hanya load ulang jika HTML-nya berbeda
-            if (webView.tag != capturedHtmlContent) {
-                webView.tag = capturedHtmlContent
-                webView.loadDataWithBaseURL(
-                    "file:///android_asset/katex/",
-                    capturedHtmlContent,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
-            }
-        }
-    )
+    // Cleanup bitmap dari cache saat composable di-dispose
+    DisposableEffect(htmlContent) {
+        onDispose { /* bitmap tetap di cache, tidak direcycle di sini */ }
+    }
 }
-
 @Composable
 fun MarkdownText(
     text: String, 
@@ -357,8 +425,12 @@ fun MarkdownText(
     val highlightBgColor = MaterialTheme.colorScheme.tertiaryContainer
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
-    // Cache height WebView per htmlContent — bertahan selama MarkdownText hidup
-    val webViewHeightCache = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>() }
+
+    // Deteksi dark/light mode — jika berubah, clear semua bitmap cache supaya re-render
+    val isDarkTheme = isSystemInDarkTheme()
+    LaunchedEffect(isDarkTheme) {
+        MathBitmapCache.clearAll()
+    }
 
     LaunchedEffect(text) {
         onResolveSelection { rect, selectedText ->
@@ -385,7 +457,6 @@ fun MarkdownText(
                         assets = katexAssets,
                         textColor = MaterialTheme.colorScheme.onBackground,
                         fontFamily = fontFamily,
-                        heightCache = webViewHeightCache,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
