@@ -140,10 +140,10 @@ fun KaTeXWebView(
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             
-            <!-- Menggunakan path relatif. Akan dicegat oleh WebViewClient Interceptor -->
-            <link rel="stylesheet" href="katex.min.css">
-            <script src="katex.min.js"></script>
-            <script src="auto-render.min.js"></script>
+            <!-- Path relatif yang akan diarahkan sempurna oleh Interceptor -->
+            <link rel="stylesheet" href="katex/katex.min.css">
+            <script src="katex/katex.min.js"></script>
+            <script src="katex/auto-render.min.js"></script>
             
             <style>
                 body {
@@ -226,35 +226,44 @@ fun KaTeXWebView(
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
                 
-                // ULTIMATE BYPASS: Mencegat request URL dan memuat langsung dari memori Asset APK
                 webViewClient = object : android.webkit.WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: android.webkit.WebView?,
                         request: android.webkit.WebResourceRequest?
                     ): android.webkit.WebResourceResponse? {
                         val url = request?.url?.toString() ?: ""
-                        try {
-                            if (url.endsWith("katex.min.css")) {
-                                return android.webkit.WebResourceResponse("text/css", "UTF-8", ctx.assets.open("katex/katex.min.css"))
-                            }
-                            if (url.endsWith("katex.min.js")) {
-                                return android.webkit.WebResourceResponse("application/javascript", "UTF-8", ctx.assets.open("katex/katex.min.js"))
-                            }
-                            if (url.endsWith("auto-render.min.js")) {
-                                return android.webkit.WebResourceResponse("application/javascript", "UTF-8", ctx.assets.open("katex/auto-render.min.js"))
-                            }
-                            if (url.contains("fonts/")) {
-                                val fontName = url.substringAfterLast("fonts/")
+                        
+                        // Menangkap request yang diarahkan ke domain whitelist OS
+                        if (url.startsWith("https://appassets.androidplatform.net/assets/")) {
+                            try {
+                                val filePath = url.removePrefix("https://appassets.androidplatform.net/assets/")
                                 val mimeType = when {
-                                    fontName.endsWith(".woff2") -> "font/woff2"
-                                    fontName.endsWith(".woff") -> "font/woff"
-                                    fontName.endsWith(".ttf") -> "font/ttf"
+                                    filePath.endsWith(".css") -> "text/css"
+                                    filePath.endsWith(".js") -> "application/javascript"
+                                    filePath.endsWith(".woff2") -> "font/woff2"
+                                    filePath.endsWith(".woff") -> "font/woff"
+                                    filePath.endsWith(".ttf") -> "font/ttf"
                                     else -> "application/octet-stream"
                                 }
-                                return android.webkit.WebResourceResponse(mimeType, null, ctx.assets.open("katex/fonts/$fontName"))
+                                
+                                // INJEKSI CORS HEADER & STATUS 200 OK
+                                // Ini kunci utama supaya OS Android 15 nggak memblokir file lokal kita
+                                val headers = mapOf(
+                                    "Access-Control-Allow-Origin" to "*",
+                                    "Cache-Control" to "no-cache"
+                                )
+                                
+                                return android.webkit.WebResourceResponse(
+                                    mimeType,
+                                    "UTF-8",
+                                    200,
+                                    "OK",
+                                    headers,
+                                    ctx.assets.open(filePath)
+                                )
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
                         }
                         return super.shouldInterceptRequest(view, request)
                     }
@@ -264,8 +273,8 @@ fun KaTeXWebView(
             }
         },
         update = { webView ->
-            // Bikin HTTPS bohongan biar lolos dari Cross-Origin Read Blocking (CORB) OS Android
-            webView.loadDataWithBaseURL("https://local.katex/", htmlContent, "text/html", "UTF-8", null)
+            // Base URL pakai domain whitelist resmi WebViewAssetLoader untuk menghindari blokir CORS
+            webView.loadDataWithBaseURL("https://appassets.androidplatform.net/assets/", htmlContent, "text/html", "UTF-8", null)
         }
     )
 }
@@ -283,6 +292,7 @@ fun MarkdownText(
 ) {
     val lines = text.split("\n")
     
+    // Chunking the markdown into Native lines and WebView math blocks
     val markdownItems = remember(text) {
         val items = mutableListOf<MarkdownItem>()
         var inMathBlock = false
