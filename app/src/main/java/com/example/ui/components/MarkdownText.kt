@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONArray
 
 /**
@@ -243,11 +241,80 @@ document.addEventListener("DOMContentLoaded", function() {
     val cached = remember(htmlContent) { MathBitmapCache.get(htmlContent) }
     var bitmap by remember(htmlContent) { mutableStateOf(cached?.first) }
     var heightPx by remember(htmlContent) { mutableStateOf(cached?.second ?: 1) }
-
     val heightDp = with(density) { heightPx.toDp() }.coerceAtLeast(1.dp)
 
+    val capturedHtml = htmlContent
+
+    // Render offscreen WebView untuk capture bitmap — hanya jika belum ada di cache
+    if (bitmap == null) {
+        LaunchedEffect(capturedHtml) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                val ctx = context
+                val screenWidth = ctx.resources.displayMetrics.widthPixels
+                val d = ctx.resources.displayMetrics.density
+
+                val webView = android.webkit.WebView(ctx).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.defaultTextEncodingName = "utf-8"
+                    @Suppress("DEPRECATION")
+                    settings.allowFileAccessFromFileURLs = true
+                    webViewClient = android.webkit.WebViewClient()
+                    webChromeClient = android.webkit.WebChromeClient()
+                    // Ukuran layar penuh tapi alpha 0 — WebView harus punya ukuran
+                    // nyata agar draw() bisa capture dengan benar
+                    alpha = 0f
+                }
+
+                // Pasang ke window agar WebView punya drawing surface yang valid
+                val rootView = (ctx as? android.app.Activity)?.window?.decorView as? android.view.ViewGroup
+                rootView?.addView(
+                    webView,
+                    android.view.ViewGroup.LayoutParams(screenWidth, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+                )
+
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+                webView.addJavascriptInterface(object : Any() {
+                    @android.webkit.JavascriptInterface
+                    fun onHeightReady(height: Int) {
+                        val px = (height * d).toInt().coerceAtLeast(1)
+                        handler.post {
+                            try {
+                                webView.measure(
+                                    android.view.View.MeasureSpec.makeMeasureSpec(screenWidth, android.view.View.MeasureSpec.EXACTLY),
+                                    android.view.View.MeasureSpec.makeMeasureSpec(px, android.view.View.MeasureSpec.EXACTLY)
+                                )
+                                webView.layout(0, 0, screenWidth, px)
+                                val bmp = Bitmap.createBitmap(screenWidth, px, Bitmap.Config.ARGB_8888)
+                                val canvas = Canvas(bmp)
+                                webView.draw(canvas)
+                                MathBitmapCache.put(capturedHtml, bmp, px)
+                                bitmap = bmp
+                                heightPx = px
+                            } catch (_: Exception) {
+                            } finally {
+                                rootView?.removeView(webView)
+                                webView.destroy()
+                            }
+                        }
+                    }
+                }, "HeightBridge")
+
+                webView.loadDataWithBaseURL(
+                    "file:///android_asset/katex/",
+                    capturedHtml,
+                    "text/html",
+                    "UTF-8",
+                    null
+                )
+            }
+        }
+    }
+
+    // Tampilkan bitmap jika sudah siap, atau placeholder transparan jika masih loading
     if (bitmap != null) {
-        // Sudah ada bitmap — tampilkan langsung, zero WebView, zero kedip
         Image(
             bitmap = bitmap!!.asImageBitmap(),
             contentDescription = null,
@@ -257,70 +324,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 .height(heightDp)
         )
     } else {
-        // Belum ada bitmap — render di background WebView tersembunyi
-        // Spacer sebagai placeholder dengan height estimasi
-        Spacer(modifier = modifier.fillMaxWidth().height(heightDp.coerceAtLeast(32.dp)))
-
-        val capturedHtml = htmlContent
-        AndroidView(
-            modifier = Modifier.size(0.dp), // tidak terlihat user
-            factory = { ctx ->
-                android.webkit.WebView(ctx).apply {
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    isVerticalScrollBarEnabled = false
-                    isHorizontalScrollBarEnabled = false
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.defaultTextEncodingName = "utf-8"
-                    @Suppress("DEPRECATION")
-                    settings.allowFileAccessFromFileURLs = true
-                    webViewClient = android.webkit.WebViewClient()
-                    webChromeClient = android.webkit.WebChromeClient()
-
-                    addJavascriptInterface(object : Any() {
-                        @android.webkit.JavascriptInterface
-                        fun onHeightReady(height: Int) {
-                            val d = ctx.resources.displayMetrics.density
-                            val px = (height * d).toInt().coerceAtLeast(1)
-                            val screenWidth = ctx.resources.displayMetrics.widthPixels
-
-                            // Capture bitmap di main thread setelah height diketahui
-                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                try {
-                                    measure(
-                                        android.view.View.MeasureSpec.makeMeasureSpec(screenWidth, android.view.View.MeasureSpec.EXACTLY),
-                                        android.view.View.MeasureSpec.makeMeasureSpec(px, android.view.View.MeasureSpec.EXACTLY)
-                                    )
-                                    layout(0, 0, screenWidth, px)
-                                    val bmp = Bitmap.createBitmap(screenWidth, px, Bitmap.Config.ARGB_8888)
-                                    val canvas = Canvas(bmp)
-                                    draw(canvas)
-                                    MathBitmapCache.put(capturedHtml, bmp, px)
-                                    bitmap = bmp
-                                    heightPx = px
-                                } catch (e: Exception) {
-                                    // Fallback: jika capture gagal, tetap pakai WebView biasa
-                                }
-                            }
-                        }
-                    }, "HeightBridge")
-
-                    loadDataWithBaseURL(
-                        "file:///android_asset/katex/",
-                        capturedHtml,
-                        "text/html",
-                        "UTF-8",
-                        null
-                    )
-                }
-            },
-            update = { } // tidak perlu update — sekali load saja
-        )
-    }
-
-    // Cleanup bitmap dari cache saat composable di-dispose
-    DisposableEffect(htmlContent) {
-        onDispose { /* bitmap tetap di cache, tidak direcycle di sini */ }
+        // Placeholder tipis — tidak pakai Spacer besar agar tidak bikin gap
+        Spacer(modifier = modifier.fillMaxWidth().height(4.dp))
     }
 }
 @Composable
