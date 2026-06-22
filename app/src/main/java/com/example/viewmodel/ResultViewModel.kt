@@ -542,17 +542,18 @@ class ResultViewModel(
                     return@launch 
                 }
 
-                // ENGINE MODE: SUPER STRICT INSTRUCTIONS
+                // ENGINE MODE: SUPER STRICT INSTRUCTIONS WITH SMART TIDY UP
                 val taskInstruction = when (task) {
-                    0 -> "Task: TIDY UP. Your ONLY job is to fix grammatical errors, remove stuttering/filler words, and make the text readable. DO NOT analyze. DO NOT summarize. DO NOT add new information. Keep the original meaning perfectly intact."
+                    0 -> "Task: STRICT TIDY UP. Fix grammatical errors, remove stuttering/filler words, and cleverly correct any typos or out-of-context words based on the surrounding paragraph. DO NOT summarize, DO NOT analyze, and DO NOT cut the information short. Maintain the original length but make it perfectly coherent."
                     1 -> "Task: SUMMARIZE. Extract the core information and make a concise summary. Ignore filler words."
                     2 -> "Task: ANALYZE. Extract the main points, underlying sentiments, and any action items."
-                    else -> "Task: TIDY UP."
+                    else -> "Task: STRICT TIDY UP."
                 }
 
+                // Header diwajibkan untuk menstruktur teks, tak peduli paragraf atau bullet
                 val formatInstruction = when (format) {
-                    0 -> "Format: PARAGRAPHS ONLY. DO NOT use bullet points."
-                    1 -> "Format: BULLET POINTS. Use strictly the minus sign '-' for bullet points. NEVER use asterisks ('*')."
+                    0 -> "Format: Use beautiful Markdown. Structure the text with headers (#, ##) for clear topic shifts and use PARAGRAPHS for the details. DO NOT use bullet points."
+                    1 -> "Format: Use beautiful Markdown. Structure the text with headers (#, ##) for clear topic shifts and use BULLET POINTS for the details. Use strictly the minus sign '-' for bullet points. NEVER use asterisks ('*')."
                     else -> ""
                 }
 
@@ -571,7 +572,6 @@ class ResultViewModel(
                     4. LATEX MATH: Convert ALL math, numbers, and scientific symbols to LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math.
                 """.trimIndent()
                 
-                // Menambahkan command penegas di User Content agar Llama/Gemini tidak lupa instruksi bahasanya
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
                 
                 val processedText = if (provider == 1) { // Groq
