@@ -1,10 +1,28 @@
+```kotlin
 package com.example.ui.components
 
 import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,13 +32,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
@@ -31,6 +54,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
 /**
@@ -67,7 +92,7 @@ private fun resolveRectToPosition(
     rawLines: List<String>
 ): Triple<Int, Int, Int>? {
     if (selectedText.isBlank()) return null
-    val anchor = androidx.compose.ui.geometry.Offset(rect.left, rect.center.y)
+    val anchor = Offset(rect.left, rect.center.y)
     val info = registry.values.firstOrNull { it.boundsInWindow.let { b -> anchor.y in b.top..b.bottom } }
         ?: registry.values.minByOrNull { lineInfo ->
             val b = lineInfo.boundsInWindow
@@ -84,7 +109,7 @@ private fun resolveRectToPosition(
 
     val localX = (anchor.x - info.boundsInWindow.left).coerceIn(0f, info.boundsInWindow.width)
     val approxLocalOffset = info.layoutResult.getOffsetForPosition(
-        androidx.compose.ui.geometry.Offset(localX, info.boundsInWindow.height / 2f)
+        Offset(localX, info.boundsInWindow.height / 2f)
     ).coerceIn(0, info.renderedText.length)
     val approxRawOffset = (approxLocalOffset + info.prefixLen).coerceIn(0, rawLine.length)
 
@@ -112,6 +137,36 @@ data class KaTeXAssets(val css: String, val js: String, val autoRender: String) 
     val isReady get() = js.isNotEmpty()
 }
 
+// Komponen Shimmer Elegan
+@Composable
+fun ShimmerBox(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val offsetX by infiniteTransition.animateFloat(
+        initialValue = -1000f,
+        targetValue = 2000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer_offset"
+    )
+
+    val color1 = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    val color2 = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+
+    val brush = Brush.linearGradient(
+        colors = listOf(color1, color2, color1),
+        start = Offset(offsetX, 0f),
+        end = Offset(offsetX + 400f, 400f)
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(brush)
+    )
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun KaTeXWebView(
@@ -119,7 +174,6 @@ fun KaTeXWebView(
     assets: KaTeXAssets,
     textColor: Color,
     fontFamily: FontFamily,
-    // Cache height per htmlContent key agar tidak mulai dari 1dp setiap kali
     heightCache: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>,
     modifier: Modifier = Modifier
 ) {
@@ -163,18 +217,15 @@ body {
     margin: 0;
     padding: 8px 4px;
     word-wrap: break-word;
-    /* Ubah ini supaya bodi utama tidak menahan overflow horizontal */
     overflow-x: hidden; 
     overflow-y: hidden;
 }
-/* Tambahan ruleset khusus agar blok KaTeX (rumus) bisa digeser (horizontal scroll) */
 .katex-display {
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 6px; /* Ruang bernapas buat scrollbar */
+    padding-bottom: 6px; 
     -webkit-overflow-scrolling: touch;
 }
-/* Styling scrollbar tipis agar UI tetap clean */
 .katex-display::-webkit-scrollbar {
     height: 4px;
 }
@@ -202,11 +253,9 @@ document.addEventListener("DOMContentLoaded", function() {
             throwOnError: false
         });
     }
-    // Report tinggi konten ke Kotlin setelah render selesai
     setTimeout(function() {
         var el = document.getElementById('math-content');
         var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-        // Tambahkan buffer ~30px karena ada tambahan scrollbar di bawah
         if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 30);
     }, 500);
 });
@@ -215,57 +264,94 @@ document.addEventListener("DOMContentLoaded", function() {
 </html>""".trimIndent()
     }
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    var webViewHeightPx by remember(htmlContent) {
-        mutableStateOf(heightCache[htmlContent] ?: 1)
+    // STATE CERDAS: Nahan shift layout dan nyalain animasi
+    var isRendered by remember(htmlContent) { mutableStateOf(false) }
+    var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
+
+    val density = LocalDensity.current
+    val targetHeightDp = remember(webViewHeightPx) {
+        if (webViewHeightPx == -1) 60.dp // Tinggi box reservasi awal (Skeleton Box)
+        else with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
     }
-    val heightDp = with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
+
+    // Melar mulus
+    val animatedHeight by animateDpAsState(
+        targetValue = targetHeightDp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+        label = "katexHeight"
+    )
+
+    // Pudar halus (Crossfade)
+    val webViewAlpha by animateFloatAsState(
+        targetValue = if (isRendered) 1f else 0.01f, // 0.01f mencegah view mati 100% sehingga tetap ter-render
+        animationSpec = tween(400),
+        label = "webviewAlpha"
+    )
 
     val capturedHtmlContent = htmlContent
     val capturedHeightCache = heightCache
 
-    AndroidView(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(heightDp),
-        factory = { ctx ->
-            android.webkit.WebView(ctx).apply {
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                // Kita enable horizontal scrolling di level native Android supaya touch geser bisa diteruskan
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false 
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.defaultTextEncodingName = "utf-8"
-                @Suppress("DEPRECATION")
-                settings.allowFileAccessFromFileURLs = true
-                webViewClient = android.webkit.WebViewClient()
-                webChromeClient = android.webkit.WebChromeClient()
-                addJavascriptInterface(object : Any() {
-                    @android.webkit.JavascriptInterface
-                    fun onHeightReady(height: Int) {
-                        val d = ctx.resources.displayMetrics.density
-                        val px = (height * d).toInt().coerceAtLeast(1)
-                        capturedHeightCache[capturedHtmlContent] = px
-                        webViewHeightPx = px
-                    }
-                }, "HeightBridge")
-                tag = ""
+            .height(animatedHeight) // Wadah dipatok dengan animasi tinggi melar halus
+    ) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(webViewAlpha),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false 
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.defaultTextEncodingName = "utf-8"
+                    @Suppress("DEPRECATION")
+                    settings.allowFileAccessFromFileURLs = true
+                    webViewClient = android.webkit.WebViewClient()
+                    webChromeClient = android.webkit.WebChromeClient()
+                    
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onHeightReady(height: Int) {
+                            // Wajib dieksekusi di Main Thread buat update UI
+                            Handler(Looper.getMainLooper()).post {
+                                val d = ctx.resources.displayMetrics.density
+                                val px = (height * d).toInt().coerceAtLeast(1)
+                                capturedHeightCache[capturedHtmlContent] = px
+                                webViewHeightPx = px
+                                isRendered = true // Memicu fade-out Shimmer dan pemanjangan wadah
+                            }
+                        }
+                    }, "HeightBridge")
+                    tag = ""
+                }
+            },
+            update = { webView ->
+                if (webView.tag != capturedHtmlContent) {
+                    webView.tag = capturedHtmlContent
+                    webView.loadDataWithBaseURL(
+                        "file:///android_asset/katex/",
+                        capturedHtmlContent,
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                }
             }
-        },
-        update = { webView ->
-            if (webView.tag != capturedHtmlContent) {
-                webView.tag = capturedHtmlContent
-                webView.loadDataWithBaseURL(
-                    "file:///android_asset/katex/",
-                    capturedHtmlContent,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
-            }
+        )
+
+        // Shimmer Overlay yang numpuk pas di atas webview sebelum jadi
+        AnimatedVisibility(
+            visible = !isRendered,
+            enter = fadeIn(),
+            exit = fadeOut(animationSpec = tween(400))
+        ) {
+            ShimmerBox(modifier = Modifier.fillMaxSize().padding(vertical = 4.dp))
         }
-    )
+    }
 }
 
 @Composable
@@ -283,7 +369,7 @@ fun MarkdownText(
 
     var katexAssets by remember { mutableStateOf(KaTeXAssets("", "", "")) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             val css = try { context.assets.open("katex/katex.min.css").bufferedReader().readText() } catch (e: Exception) { "" }
             val js = try { context.assets.open("katex/katex.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
             val ar = try { context.assets.open("katex/auto-render.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
@@ -666,3 +752,6 @@ fun BasicMarkdownLine(
         onTextLayout = { textLayoutResult = it }
     )
 }
+
+
+```
