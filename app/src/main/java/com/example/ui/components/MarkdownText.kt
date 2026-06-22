@@ -4,7 +4,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,9 +15,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
@@ -28,14 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONArray
 
 /**
  * A single saved highlight.
- * [start]/[end] pin it to ONE exact occurrence of [text] within a specific line
- * (line index = [line]). When start < 0 it's legacy data with no position info,
- * and every occurrence of [text] in the whole note is highlighted (old behavior),
- * which is the best we can do without knowing where the user originally selected it.
  */
 data class HighlightItem(
     val text: String,
@@ -54,12 +52,13 @@ data class LineLayoutInfo(
 )
 
 /**
- * Given a selection Rect in window coordinates (from the custom selection toolbar)
- * and the actual selected text, find which rendered line the selection START falls
- * in, then locate the nearest occurrence of [selectedText] to that point within the
- * raw line. Returns (lineIndex, rawStart, rawEnd), or null if it can't be resolved
- * (selection spans multiple lines, etc).
+ * Sealed class to handle chunking between Native Compose Text and KaTeX WebViews
  */
+sealed class MarkdownItem {
+    data class NativeLine(val text: String, val lineIndex: Int) : MarkdownItem()
+    data class MathBlock(val rawText: String, val startLineIndex: Int) : MarkdownItem()
+}
+
 private fun resolveRectToPosition(
     rect: Rect,
     selectedText: String,
@@ -88,8 +87,6 @@ private fun resolveRectToPosition(
     ).coerceIn(0, info.renderedText.length)
     val approxRawOffset = (approxLocalOffset + info.prefixLen).coerceIn(0, rawLine.length)
 
-    // The tap/selection point gives an approximate offset; snap to the nearest
-    // actual occurrence of the selected text on this line for exact start/end.
     val lowerLine = rawLine.lowercase()
     val lowerSel = selectedText.lowercase()
     var bestStart = -1
@@ -110,6 +107,96 @@ private fun resolveRectToPosition(
 }
 
 @Composable
+fun KaTeXWebView(
+    mathContent: String,
+    textColor: Color,
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    val hexColor = String.format("#%06X", 0xFFFFFF and textColor.toArgb())
+    val cssFont = when (fontFamily) {
+        FontFamily.Serif -> "serif"
+        FontFamily.Monospace -> "monospace"
+        else -> "sans-serif"
+    }
+
+    val htmlContent = remember(mathContent, hexColor, cssFont) {
+        var html = mathContent
+        html = html.replace(Regex("^### (.*)$", RegexOption.MULTILINE), "<h4>$1</h4>")
+        html = html.replace(Regex("^## (.*)$", RegexOption.MULTILINE), "<h3>$1</h3>")
+        html = html.replace(Regex("^# (.*)$", RegexOption.MULTILINE), "<h2>$1</h2>")
+        
+        html = html.replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
+        html = html.replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
+        html = html.replace(Regex("_(.*?)_"), "<i>$1</i>")
+        
+        html = html.replace(Regex("^- (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
+        html = html.replace(Regex("^[0-9]+\\. (.*)$", RegexOption.MULTILINE), "<li>$1</li>")
+        
+        if (!html.trim().startsWith("$$")) {
+            html = html.replace("\n", "<br>")
+        }
+        
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <link rel="stylesheet" href="file:///android_asset/katex/katex.min.css">
+            <script src="file:///android_asset/katex/katex.min.js"></script>
+            <script src="file:///android_asset/katex/auto-render.min.js"></script>
+            <style>
+                body {
+                    background-color: transparent;
+                    color: $hexColor;
+                    font-family: $cssFont;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    margin: 0;
+                    padding: 4px 0px;
+                    overflow-wrap: break-word;
+                }
+                li { margin-bottom: 4px; }
+            </style>
+        </head>
+        <body>
+            $html
+            <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    renderMathInElement(document.body, {
+                      delimiters: [
+                          {left: '$$', right: '$$', display: true},
+                          {left: '$', right: '$', display: false},
+                          {left: '\\(', right: '\\)', display: false},
+                          {left: '\\[', right: '\\]', display: true}
+                      ],
+                      throwOnError: false
+                    });
+                });
+            </script>
+        </body>
+        </html>
+        """.trimIndent()
+    }
+
+    AndroidView(
+        modifier = modifier.fillMaxWidth(),
+        factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                settings.javaScriptEnabled = true
+                settings.defaultTextEncodingName = "utf-8"
+            }
+        },
+        update = { webView ->
+            webView.loadDataWithBaseURL("file:///android_asset/katex/", htmlContent, "text/html", "UTF-8", null)
+        }
+    )
+}
+
+@Composable
 fun MarkdownText(
     text: String, 
     listState: LazyListState,
@@ -121,6 +208,54 @@ fun MarkdownText(
     modifier: Modifier = Modifier
 ) {
     val lines = text.split("\n")
+    
+    // Chunking the markdown into Native lines and WebView math blocks
+    val markdownItems = remember(text) {
+        val items = mutableListOf<MarkdownItem>()
+        var inMathBlock = false
+        var mathBlockContent = ""
+        var mathBlockStartIndex = -1
+
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (inMathBlock) {
+                mathBlockContent += "\n" + line
+                if (line.trim().endsWith("$$") || line.trim() == "$$") {
+                    inMathBlock = false
+                    items.add(MarkdownItem.MathBlock(mathBlockContent, mathBlockStartIndex))
+                    mathBlockContent = ""
+                }
+                i++
+                continue
+            }
+
+            if (line.trim().startsWith("$$")) {
+                inMathBlock = true
+                mathBlockStartIndex = i
+                mathBlockContent = line
+                if (line.trim().length > 2 && line.trim().endsWith("$$")) {
+                    inMathBlock = false
+                    items.add(MarkdownItem.MathBlock(mathBlockContent, mathBlockStartIndex))
+                    mathBlockContent = ""
+                }
+                i++
+                continue
+            }
+
+            val hasInlineMath = Regex("""\$.+?\$""").containsMatchIn(line)
+            if (hasInlineMath) {
+                items.add(MarkdownItem.MathBlock(line, i))
+            } else {
+                items.add(MarkdownItem.NativeLine(line, i))
+            }
+            i++
+        }
+        if (inMathBlock) {
+            items.add(MarkdownItem.MathBlock(mathBlockContent, mathBlockStartIndex))
+        }
+        items
+    }
     
     val savedHighlights = remember(highlightsInfo) {
         val list = mutableListOf<HighlightItem>()
@@ -148,10 +283,6 @@ fun MarkdownText(
 
     val highlightBgColor = MaterialTheme.colorScheme.tertiaryContainer
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
-
-    // Registry of every rendered line's layout + window bounds + raw-line prefix
-    // offset, so a window-space selection Rect (from the custom selection toolbar)
-    // can be resolved into an exact (lineIndex, rawStart, rawEnd) position.
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
 
     LaunchedEffect(text) {
@@ -166,56 +297,116 @@ fun MarkdownText(
     ) {
         item { Spacer(modifier = Modifier.height(8.dp)) }
 
-        itemsIndexed(lines) { lineIndex, line ->
-            val indentSpaces = line.takeWhile { it == ' ' || it == '\t' }.length
-            val trimmedLine = line.trimStart()
+        items(markdownItems.size) { index ->
+            when (val item = markdownItems[index]) {
+                is MarkdownItem.MathBlock -> {
+                    KaTeXWebView(
+                        mathContent = item.rawText,
+                        textColor = MaterialTheme.colorScheme.onBackground,
+                        fontFamily = fontFamily,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                is MarkdownItem.NativeLine -> {
+                    val lineIndex = item.lineIndex
+                    val line = item.text
+                    val indentSpaces = line.takeWhile { it == ' ' || it == '\t' }.length
+                    val trimmedLine = line.trimStart()
 
-            val lineHighlights = remember(savedHighlights, lineIndex) {
-                savedHighlights.filter { it.line == lineIndex }
-            }
-            val legacyHighlights = remember(savedHighlights) {
-                savedHighlights.filter { it.start < 0 }
-            }
+                    val lineHighlights = remember(savedHighlights, lineIndex) {
+                        savedHighlights.filter { it.line == lineIndex }
+                    }
+                    val legacyHighlights = remember(savedHighlights) {
+                        savedHighlights.filter { it.start < 0 }
+                    }
 
-            when {
-                trimmedLine.startsWith("# ") -> {
-                    Text(
-                        text = trimmedLine.removePrefix("# ").trim(),
-                        style = MaterialTheme.typography.displaySmall.copy(fontFamily = fontFamily),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 32.dp, bottom = 16.dp)
-                    )
-                }
-                trimmedLine.startsWith("## ") -> {
-                    Text(
-                        text = trimmedLine.removePrefix("## ").trim(),
-                        style = MaterialTheme.typography.headlineMedium.copy(fontFamily = fontFamily),
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)
-                    )
-                }
-                trimmedLine.startsWith("### ") -> {
-                    Text(
-                        text = trimmedLine.removePrefix("### ").trim(),
-                        style = MaterialTheme.typography.titleLarge.copy(fontFamily = fontFamily),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                }
-                trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ") -> {
-                    val paddingStart = 16.dp + (indentSpaces * 6).dp
-                    val prefixLen = indentSpaces + 2
-                    Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
-                        Text(
-                            text = if (indentSpaces > 0) "◦" else "•",
-                            modifier = Modifier.width(24.dp),
-                            style = MaterialTheme.typography.bodyLarge, 
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        BasicMarkdownLine(
-                            text = trimmedLine.substring(2).trim(), 
+                    when {
+                        trimmedLine.startsWith("# ") -> {
+                            Text(
+                                text = trimmedLine.removePrefix("# ").trim(),
+                                style = MaterialTheme.typography.displaySmall.copy(fontFamily = fontFamily),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 32.dp, bottom = 16.dp)
+                            )
+                        }
+                        trimmedLine.startsWith("## ") -> {
+                            Text(
+                                text = trimmedLine.removePrefix("## ").trim(),
+                                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = fontFamily),
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)
+                            )
+                        }
+                        trimmedLine.startsWith("### ") -> {
+                            Text(
+                                text = trimmedLine.removePrefix("### ").trim(),
+                                style = MaterialTheme.typography.titleLarge.copy(fontFamily = fontFamily),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                            )
+                        }
+                        trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ") -> {
+                            val paddingStart = 16.dp + (indentSpaces * 6).dp
+                            val prefixLen = indentSpaces + 2
+                            Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
+                                Text(
+                                    text = if (indentSpaces > 0) "◦" else "•",
+                                    modifier = Modifier.width(24.dp),
+                                    style = MaterialTheme.typography.bodyLarge, 
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                BasicMarkdownLine(
+                                    text = trimmedLine.substring(2).trim(), 
+                                    lineIndex = lineIndex,
+                                    prefixLen = prefixLen,
+                                    highlightQuery = highlightQuery,
+                                    lineHighlights = lineHighlights,
+                                    legacyHighlights = legacyHighlights,
+                                    onSavedHighlightClick = onSavedHighlightClick,
+                                    highlightBgColor = highlightBgColor,
+                                    highlightTextColor = highlightTextColor,
+                                    fontFamily = fontFamily,
+                                    lineRegistry = lineRegistry,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        trimmedLine.matches(Regex("^[0-9]+\\.\\s.*")) -> {
+                            val dotIndex = trimmedLine.indexOf(".")
+                            val number = trimmedLine.substring(0, dotIndex + 1)
+                            val content = trimmedLine.substring(dotIndex + 1).trim()
+                            val paddingStart = 16.dp + (indentSpaces * 6).dp
+                            val contentStartInTrimmed = trimmedLine.indexOf(content, dotIndex + 1)
+                            val prefixLen = indentSpaces + (if (contentStartInTrimmed >= 0) contentStartInTrimmed else dotIndex + 1)
+                            
+                            Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
+                                Text(
+                                    text = number, 
+                                    modifier = Modifier.width(32.dp), 
+                                    style = MaterialTheme.typography.bodyLarge, 
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                BasicMarkdownLine(
+                                    text = content, 
+                                    lineIndex = lineIndex,
+                                    prefixLen = prefixLen,
+                                    highlightQuery = highlightQuery,
+                                    lineHighlights = lineHighlights,
+                                    legacyHighlights = legacyHighlights,
+                                    onSavedHighlightClick = onSavedHighlightClick,
+                                    highlightBgColor = highlightBgColor,
+                                    highlightTextColor = highlightTextColor,
+                                    fontFamily = fontFamily,
+                                    lineRegistry = lineRegistry,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        trimmedLine.isBlank() -> Spacer(modifier = Modifier.height(16.dp))
+                        else -> BasicMarkdownLine(
+                            text = trimmedLine, 
                             lineIndex = lineIndex,
-                            prefixLen = prefixLen,
+                            prefixLen = indentSpaces,
                             highlightQuery = highlightQuery,
                             lineHighlights = lineHighlights,
                             legacyHighlights = legacyHighlights,
@@ -224,56 +415,10 @@ fun MarkdownText(
                             highlightTextColor = highlightTextColor,
                             fontFamily = fontFamily,
                             lineRegistry = lineRegistry,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
                 }
-                trimmedLine.matches(Regex("^[0-9]+\\.\\s.*")) -> {
-                    val dotIndex = trimmedLine.indexOf(".")
-                    val number = trimmedLine.substring(0, dotIndex + 1)
-                    val content = trimmedLine.substring(dotIndex + 1).trim()
-                    val paddingStart = 16.dp + (indentSpaces * 6).dp
-                    val contentStartInTrimmed = trimmedLine.indexOf(content, dotIndex + 1)
-                    val prefixLen = indentSpaces + (if (contentStartInTrimmed >= 0) contentStartInTrimmed else dotIndex + 1)
-                    
-                    Row(modifier = Modifier.padding(start = paddingStart, top = 8.dp, bottom = 8.dp)) {
-                        Text(
-                            text = number, 
-                            modifier = Modifier.width(32.dp), 
-                            style = MaterialTheme.typography.bodyLarge, 
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        BasicMarkdownLine(
-                            text = content, 
-                            lineIndex = lineIndex,
-                            prefixLen = prefixLen,
-                            highlightQuery = highlightQuery,
-                            lineHighlights = lineHighlights,
-                            legacyHighlights = legacyHighlights,
-                            onSavedHighlightClick = onSavedHighlightClick,
-                            highlightBgColor = highlightBgColor,
-                            highlightTextColor = highlightTextColor,
-                            fontFamily = fontFamily,
-                            lineRegistry = lineRegistry,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                trimmedLine.isBlank() -> Spacer(modifier = Modifier.height(16.dp))
-                else -> BasicMarkdownLine(
-                    text = trimmedLine, 
-                    lineIndex = lineIndex,
-                    prefixLen = indentSpaces,
-                    highlightQuery = highlightQuery,
-                    lineHighlights = lineHighlights,
-                    legacyHighlights = legacyHighlights,
-                    onSavedHighlightClick = onSavedHighlightClick,
-                    highlightBgColor = highlightBgColor,
-                    highlightTextColor = highlightTextColor,
-                    fontFamily = fontFamily,
-                    lineRegistry = lineRegistry,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
             }
         }
         
@@ -323,7 +468,6 @@ fun BasicMarkdownLine(
         val plainString = this.toAnnotatedString().text
         val plainLength = plainString.length
 
-        // Precise: highlight only the exact occurrence the user originally selected.
         lineHighlights.forEach { item ->
             val localStart = item.start - prefixLen
             val localEnd = item.end - prefixLen
@@ -342,8 +486,6 @@ fun BasicMarkdownLine(
             }
         }
 
-        // Legacy fallback: highlights saved before position tracking existed don't
-        // know where they came from, so the best we can still do is match by text.
         val plainLower = plainString.lowercase()
         legacyHighlights.forEach { item ->
             val wordLower = item.text.lowercase()
