@@ -544,7 +544,7 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. MANDATORY TRANSLATION: The entire output MUST be in $language. Even if the raw transcript is in another language, you MUST translate it completely to $language while tidying it up.
                         2. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
-                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `$$` for block equations and `$` for inline math. NEVER use `$` as a plain text symbol.
+                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol.
                         4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact in $language.
                         5. ZERO YAPPING & NO QUOTES: Output ONLY the final processed text. DO NOT add conversational filler, introductions, or conclusions. DO NOT wrap your response in single quotes (') or double quotes ("). DO NOT use markdown code blocks (```) to enclose the entire response.
                     """.trimIndent()
@@ -555,7 +555,7 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. MANDATORY TRANSLATION: The entire summary MUST be in $language. Even if the raw transcript is in another language, your final summary MUST be in $language. No exceptions.
                         2. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
-                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `$$` for block equations and `$` for inline math. NEVER use `$` as a plain text symbol.
+                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
                         5. ZERO YAPPING & NO QUOTES: Output ONLY the final summarized text. DO NOT add conversational filler. DO NOT wrap your response in single quotes (') or double quotes ("). DO NOT use markdown code blocks (```) to enclose the entire response.
                     """.trimIndent()
@@ -636,3 +636,4 @@ class ResultViewModel(
             }
     }
 }
+
