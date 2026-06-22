@@ -140,10 +140,10 @@ fun KaTeXWebView(
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             
-            <!-- Path relatif yang akan diarahkan sempurna oleh Interceptor -->
-            <link rel="stylesheet" href="katex/katex.min.css">
-            <script src="katex/katex.min.js"></script>
-            <script src="katex/auto-render.min.js"></script>
+            <!-- Path via WebViewAssetLoader AssetsPathHandler -->
+            <link rel="stylesheet" href="/assets/katex/katex.min.css">
+            <script src="/assets/katex/katex.min.js"></script>
+            <script src="/assets/katex/auto-render.min.js"></script>
             
             <style>
                 body {
@@ -226,46 +226,16 @@ fun KaTeXWebView(
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
                 
-                webViewClient = object : android.webkit.WebViewClient() {
+                val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(ctx))
+                    .build()
+
+                webViewClient = object : androidx.webkit.WebViewClientCompat() {
                     override fun shouldInterceptRequest(
-                        view: android.webkit.WebView?,
-                        request: android.webkit.WebResourceRequest?
+                        view: android.webkit.WebView,
+                        request: android.webkit.WebResourceRequest
                     ): android.webkit.WebResourceResponse? {
-                        val url = request?.url?.toString() ?: ""
-                        
-                        // Menangkap request yang diarahkan ke domain whitelist OS
-                        if (url.startsWith("https://appassets.androidplatform.net/assets/")) {
-                            try {
-                                val filePath = url.removePrefix("https://appassets.androidplatform.net/assets/")
-                                val mimeType = when {
-                                    filePath.endsWith(".css") -> "text/css"
-                                    filePath.endsWith(".js") -> "application/javascript"
-                                    filePath.endsWith(".woff2") -> "font/woff2"
-                                    filePath.endsWith(".woff") -> "font/woff"
-                                    filePath.endsWith(".ttf") -> "font/ttf"
-                                    else -> "application/octet-stream"
-                                }
-                                
-                                // INJEKSI CORS HEADER & STATUS 200 OK
-                                // Ini kunci utama supaya OS Android 15 nggak memblokir file lokal kita
-                                val headers = mapOf(
-                                    "Access-Control-Allow-Origin" to "*",
-                                    "Cache-Control" to "no-cache"
-                                )
-                                
-                                return android.webkit.WebResourceResponse(
-                                    mimeType,
-                                    "UTF-8",
-                                    200,
-                                    "OK",
-                                    headers,
-                                    ctx.assets.open(filePath)
-                                )
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        }
-                        return super.shouldInterceptRequest(view, request)
+                        return assetLoader.shouldInterceptRequest(request.url)
                     }
                 }
                 
@@ -273,8 +243,7 @@ fun KaTeXWebView(
             }
         },
         update = { webView ->
-            // Base URL pakai domain whitelist resmi WebViewAssetLoader untuk menghindari blokir CORS
-            webView.loadDataWithBaseURL("https://appassets.androidplatform.net/assets/", htmlContent, "text/html", "UTF-8", null)
+            webView.loadDataWithBaseURL("https://appassets.androidplatform.net/", htmlContent, "text/html", "UTF-8", null)
         }
     )
 }
