@@ -544,32 +544,30 @@ class ResultViewModel(
 
                 // ENGINE MODE: SUPER STRICT INSTRUCTIONS WITH SMART TIDY UP
                 val taskInstruction = when (task) {
-                    0 -> "Task: STRICT TIDY UP. Fix grammatical errors, remove stuttering/filler words, and cleverly correct any typos or out-of-context words based on the surrounding paragraph. DO NOT summarize, DO NOT analyze, and DO NOT cut the information short. Maintain the original length but make it perfectly coherent."
+                    0 -> "Task: STRICT PROOFREADING (TIDY UP). Your ONLY job is to fix typos, fix grammar, and remove filler/stuttering words. You MUST preserve the exact original meaning, tone, and length. DO NOT add any explanations, analysis, facts, or context. If the input is just a phrase, output ONLY the corrected phrase. Example: if user inputs 'halo halo bandung, ibukota periangan', you output EXACTLY 'Halo-halo Bandung, ibukota Priangan.' NOTHING ELSE."
                     1 -> "Task: SUMMARIZE. Extract the core information and make a concise summary. Ignore filler words."
                     2 -> "Task: ANALYZE. Extract the main points, underlying sentiments, and any action items."
-                    else -> "Task: STRICT TIDY UP."
+                    else -> "Task: STRICT PROOFREADING (TIDY UP)."
                 }
 
-                // Header diwajibkan untuk menstruktur teks, tak peduli paragraf atau bullet
                 val formatInstruction = when (format) {
-                    0 -> "Format: Use beautiful Markdown. Structure the text with headers (#, ##) for clear topic shifts and use PARAGRAPHS for the details. DO NOT use bullet points."
-                    1 -> "Format: Use beautiful Markdown. Structure the text with headers (#, ##) for clear topic shifts and use BULLET POINTS for the details. Use strictly the minus sign '-' for bullet points. NEVER use asterisks ('*')."
+                    0 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use PARAGRAPHS for the details. DO NOT use bullet points. Use **bold** for key concepts/terms, *italic* for tone emphasis or foreign words, and > blockquotes for direct statements/quotes."
+                    1 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use BULLET POINTS (strictly the minus sign '-') for details. NEVER use asterisks ('*'). Use **bold** to highlight the start of a bullet point or key concepts, *italic* for tone emphasis, and > blockquotes for direct statements/quotes."
                     else -> ""
                 }
 
                 val systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
-                    You are a strict data processing compiler. You DO NOT converse.
-                    TARGET LANGUAGE: $language. You MUST translate the output to $language regardless of the input language.
+                    You are a strict text processing engine, NOT a conversational chatbot.
+                    TARGET LANGUAGE: $language. You MUST translate the output to $language if the input is different.
                     
                     $taskInstruction
                     $formatInstruction
                     
                     CRITICAL STRICT RULES YOU MUST OBEY:
-                    1. MANDATORY TRANSLATION: You MUST output strictly in $language.
-                    2. ZERO YAPPING: Output EXACTLY the final processed text. NO introductions, NO conclusions, NO conversational filler.
-                    3. NO QUOTES: DO NOT wrap your output in quotes or markdown code blocks (```).
-                    4. LATEX MATH: Convert ALL math, numbers, and scientific symbols to LaTeX. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math.
+                    1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
+                    2. NO QUOTES: DO NOT wrap your output in quotes or markdown code blocks (```).
+                    3. CONDITIONAL LATEX: ONLY IF the original text naturally contains mathematical or scientific formulas, format them in LaTeX (`${'$'}${'$'}` or `${'$'}`). DO NOT invent, hallucinate, or insert math/physics concepts if they are not in the source text.
                 """.trimIndent()
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
