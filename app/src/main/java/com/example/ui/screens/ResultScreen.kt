@@ -577,8 +577,10 @@ fun ResultScreen(
                             }
 
                             if (!note!!.summary.isNullOrEmpty() && !isLoading) {
+                                // Mencegat dan menghapus Metadata Tag khusus UI
+                                val cleanSummary = note!!.summary!!.replace(Regex("<!--BINOT_META:.*?-->"), "").trimEnd()
                                 MarkdownText(
-                                    text = note!!.summary!!, 
+                                    text = cleanSummary, 
                                     listState = listState,
                                     highlightsInfo = note!!.highlightsInfo,
                                     onSavedHighlightClick = { word, noteText, line, start, end ->
@@ -1222,7 +1224,9 @@ fun ResultScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                val textToSearch = note!!.summary ?: note!!.rawText
+                // Membersihkan Meta dari fitur Search
+                val cleanSummaryForSearch = note!!.summary?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trimEnd()
+                val textToSearch = cleanSummaryForSearch ?: note!!.rawText
                 val lines = textToSearch.split("\n")
                 val searchResults = lines.mapIndexedNotNull { index, line ->
                     if (searchHighlightQuery.isNotBlank() && line.contains(searchHighlightQuery, ignoreCase = true)) {
@@ -1377,7 +1381,8 @@ fun ResultScreen(
                         BouncyCapsule(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", note!!.summary ?: note!!.rawText))
+                                val cleanSummaryToCopy = note!!.summary?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trimEnd()
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Binot Note", cleanSummaryToCopy ?: note!!.rawText))
                                 coroutineScope.launch { snackbarHostState.showSnackbar("Text Copied!") }
                                 showSidePanel = false
                             },
@@ -1392,9 +1397,10 @@ fun ResultScreen(
                     item {
                         BouncyCapsule(
                             onClick = {
+                                val cleanSummaryToShare = note!!.summary?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trimEnd()
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${note!!.summary ?: note!!.rawText}")
+                                    putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${cleanSummaryToShare ?: note!!.rawText}")
                                 }
                                 context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
                                 showSidePanel = false
