@@ -536,36 +536,28 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // DIROMBAK UNTUK MENCEGAH HALUSINASI SIMBOL $$
+                // DIROMBAK UNTUK MENCEGAH HALUSINASI SIMBOL, TANDA KUTIP, DAN PAKSAAN TRANSLASI
                 val systemPrompt = if (mode == "tidy") {
                     """
-                        You are an elite proofreader and document formatter. Clean up the provided raw voice transcript into $language WITHOUT summarizing or omitting details.
+                        You are an elite proofreader and translator. Your strict task is to TRANSLATE and TIDY UP the raw voice transcript into EXACTLY this language: $language.
                         
                         CRITICAL STRICT RULES YOU MUST OBEY:
-                        1. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
-                        2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - STRICTLY use `${'$'}${'$'}` ONLY to wrap standalone block equations (example: `${'$'}${'$'}` x^2 + y = z `${'$'}${'$'}`).
-                           - STRICTLY use `${'$'}` ONLY to wrap inline math within a sentence (example: The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
-                           - NEVER use `${'$'}` as a plain text symbol in your explanation.
-                           - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \sum, \int, \alpha, \beta).
-                        3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
-                        4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
-                        5. ZERO YAPPING: Output ONLY the final formatted text. Do not add introductory words, pleasantries, or concluding remarks.
+                        1. MANDATORY TRANSLATION: The entire output MUST be in $language. Even if the raw transcript is in another language, you MUST translate it completely to $language while tidying it up.
+                        2. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
+                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `$$` for block equations and `$` for inline math. NEVER use `$` as a plain text symbol.
+                        4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact in $language.
+                        5. ZERO YAPPING & NO QUOTES: Output ONLY the final processed text. DO NOT add conversational filler, introductions, or conclusions. DO NOT wrap your response in single quotes (') or double quotes ("). DO NOT use markdown code blocks (```) to enclose the entire response.
                     """.trimIndent()
                 } else {
                     """
-                        You are an elite meeting assistant and professional summarizer. Summarize the provided raw voice transcript into $language.
+                        You are an elite meeting assistant and professional translator. Your strict task is to TRANSLATE and SUMMARIZE the raw voice transcript into EXACTLY this language: $language.
                         
                         CRITICAL STRICT RULES YOU MUST OBEY:
-                        1. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
-                        2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - STRICTLY use `${'$'}${'$'}` ONLY to wrap standalone block equations (example: `${'$'}${'$'}` x^2 + y = z `${'$'}${'$'}`).
-                           - STRICTLY use `${'$'}` ONLY to wrap inline math within a sentence (example: The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
-                           - NEVER use `${'$'}` as a plain text symbol in your explanation.
-                           - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \alpha).
-                        3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
+                        1. MANDATORY TRANSLATION: The entire summary MUST be in $language. Even if the raw transcript is in another language, your final summary MUST be in $language. No exceptions.
+                        2. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
+                        3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, convert them into valid LaTeX. Use `$$` for block equations and `$` for inline math. NEVER use `$` as a plain text symbol.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
-                        5. ZERO YAPPING: Output ONLY the final summarized text. Do not add introductory words or conversational filler.
+                        5. ZERO YAPPING & NO QUOTES: Output ONLY the final summarized text. DO NOT add conversational filler. DO NOT wrap your response in single quotes (') or double quotes ("). DO NOT use markdown code blocks (```) to enclose the entire response.
                     """.trimIndent()
                 }
                 
@@ -590,7 +582,10 @@ class ResultViewModel(
                 
                 launch(Dispatchers.Main) {
                     if (processedText != null) {
-                        val updatedNote = currentNote.copy(summary = processedText, timestamp = System.currentTimeMillis())
+                        // Hilangkan tanda kutip tunggal/ganda di awal dan akhir string dan pastikan bersih
+                        val cleanedText = processedText.trim().removeSurrounding("'", "'").removeSurrounding("\"", "\"")
+                        
+                        val updatedNote = currentNote.copy(summary = cleanedText, timestamp = System.currentTimeMillis())
                         _note.value = updatedNote
                         noteRepository.update(updatedNote)
                     } else { 
@@ -641,4 +636,3 @@ class ResultViewModel(
             }
     }
 }
-
