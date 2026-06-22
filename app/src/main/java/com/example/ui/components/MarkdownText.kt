@@ -161,7 +161,8 @@ body {
     font-size: 16px;
     line-height: 1.6;
     margin: 0;
-    padding: 0;
+    /* Memberikan ruang bernapas 8px di atas/bawah agar simbol tidak kepotong */
+    padding: 8px 4px;
     word-wrap: break-word;
     overflow: hidden;
 }
@@ -188,8 +189,10 @@ document.addEventListener("DOMContentLoaded", function() {
     // Report tinggi konten ke Kotlin setelah render selesai
     setTimeout(function() {
         var el = document.getElementById('math-content');
-        var h = el ? el.offsetHeight : document.body.scrollHeight;
-        if (window.HeightBridge) window.HeightBridge.onHeightReady(h);
+        // getBoundingClientRect().height jauh lebih presisi untuk elemen kompleks KaTeX
+        var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
+        // Tambahkan buffer ~24px untuk mengamankan ruang yang mungkin tersembunyi
+        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 24);
     }, 500);
 });
 </script>
