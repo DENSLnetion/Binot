@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -106,6 +107,7 @@ private fun resolveRectToPosition(
     return Triple(lineIndex, bestStart, bestStart + selectedText.length)
 }
 
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun KaTeXWebView(
     mathContent: String,
@@ -137,9 +139,12 @@ fun KaTeXWebView(
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-            <link rel="stylesheet" href="katex.min.css">
-            <script src="katex.min.js"></script>
-            <script src="auto-render.min.js"></script>
+            
+            <!-- ABSOLUTE PATH INJECTION: Paksa OS nyari di root folder assets -->
+            <link rel="stylesheet" href="file:///android_asset/katex/katex.min.css">
+            <script src="file:///android_asset/katex/katex.min.js"></script>
+            <script src="file:///android_asset/katex/auto-render.min.js"></script>
+            
             <style>
                 body {
                     background-color: transparent;
@@ -150,7 +155,7 @@ fun KaTeXWebView(
                     margin: 0;
                     padding: 4px 0px;
                     word-wrap: break-word;
-                    white-space: pre-wrap; /* Mengamankan spasi antar teks dan rumus */
+                    white-space: pre-wrap;
                 }
                 li { margin-bottom: 4px; }
                 #debug-console {
@@ -196,7 +201,6 @@ fun KaTeXWebView(
                             }
                         });
                         
-                        // Deteksi visual: kalau nggak ada tag class 'katex' yang tercipta, berarti gagal parse
                         if (el.innerHTML.indexOf('class="katex"') === -1 && (el.innerHTML.indexOf('$$') !== -1 || el.innerHTML.indexOf('$') !== -1)) {
                             logDebug("Script jalan, tapi KaTeX gagal nemuin rumus. Cek spasi di antara $$ lo.");
                         }
@@ -218,7 +222,6 @@ fun KaTeXWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 
-                // Mencegah OS mengambil alih loading asset
                 webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
                 
@@ -228,6 +231,8 @@ fun KaTeXWebView(
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
                 
+                // Murni eksekusi tanpa batas untuk file lokal
+                @Suppress("DEPRECATION")
                 try {
                     settings.allowFileAccessFromFileURLs = true
                     settings.allowUniversalAccessFromFileURLs = true
@@ -237,7 +242,8 @@ fun KaTeXWebView(
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL("file:///android_asset/katex/", htmlContent, "text/html", "UTF-8", null)
+            // Base URL dipaksa merujuk ke root asset
+            webView.loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
         }
     )
 }
@@ -621,3 +627,4 @@ fun BasicMarkdownLine(
         onTextLayout = { textLayoutResult = it }
     )
 }
+
