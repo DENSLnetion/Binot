@@ -260,6 +260,8 @@ class ResultViewModel(
             try {
                 val provider = settingsRepository.aiProviderFlow.first()
                 val apiKey = if (provider == 1) settingsRepository.groqApiKeyFlow.first() else settingsRepository.geminiApiKeyFlow.first()
+                // Mengambil preferensi bahasa AI global untuk explain text
+                val targetLanguage = settingsRepository.aiLanguageFlow.first()
                 
                 if (apiKey.isBlank()) {
                     launch(Dispatchers.Main) {
@@ -272,9 +274,10 @@ class ResultViewModel(
                 val systemPrompt = """
                     You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
                     STRICT RULES YOU MUST OBEY:
-                    1. Output language MUST follow: $deviceLanguage.
+                    1. Output language MUST follow: $targetLanguage.
                     2. NO conversational filler, pleasantries, or introductions.
                     3. Format nicely using Markdown if needed, but ABSOLUTELY NO BACKTICKS (`).
+                    4. CRITICAL: DO NOT generate tables under any circumstances.
                 """.trimIndent()
                 
                 val userPrompt = "Term to explain: \"$selectedText\""
@@ -550,7 +553,7 @@ class ResultViewModel(
                 }
 
                 val formatInstruction = when (format) {
-                    0 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use PARAGRAPHS for the details. DO NOT use bullet points. Use **bold** for key concepts/terms, *italic* for tone emphasis or foreign words, and > blockquotes for direct statements/quotes."
+                    0 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use PARAGRAPHS for the details. DO NOT use bullet points. Use **bold** for key concepts/terms, *italic* for tone emphasis or foreign words, and > blockquotes for direct statements/quotes. DO NOT wrap your text in single quotes (') or double quotes (\")."
                     1 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use BULLET POINTS (strictly the minus sign '-') for details. NEVER use asterisks ('*'). Use **bold** to highlight the start of a bullet point or key concepts, *italic* for tone emphasis, and > blockquotes for direct statements/quotes."
                     else -> ""
                 }
@@ -567,6 +570,7 @@ class ResultViewModel(
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
                     3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols in the original text, convert them into valid LaTeX directly — NO wrapping in any extra characters. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol. ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
+                    4. CRITICAL: DO NOT generate tables under any circumstances.
                 """.trimIndent()
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
