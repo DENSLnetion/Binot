@@ -119,6 +119,8 @@ fun KaTeXWebView(
     assets: KaTeXAssets,
     textColor: Color,
     fontFamily: FontFamily,
+    // Cache height per htmlContent key agar tidak mulai dari 1dp setiap kali
+    heightCache: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>,
     modifier: Modifier = Modifier
 ) {
     if (!assets.isReady) return
@@ -130,8 +132,10 @@ fun KaTeXWebView(
         else -> "sans-serif"
     }
 
-    // Ukuran WebView: mulai 1dp (invisible), JS akan report tinggi sebenarnya
-    var webViewHeightPx by remember { mutableStateOf(1) }
+    // Mulai dari cached height jika tersedia, sehingga tidak ada layout jump
+    var webViewHeightPx by remember(htmlContent) {
+        mutableStateOf(heightCache[htmlContent] ?: 1)
+    }
 
     val patchedCss = remember(assets.css) {
         assets.css.replace(Regex("""url\(['"]?(fonts/[^'"")]+)['"]?\)""")) { match ->
@@ -191,7 +195,7 @@ document.addEventListener("DOMContentLoaded", function() {
     setTimeout(function() {
         var h = document.body.scrollHeight;
         if (window.HeightBridge) window.HeightBridge.onHeightReady(h);
-    }, 100);
+    }, 500);
 });
 </script>
 </body>
@@ -217,6 +221,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 settings.allowFileAccessFromFileURLs = true
                 webViewClient = android.webkit.WebViewClient()
                 webChromeClient = android.webkit.WebChromeClient()
+                // Tag digunakan sebagai guard agar tidak reload HTML yang sama
+                tag = ""
             }
         },
         update = { webView ->
@@ -226,16 +232,22 @@ document.addEventListener("DOMContentLoaded", function() {
                 fun onHeightReady(height: Int) {
                     val density = context.resources.displayMetrics.density
                     val px = (height * density).toInt().coerceAtLeast(1)
+                    // Simpan ke cache supaya render berikutnya langsung pakai height ini
+                    heightCache[htmlContent] = px
                     webViewHeightPx = px
                 }
             }, "HeightBridge")
-            webView.loadDataWithBaseURL(
-                "file:///android_asset/katex/",
-                htmlContent,
-                "text/html",
-                "UTF-8",
-                null
-            )
+            // Guard: hanya load ulang jika HTML-nya berbeda
+            if (webView.tag != htmlContent) {
+                webView.tag = htmlContent
+                webView.loadDataWithBaseURL(
+                    "file:///android_asset/katex/",
+                    htmlContent,
+                    "text/html",
+                    "UTF-8",
+                    null
+                )
+            }
         }
     )
 }
@@ -342,6 +354,8 @@ fun MarkdownText(
     val highlightBgColor = MaterialTheme.colorScheme.tertiaryContainer
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
+    // Cache height WebView per htmlContent — bertahan selama MarkdownText hidup
+    val webViewHeightCache = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>() }
 
     LaunchedEffect(text) {
         onResolveSelection { rect, selectedText ->
@@ -355,7 +369,12 @@ fun MarkdownText(
     ) {
         item { Spacer(modifier = Modifier.height(8.dp)) }
 
-        items(markdownItems.size) { index ->
+        items(markdownItems.size, key = { index -> markdownItems[index].let {
+            when (it) {
+                is MarkdownItem.MathBlock -> "math_${it.startLineIndex}"
+                is MarkdownItem.NativeLine -> "line_${it.lineIndex}"
+            }
+        }}) { index ->
             when (val item = markdownItems[index]) {
                 is MarkdownItem.MathBlock -> {
                     KaTeXWebView(
@@ -363,6 +382,7 @@ fun MarkdownText(
                         assets = katexAssets,
                         textColor = MaterialTheme.colorScheme.onBackground,
                         fontFamily = fontFamily,
+                        heightCache = webViewHeightCache,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
