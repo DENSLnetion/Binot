@@ -140,10 +140,10 @@ fun KaTeXWebView(
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
             
-            <!-- ABSOLUTE PATH INJECTION: Paksa OS nyari di root folder assets -->
-            <link rel="stylesheet" href="file:///android_asset/katex/katex.min.css">
-            <script src="file:///android_asset/katex/katex.min.js"></script>
-            <script src="file:///android_asset/katex/auto-render.min.js"></script>
+            <!-- Menggunakan path relatif. Akan dicegat oleh WebViewClient Interceptor -->
+            <link rel="stylesheet" href="katex.min.css">
+            <script src="katex.min.js"></script>
+            <script src="auto-render.min.js"></script>
             
             <style>
                 body {
@@ -184,8 +184,8 @@ fun KaTeXWebView(
 
                 document.addEventListener("DOMContentLoaded", function() {
                     try {
-                        if (typeof katex === 'undefined') { logDebug("Fatal: katex object missing. Cek file katex.min.js di assets!"); return; }
-                        if (typeof renderMathInElement === 'undefined') { logDebug("Fatal: renderMathInElement missing. Cek file auto-render.min.js!"); return; }
+                        if (typeof katex === 'undefined') { logDebug("Fatal: katex object missing. Interceptor gagal nyuapin JS!"); return; }
+                        if (typeof renderMathInElement === 'undefined') { logDebug("Fatal: renderMathInElement missing!"); return; }
                         
                         var el = document.getElementById('math-content');
                         renderMathInElement(el, {
@@ -222,28 +222,50 @@ fun KaTeXWebView(
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 
-                webViewClient = android.webkit.WebViewClient()
-                webChromeClient = android.webkit.WebChromeClient()
-                
                 settings.javaScriptEnabled = true
-                settings.allowFileAccess = true 
-                settings.allowContentAccess = true
                 settings.domStorageEnabled = true
                 settings.defaultTextEncodingName = "utf-8"
                 
-                // Murni eksekusi tanpa batas untuk file lokal
-                @Suppress("DEPRECATION")
-                try {
-                    settings.allowFileAccessFromFileURLs = true
-                    settings.allowUniversalAccessFromFileURLs = true
-                } catch (e: Exception) {
-                    // Safe catch
+                // ULTIMATE BYPASS: Mencegat request URL dan memuat langsung dari memori Asset APK
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: android.webkit.WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): android.webkit.WebResourceResponse? {
+                        val url = request?.url?.toString() ?: ""
+                        try {
+                            if (url.endsWith("katex.min.css")) {
+                                return android.webkit.WebResourceResponse("text/css", "UTF-8", ctx.assets.open("katex/katex.min.css"))
+                            }
+                            if (url.endsWith("katex.min.js")) {
+                                return android.webkit.WebResourceResponse("application/javascript", "UTF-8", ctx.assets.open("katex/katex.min.js"))
+                            }
+                            if (url.endsWith("auto-render.min.js")) {
+                                return android.webkit.WebResourceResponse("application/javascript", "UTF-8", ctx.assets.open("katex/auto-render.min.js"))
+                            }
+                            if (url.contains("fonts/")) {
+                                val fontName = url.substringAfterLast("fonts/")
+                                val mimeType = when {
+                                    fontName.endsWith(".woff2") -> "font/woff2"
+                                    fontName.endsWith(".woff") -> "font/woff"
+                                    fontName.endsWith(".ttf") -> "font/ttf"
+                                    else -> "application/octet-stream"
+                                }
+                                return android.webkit.WebResourceResponse(mimeType, null, ctx.assets.open("katex/fonts/$fontName"))
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                        return super.shouldInterceptRequest(view, request)
+                    }
                 }
+                
+                webChromeClient = android.webkit.WebChromeClient()
             }
         },
         update = { webView ->
-            // Base URL dipaksa merujuk ke root asset
-            webView.loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
+            // Bikin HTTPS bohongan biar lolos dari Cross-Origin Read Blocking (CORB) OS Android
+            webView.loadDataWithBaseURL("https://local.katex/", htmlContent, "text/html", "UTF-8", null)
         }
     )
 }
@@ -261,7 +283,6 @@ fun MarkdownText(
 ) {
     val lines = text.split("\n")
     
-    // Chunking the markdown into Native lines and WebView math blocks
     val markdownItems = remember(text) {
         val items = mutableListOf<MarkdownItem>()
         var inMathBlock = false
