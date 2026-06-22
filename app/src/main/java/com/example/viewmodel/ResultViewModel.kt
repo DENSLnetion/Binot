@@ -429,7 +429,6 @@ class ResultViewModel(
 
                     launch(Dispatchers.Main) { _loadingMessage.value = "Audio uploaded. Gemini is processing..." }
                     
-                    // NEW TRANSCRIBE PROMPT (PHASE 1 - VERBATIM ONLY)
                     val systemPrompt = """
                         You are a highly accurate audio transcription AI. Your ONLY task is to transcribe the audio exactly word-for-word.
                         
@@ -537,7 +536,7 @@ class ResultViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // NEW FORMATTING PROMPT (PHASE 2 - MARKDOWN & LATEX)
+                // DIROMBAK UNTUK MENCEGAH HALUSINASI SIMBOL $$
                 val systemPrompt = if (mode == "tidy") {
                     """
                         You are an elite proofreader and document formatter. Clean up the provided raw voice transcript into $language WITHOUT summarizing or omitting details.
@@ -545,8 +544,9 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
                         2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - Use `${'$'}${'$'}` for block equations or standalone formulas (e.g., `${'$'}${'$'}` x^2 + y^2 = z^2 `${'$'}${'$'}`).
-                           - Use `${'$'}` for inline math within sentences (e.g., The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
+                           - STRICTLY use `${'$'}${'$'}` ONLY to wrap standalone block equations (example: `${'$'}${'$'}` x^2 + y = z `${'$'}${'$'}`).
+                           - STRICTLY use `${'$'}` ONLY to wrap inline math within a sentence (example: The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
+                           - NEVER use `${'$'}` as a plain text symbol in your explanation.
                            - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \sum, \int, \alpha, \beta).
                         3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
                         4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
@@ -559,8 +559,9 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
                         2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - Use `${'$'}${'$'}` for block equations or standalone formulas.
-                           - Use `${'$'}` for inline math within sentences.
+                           - STRICTLY use `${'$'}${'$'}` ONLY to wrap standalone block equations (example: `${'$'}${'$'}` x^2 + y = z `${'$'}${'$'}`).
+                           - STRICTLY use `${'$'}` ONLY to wrap inline math within a sentence (example: The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
+                           - NEVER use `${'$'}` as a plain text symbol in your explanation.
                            - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \alpha).
                         3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
@@ -640,3 +641,4 @@ class ResultViewModel(
             }
     }
 }
+
