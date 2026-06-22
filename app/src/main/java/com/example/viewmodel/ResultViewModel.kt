@@ -566,10 +566,7 @@ class ResultViewModel(
                     CRITICAL STRICT RULES YOU MUST OBEY:
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
-                    3. MATHEMATICS & UNIQUE SYMBOLS (CRITICAL RULE): You MUST wrap ALL mathematical symbols, scientific equations, formulas, and unique variables in SINGLE QUOTES ('). Use LaTeX format inside the single quotes.
-                       - Correct Example: The formula is '${'$'}${'$'}E = mc^2${'$'}${'$'}' and the variable is 'x'.
-                       - Incorrect Example: The formula is ${'$'}${'$'}E = mc^2${'$'}${'$'} and the variable is x.
-                       ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
+                    3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols in the original text, convert them into valid LaTeX directly — NO wrapping in any extra characters. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol. ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
                 """.trimIndent()
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
