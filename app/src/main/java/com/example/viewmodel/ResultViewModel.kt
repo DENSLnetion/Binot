@@ -542,7 +542,6 @@ class ResultViewModel(
                     return@launch 
                 }
 
-                // ENGINE MODE: SUPER STRICT INSTRUCTIONS WITH SMART TIDY UP
                 val taskInstruction = when (task) {
                     0 -> "Task: STRICT PROOFREADING (TIDY UP). Your ONLY job is to fix typos, fix grammar, and remove filler/stuttering words. You MUST preserve the exact original meaning, tone, and length. DO NOT add any explanations, analysis, facts, or context. If the input is just a phrase, output ONLY the corrected phrase. Example: if user inputs 'halo halo bandung, ibukota periangan', you output EXACTLY 'Halo-halo Bandung, ibukota Priangan.' NOTHING ELSE."
                     1 -> "Task: SUMMARIZE. Extract the core information and make a concise summary. Ignore filler words."
@@ -566,8 +565,11 @@ class ResultViewModel(
                     
                     CRITICAL STRICT RULES YOU MUST OBEY:
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
-                    2. NO QUOTES: DO NOT wrap your output in quotes or markdown code blocks (```).
-                    3. CONDITIONAL LATEX: ONLY IF the original text naturally contains mathematical or scientific formulas, format them in LaTeX (`${'$'}${'$'}` or `${'$'}`). DO NOT invent, hallucinate, or insert math/physics concepts if they are not in the source text.
+                    2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
+                    3. MATHEMATICS & UNIQUE SYMBOLS (CRITICAL RULE): You MUST wrap ALL mathematical symbols, scientific equations, formulas, and unique variables in SINGLE QUOTES ('). Use LaTeX format inside the single quotes.
+                       - Correct Example: The formula is '$$E = mc^2$$' and the variable is 'x'.
+                       - Incorrect Example: The formula is $$E = mc^2$$ and the variable is x.
+                       ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
                 """.trimIndent()
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
@@ -591,6 +593,7 @@ class ResultViewModel(
                 
                 launch(Dispatchers.Main) {
                     if (processedText != null) {
+                        // Quotes removal logic aman karena hanya menghapus quote di AWAL dan AKHIR blok teks (kalau AI ngeyel ngasih quotes ke seluruh response)
                         val cleanedText = processedText.trim().removeSurrounding("'", "'").removeSurrounding("\"", "\"")
                         val finalOutput = cleanedText + "\n\n" + metaTag
                         
