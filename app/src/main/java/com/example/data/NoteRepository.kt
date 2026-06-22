@@ -13,5 +13,7 @@ class NoteRepository(private val noteDao: NoteDao) {
     suspend fun update(note: NoteEntity) = noteDao.updateNote(note)
     suspend fun deleteById(id: Int) = noteDao.deleteNoteById(id)
     suspend fun getNoteById(id: Int) = noteDao.getNoteById(id)
-}
 
+    // FUNGSI BARU: Memanggil fungsi reset dari DAO
+    suspend fun resetAllSummaries() = noteDao.resetAllSummaries()
+}
