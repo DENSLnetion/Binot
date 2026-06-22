@@ -218,12 +218,13 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                     
-                    val aiProvider by settingsViewModel.aiProvider.collectAsState()
-                    val geminiKey by settingsViewModel.apiKey.collectAsState()
-                    val groqKey by settingsViewModel.groqApiKey.collectAsState()
-                    
+                    // Kita membuang passing API Key satu persatu, dan langsung menggunakan appContainer.settingsRepository
                     val resultViewModel: ResultViewModel = viewModel(
-                        factory = ResultViewModel.provideFactory(noteId, appContainer.noteRepository, aiProvider, geminiKey, groqKey)
+                        factory = ResultViewModel.provideFactory(
+                            noteId = noteId, 
+                            repository = appContainer.noteRepository, 
+                            settingsRepository = appContainer.settingsRepository
+                        )
                     )
                     ResultScreen(
                         viewModel = resultViewModel,
