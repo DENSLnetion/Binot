@@ -438,7 +438,7 @@ class ResultViewModel(
                         2. VERBATIM TRANSCRIBE: Transcribe exactly what is spoken word-by-word, including informal words, repeated words, and natural speech flow.
                         3. KEEP PUNCTUATION & CAPITALIZATION: You MUST add accurate punctuation (periods, commas, question marks) and use proper capitalization to make it readable.
                         4. NO GRAMMAR CORRECTION: Absolutely DO NOT fix the speaker's grammatical errors or restructure their sentences.
-                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use ², ^, $, or $$).
+                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use ², ^, ${'$'}, or ${'$'}${'$'}).
                         6. Automatically detect and transcribe in the spoken language.
                     """.trimIndent()
                     
@@ -545,8 +545,8 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. ELEGANT MARKDOWN: Structure the text using professional Markdown formatting. Use '#' for main titles, '##' for headers, '-' for bullet points, and '**' for emphasis.
                         2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - Use `$$` for block equations or standalone formulas (e.g., $$ x^2 + y^2 = z^2 $$).
-                           - Use `$` for inline math within sentences (e.g., The value of $x$ is $5$).
+                           - Use `${'$'}${'$'}` for block equations or standalone formulas (e.g., `${'$'}${'$'}` x^2 + y^2 = z^2 `${'$'}${'$'}`).
+                           - Use `${'$'}` for inline math within sentences (e.g., The value of `${'$'}`x`${'$'}` is `${'$'}`5`${'$'}`).
                            - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \sum, \int, \alpha, \beta).
                         3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
                         4. PRESERVE EVERYTHING: Do not summarize the core message. Fix grammatical errors and remove stuttering/filler words, but keep all information intact.
@@ -559,8 +559,8 @@ class ResultViewModel(
                         CRITICAL STRICT RULES YOU MUST OBEY:
                         1. ELEGANT MARKDOWN: Structure the summary logically. Use '#' for titles, '##' for section headers, and '-' for bullet lists.
                         2. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols, you MUST convert them into valid LaTeX syntax.
-                           - Use `$$` for block equations or standalone formulas.
-                           - Use `$` for inline math within sentences.
+                           - Use `${'$'}${'$'}` for block equations or standalone formulas.
+                           - Use `${'$'}` for inline math within sentences.
                            - Use proper LaTeX commands (e.g., \frac{1}{2}, \pm, \circ, \alpha).
                         3. NO CODE BLOCKS: ABSOLUTELY NO BACKTICKS (`). NEVER wrap text or equations in markdown code blocks. Write equations naturally inline as plain text or block formatting.
                         4. CLARITY: Ignore filler words and fix broken sentence structures. Make the summary comprehensive but concise.
