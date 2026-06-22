@@ -81,6 +81,25 @@ class SettingsViewModel(
         initialValue = 0 // 0 = Gemini, 1 = Groq
     )
 
+    // --- NEW GLOBAL AI PREFERENCES ---
+    val aiLanguage: StateFlow<String> = settingsRepository.aiLanguageFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "English"
+    )
+
+    val aiTask: StateFlow<Int> = settingsRepository.aiTaskFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
+    val aiFormat: StateFlow<Int> = settingsRepository.aiFormatFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0
+    )
+
     private val _updateState = MutableStateFlow(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
@@ -119,6 +138,18 @@ class SettingsViewModel(
 
     fun saveAiProvider(provider: Int) {
         viewModelScope.launch { settingsRepository.saveAiProvider(provider) }
+    }
+
+    fun saveAiLanguage(language: String) {
+        viewModelScope.launch { settingsRepository.saveAiLanguage(language) }
+    }
+
+    fun saveAiTask(task: Int) {
+        viewModelScope.launch { settingsRepository.saveAiTask(task) }
+    }
+
+    fun saveAiFormat(format: Int) {
+        viewModelScope.launch { settingsRepository.saveAiFormat(format) }
     }
 
     fun exportBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
