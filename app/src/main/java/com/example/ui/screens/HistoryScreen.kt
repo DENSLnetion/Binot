@@ -14,6 +14,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +28,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -38,6 +40,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Audiotrack
@@ -47,8 +51,10 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
@@ -66,10 +72,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
 import com.example.viewmodel.HistoryViewModel
+import com.example.viewmodel.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -79,6 +87,7 @@ import java.util.*
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
+    settingsViewModel: SettingsViewModel,
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit,
@@ -93,6 +102,8 @@ fun HistoryScreen(
     val selectedLabels by viewModel.selectedLabels.collectAsState()
     val isMultiSelectLabelMode by viewModel.isMultiSelectLabelMode.collectAsState()
     val sortMode by viewModel.sortMode.collectAsState()
+
+    val hasSeenHistoryTour by settingsViewModel.hasSeenHistoryTour.collectAsState()
 
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
@@ -169,9 +180,9 @@ fun HistoryScreen(
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                         data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
                         val sortOptions = listOf(
-                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
-                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
+                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Latest"),
+                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Oldest"),
+                            SortOption(androidx.compose.material.icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -299,7 +310,6 @@ fun HistoryScreen(
                 if (selectionMode) {
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        // Fix: Menggunakan displayCutout untuk mengamankan padding dari notch
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
                     ) {
                         TopAppBar(
@@ -357,86 +367,159 @@ fun HistoryScreen(
                 }
             }
         ) { innerPadding ->
-            Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                if (notes.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (searchQuery.isNotEmpty() || selectedLabels.isNotEmpty()) "No results found." else "No notes yet.\nStart recording or import audio!",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                } else {
-                    with(animatedVisibilityScope) {
-                        LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(2),
-                            state = gridState,
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                    if (notes.isEmpty()) {
+                        // Empty State Interaktif
+                        Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .weight(1f)
-                                .padding(horizontal = 8.dp)
-                                .animateEnterExit(
-                                    enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                                    exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
-                                ),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalItemSpacing = 8.dp
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            if (pinnedNotes.isNotEmpty()) {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
-                                }
-                                items(pinnedNotes, key = { it.id }) { note ->
-                                    DismissibleNoteCard(
-                                        note = note,
-                                        modifier = Modifier.animateItem(),
-                                        isSelected = selectedNotes.contains(note.id),
-                                        selectedLabels = selectedLabels,
-                                        selectionMode = selectionMode,
-                                        sharedTransitionScope = sharedTransitionScope,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        viewModel = viewModel,
-                                        parentScope = coroutineScope,
-                                        snackbarHostState = snackbarHostState,
-                                        onSelect = { 
-                                            if (selectionMode) { 
-                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                                if (selectedNotes.isEmpty()) selectionMode = false 
-                                            } else { onNoteClick(note.id) }
-                                        },
-                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                    )
-                                }
+                            Icon(
+                                imageVector = Icons.Default.Mic, 
+                                contentDescription = null, 
+                                modifier = Modifier.size(72.dp).alpha(0.3f), 
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = if (searchQuery.isNotEmpty() || selectedLabels.isNotEmpty()) "No results found." else "Your space is empty.\nTap the mic to record your first thought!",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                textAlign = TextAlign.Center,
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (searchQuery.isEmpty() && selectedLabels.isEmpty()) {
+                                Spacer(modifier = Modifier.height(48.dp))
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown, 
+                                    contentDescription = null, 
+                                    modifier = Modifier.size(48.dp), 
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                )
                             }
+                        }
+                    } else {
+                        with(animatedVisibilityScope) {
+                            LazyVerticalStaggeredGrid(
+                                columns = StaggeredGridCells.Fixed(2),
+                                state = gridState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                                    .animateEnterExit(
+                                        enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
+                                        exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
+                                    ),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalItemSpacing = 8.dp
+                            ) {
+                                if (pinnedNotes.isNotEmpty()) {
+                                    item(span = StaggeredGridItemSpan.FullLine) {
+                                        Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
+                                    }
+                                    items(pinnedNotes, key = { it.id }) { note ->
+                                        DismissibleNoteCard(
+                                            note = note,
+                                            modifier = Modifier.animateItem(),
+                                            isSelected = selectedNotes.contains(note.id),
+                                            selectedLabels = selectedLabels,
+                                            selectionMode = selectionMode,
+                                            sharedTransitionScope = sharedTransitionScope,
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            viewModel = viewModel,
+                                            parentScope = coroutineScope,
+                                            snackbarHostState = snackbarHostState,
+                                            onSelect = { 
+                                                if (selectionMode) { 
+                                                    selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                                    if (selectedNotes.isEmpty()) selectionMode = false 
+                                                } else { onNoteClick(note.id) }
+                                            },
+                                            onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                        )
+                                    }
+                                }
 
-                            if (unpinnedNotes.isNotEmpty()) {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
+                                if (unpinnedNotes.isNotEmpty()) {
+                                    item(span = StaggeredGridItemSpan.FullLine) {
+                                        Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
+                                    }
+                                    items(unpinnedNotes, key = { it.id }) { note ->
+                                        DismissibleNoteCard(
+                                            note = note,
+                                            modifier = Modifier.animateItem(),
+                                            isSelected = selectedNotes.contains(note.id),
+                                            selectedLabels = selectedLabels,
+                                            selectionMode = selectionMode,
+                                            sharedTransitionScope = sharedTransitionScope,
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            viewModel = viewModel,
+                                            parentScope = coroutineScope,
+                                            snackbarHostState = snackbarHostState,
+                                            onSelect = { 
+                                                if (selectionMode) { 
+                                                    selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
+                                                    if (selectedNotes.isEmpty()) selectionMode = false 
+                                                } else { onNoteClick(note.id) }
+                                            },
+                                            onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
+                                        )
+                                    }
                                 }
-                                items(unpinnedNotes, key = { it.id }) { note ->
-                                    DismissibleNoteCard(
-                                        note = note,
-                                        modifier = Modifier.animateItem(),
-                                        isSelected = selectedNotes.contains(note.id),
-                                        selectedLabels = selectedLabels,
-                                        selectionMode = selectionMode,
-                                        sharedTransitionScope = sharedTransitionScope,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        viewModel = viewModel,
-                                        parentScope = coroutineScope,
-                                        snackbarHostState = snackbarHostState,
-                                        onSelect = { 
-                                            if (selectionMode) { 
-                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                                if (selectedNotes.isEmpty()) selectionMode = false 
-                                            } else { onNoteClick(note.id) }
-                                        },
-                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                    )
-                                }
+                                item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
                             }
-                            item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
+                        }
+                    }
+                }
+
+                // Coach Mark Overlay (Hanya muncul jika ada catatan dan belum pernah dilihat)
+                AnimatedVisibility(
+                    visible = notes.isNotEmpty() && !hasSeenHistoryTour,
+                    enter = fadeIn(tween(500)),
+                    exit = fadeOut(tween(500))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.8f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                settingsViewModel.markHistoryTourSeen()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                "Swipe left or right\nto move a note to Trash.",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(48.dp))
+                            Button(
+                                onClick = { settingsViewModel.markHistoryTourSeen() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp)
+                            ) {
+                                Text("Got it", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                            }
                         }
                     }
                 }
@@ -721,7 +804,6 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier 
 ) {
-    // FIX: Menggunakan displayCutout dan membuat batas minimum yang sangat aman (24.dp)
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
     
@@ -782,7 +864,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "Processing..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
