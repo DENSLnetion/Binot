@@ -6,10 +6,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
@@ -34,7 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
@@ -59,7 +61,6 @@ fun RecordScreen(
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
-
     var showLiveTextSheet by remember { mutableStateOf(false) }
 
     var hasPermission by remember {
@@ -77,23 +78,39 @@ fun RecordScreen(
         hasPermission = granted
     }
 
+    // --- TYPOGRAPHY CONTRAST M3 EXPRESSIVE ---
+    // Membangun string dengan kontras bobot (weight) yang kuat.
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetingTime = when (hour) {
         in 0..11 -> "Good morning"
         in 12..17 -> "Good afternoon"
         else -> "Good evening"
     }
-    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
+
+    val greetingText = buildAnnotatedString {
+        withStyle(style = SpanStyle(fontWeight = FontWeight.Light)) {
+            append("$greetingTime")
+        }
+        if (userName.isNotBlank()) {
+            append(",\n")
+            withStyle(style = SpanStyle(fontWeight = FontWeight.Black)) {
+                append(userName)
+            }
+            withStyle(style = SpanStyle(fontWeight = FontWeight.Light)) {
+                append(".")
+            }
+        } else {
+            withStyle(style = SpanStyle(fontWeight = FontWeight.Light)) {
+                append("!")
+            }
+        }
+    }
 
     val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    // PERUBAHAN KUNCI: Menggunakan displayCutout (Notch) sebagai pengaman patokan layar atas. 
-    // Ini mengamankan padding agar UI tidak tertelan batas atas fisik meskipun status bar menghilang.
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    
-    // Memberikan batas minimum yang wajar jika layar tidak punya poni besar (seperti beberapa tablet/HP flat).
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
     val displayLiveText = if (recordMode == 1) {
@@ -110,22 +127,23 @@ fun RecordScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp)) // Menggunakan safeTopMargin
+            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()), 
+                    .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
                 horizontalAlignment = Alignment.Start
             ) {
+                // Implementasi Typography Contrast
                 Text(
-                    text = greeting,
+                    text = greetingText,
                     style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Start
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Surface(
                     shape = CircleShape,
                     color = when {
@@ -150,8 +168,27 @@ fun RecordScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            // --- DYNAMIC WAVEFORM COLOR ---
+            // Logika: Jika amplitude > 50% (asumsi max 32767), warna transisi ke Tertiary.
+            // Pastikan komponen AudioWaveform lu support argumen 'color'.
+            val normalizedAmplitude = (amplitude / 32767f).coerceIn(0f, 1f)
+            val isHighAmplitude = normalizedAmplitude > 0.5f
+            
+            val waveformColor by animateColorAsState(
+                targetValue = if (isHighAmplitude) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+                animationSpec = tween(durationMillis = 300, easing = LinearEasing),
+                label = "waveformColor"
+            )
+
+            // Mengirim waveformColor ke komponen (lu perlu nambahin param color di AudioWaveform.kt)
+            // Gue lempar sebagai parameter, lu modif AudioWaveform lu nerima param ini.
             AudioWaveform(
                 amplitude = amplitude,
+                // color = waveformColor, // UNCOMMENT INI JIKA AUDIO WAVEFORM UDAH DIUPDATE
                 modifier = Modifier
                     .padding(vertical = 32.dp)
                     .animateEnterExit(enter = fadeIn())
@@ -162,20 +199,36 @@ fun RecordScreen(
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
 
+            // --- CONTAINER HIERARCHY & COLOR SHIFT ---
+            // Menggunakan surfaceContainerHigh untuk elevasi tonal yang lebih menonjol.
+            // Menambahkan efek 'breathing' saat recording.
+            val infiniteTransition = rememberInfiniteTransition(label = "breathing")
+            val breathingAlpha by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = if (isRecording) 0.6f else 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1500, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "breathingAlpha"
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
                     .animateEnterExit(enter = scaleIn(initialScale = 0.9f) + fadeIn())
                     .clip(MaterialTheme.shapes.extraLarge)
-                    .background(MaterialTheme.colorScheme.surface)
+                    // Elevasi tonal M3 Expressive: surfaceContainerHigh
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = breathingAlpha))
                     .clickable { showLiveTextSheet = true }
                     .padding(24.dp)
             ) {
                 Text(
                     text = displayLiveText,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    // Kontras warna teks menyesuaikan container
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Start,
                     modifier = Modifier
                         .fillMaxSize()
@@ -199,17 +252,17 @@ fun RecordScreen(
                 var isStopPressed by remember { mutableStateOf(false) }
 
                 val leftTargetWidth = when {
-                    isStopPressed && isSplit -> 88.dp 
-                    isLeftPressed && isSplit -> 152.dp  
-                    isLeftPressed            -> totalAreaWidth + 56.dp 
-                    isSplit                  -> 120.dp
-                    else                     -> totalAreaWidth
+                    isStopPressed && isSplit -> 88.dp
+                    isLeftPressed && isSplit -> 152.dp
+                    isLeftPressed -> totalAreaWidth + 56.dp
+                    isSplit -> 120.dp
+                    else -> totalAreaWidth
                 }
                 val rightTargetWidth = when {
-                    !isSplit                  -> 0.dp
-                    isStopPressed              -> 152.dp 
-                    isLeftPressed               -> 88.dp  
-                    else                        -> 120.dp
+                    !isSplit -> 0.dp
+                    isStopPressed -> 152.dp
+                    isLeftPressed -> 88.dp
+                    else -> 120.dp
                 }
                 val gapTarget = if (isSplit) 16.dp else 0.dp
 
@@ -232,8 +285,8 @@ fun RecordScreen(
                             .background(
                                 when {
                                     isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
-                                    isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                    else                 -> MaterialTheme.colorScheme.primary
+                                    isSplit && isPaused -> MaterialTheme.colorScheme.primaryContainer
+                                    else -> MaterialTheme.colorScheme.primary
                                 }
                             )
                             .pointerInput(isSplit, isPaused) {
@@ -252,7 +305,7 @@ fun RecordScreen(
                                                 }
                                             }
                                             isPaused -> viewModel.resumeRecording()
-                                            else     -> viewModel.pauseRecording()
+                                            else -> viewModel.pauseRecording()
                                         }
                                     }
                                 )
@@ -263,18 +316,18 @@ fun RecordScreen(
                             Icon(
                                 imageVector = when {
                                     isSplit && isPaused -> Icons.Default.PlayArrow
-                                    isSplit            -> Icons.Default.Pause
-                                    else               -> Icons.Default.Mic
+                                    isSplit -> Icons.Default.Pause
+                                    else -> Icons.Default.Mic
                                 },
                                 contentDescription = when {
                                     isSplit && isPaused -> "Resume"
-                                    isSplit            -> "Pause"
-                                    else               -> "Record"
+                                    isSplit -> "Pause"
+                                    else -> "Record"
                                 },
                                 tint = when {
                                     isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
-                                    isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    else                 -> MaterialTheme.colorScheme.onPrimary
+                                    isSplit && isPaused -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    else -> MaterialTheme.colorScheme.onPrimary
                                 },
                                 modifier = Modifier
                                     .size(32.dp)
