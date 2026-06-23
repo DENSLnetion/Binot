@@ -111,29 +111,26 @@ fun SettingsScreen(
     val recordMode by viewModel.recordMode.collectAsState() 
     val aiProvider by viewModel.aiProvider.collectAsState() 
     
-    // AI Preferences State (Actual Saved Data)
+    // Waveform state
+    val waveformStyle by viewModel.waveformStyle.collectAsState()
+    
     val aiLanguage by viewModel.aiLanguage.collectAsState()
     val aiTask by viewModel.aiTask.collectAsState()
     val aiFormat by viewModel.aiFormat.collectAsState()
 
-    // Temporary State (Prevents auto-save if user navigates away)
     var tempAiLanguage by remember(aiLanguage) { mutableStateOf(aiLanguage) }
     var tempAiTask by remember(aiTask) { mutableStateOf(aiTask) }
     var tempAiFormat by remember(aiFormat) { mutableStateOf(aiFormat) }
-    
-    // FIX: State temporary untuk AI Provider supaya nggak auto-save
     var tempAiProvider by remember(aiProvider) { mutableStateOf(aiProvider) }
 
     val updateState by viewModel.updateState.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val latestVersionStr by viewModel.latestVersionStr.collectAsState()
 
-    // Input States
     var nameInput by remember(userName) { mutableStateOf(userName) }
     var geminiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
     var groqKeyInput by remember(groqApiKey) { mutableStateOf(groqApiKey) }
 
-    // Dirty Flags (Buat deteksi apakah ada pergerakan ketikan di kolom input)
     var isNameDirty by remember { mutableStateOf(false) }
     var isGeminiKeyDirty by remember { mutableStateOf(false) }
     var isGroqKeyDirty by remember { mutableStateOf(false) }
@@ -142,11 +139,8 @@ fun SettingsScreen(
     var showAiInfoDialog by remember { mutableStateOf(false) }
     var showWarningDialog by remember { mutableStateOf(false) }
     var pendingModeSelection by remember { mutableStateOf(-1) }
-    
-    // Dialog untuk Save Apply to All
     var showApplyAllDialog by remember { mutableStateOf(false) }
 
-    // Bottom Sheet for Language Selection
     var showLanguageSheet by remember { mutableStateOf(false) }
     var languageSearchQuery by remember { mutableStateOf("") }
     
@@ -295,7 +289,6 @@ fun SettingsScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         
-        // FIX: Menggunakan displayCutout untuk margin aman bagian atas
         val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
         val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
@@ -357,7 +350,6 @@ fun SettingsScreen(
                         Text("Global AI Preferences", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Text("Notes will be automatically processed using these settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
                         
-                        // Output Language Selector
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -381,7 +373,6 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Task
                         Text("Processing Task", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
@@ -403,7 +394,6 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Format
                         Text("Output Format", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
@@ -450,7 +440,6 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // FIX: Ubah state ke tempAiProvider supaya nggak auto-save
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
@@ -466,7 +455,6 @@ fun SettingsScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // FIX: Target state baca dari tempAiProvider
                         AnimatedContent(targetState = tempAiProvider, label = "ApiKeyInput") { provider ->
                             if (provider == 0) {
                                 Column {
@@ -486,11 +474,10 @@ fun SettingsScreen(
                                     BouncyButton(
                                         onClick = { 
                                             viewModel.saveApiKey(geminiKeyInput)
-                                            viewModel.saveAiProvider(tempAiProvider) // Save sekaligus
+                                            viewModel.saveAiProvider(tempAiProvider)
                                             isGeminiKeyDirty = false
                                             coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Configuration saved!") } 
                                         }, 
-                                        // FIX: Enable kalau ada text beda ATAU provider beda
                                         enabled = isGeminiKeyDirty || tempAiProvider != aiProvider,
                                         modifier = Modifier.align(Alignment.End)
                                     ) { 
@@ -515,11 +502,10 @@ fun SettingsScreen(
                                     BouncyButton(
                                         onClick = { 
                                             viewModel.saveGroqApiKey(groqKeyInput)
-                                            viewModel.saveAiProvider(tempAiProvider) // Save sekaligus
+                                            viewModel.saveAiProvider(tempAiProvider)
                                             isGroqKeyDirty = false
                                             coroutineScope.launch { snackbarHostState.showSnackbar("Groq Configuration saved!") } 
                                         }, 
-                                        // FIX: Enable kalau ada text beda ATAU provider beda
                                         enabled = isGroqKeyDirty || tempAiProvider != aiProvider,
                                         modifier = Modifier.align(Alignment.End)
                                     ) { 
@@ -587,10 +573,22 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Appearance", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(16.dp))
+
+                        // Opsi Waveform yang di-inject di sini
+                        Text("Waveform Style", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4), onClick = { viewModel.saveThemeMode(0) }, selected = themeMode == 0) { Text("Auto") }
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4), onClick = { viewModel.saveThemeMode(1) }, selected = themeMode == 1) { Text("Light") }
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4), onClick = { viewModel.saveThemeMode(2) }, selected = themeMode == 2) { Text("Dark") }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3), onClick = { viewModel.saveWaveformStyle(0) }, selected = waveformStyle == 0) { Text("Liquid", fontSize = 12.sp) }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3), onClick = { viewModel.saveWaveformStyle(1) }, selected = waveformStyle == 1) { Text("Blob", fontSize = 12.sp) }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3), onClick = { viewModel.saveWaveformStyle(2) }, selected = waveformStyle == 2) { Text("Bars", fontSize = 12.sp) }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Text("App Theme", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4), onClick = { viewModel.saveThemeMode(0) }, selected = themeMode == 0) { Text("Auto", fontSize = 12.sp) }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4), onClick = { viewModel.saveThemeMode(1) }, selected = themeMode == 1) { Text("Light", fontSize = 12.sp) }
+                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4), onClick = { viewModel.saveThemeMode(2) }, selected = themeMode == 2) { Text("Dark", fontSize = 12.sp) }
                             SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4), onClick = { viewModel.saveThemeMode(3) }, selected = themeMode == 3) { Text("Amoled", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
                         }
                      }
