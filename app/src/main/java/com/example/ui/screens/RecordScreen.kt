@@ -5,12 +5,15 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -30,8 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -50,10 +55,13 @@ fun RecordScreen(
     viewModel: RecordViewModel,
     userName: String,
     recordMode: Int,
+    waveformStyle: Int, // Parameter injeksi untuk bentuk Waveform
     snackbarHostState: SnackbarHostState,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current // Injection sensori taktil M3
+    
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val amplitude by viewModel.amplitude.collectAsState()
@@ -78,8 +86,6 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // --- TYPOGRAPHY CONTRAST M3 EXPRESSIVE ---
-    // Membangun string dengan kontras bobot (weight) yang kuat.
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetingTime = when (hour) {
         in 0..11 -> "Good morning"
@@ -87,6 +93,7 @@ fun RecordScreen(
         else -> "Good evening"
     }
 
+    // Typography Contrast M3 Expressive
     val greetingText = buildAnnotatedString {
         withStyle(style = SpanStyle(fontWeight = FontWeight.Light)) {
             append("$greetingTime")
@@ -135,7 +142,6 @@ fun RecordScreen(
                     .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
                 horizontalAlignment = Alignment.Start
             ) {
-                // Implementasi Typography Contrast
                 Text(
                     text = greetingText,
                     style = MaterialTheme.typography.displaySmall,
@@ -168,13 +174,10 @@ fun RecordScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // --- DYNAMIC WAVEFORM COLOR ---
-            // Logika: Jika amplitude > 50% (asumsi max 32767), warna transisi ke Tertiary.
-            // Pastikan komponen AudioWaveform lu support argumen 'color'.
             val normalizedAmplitude = (amplitude / 32767f).coerceIn(0f, 1f)
             val isHighAmplitude = normalizedAmplitude > 0.5f
             
-            val waveformColor by animateColorAsState(
+            val dynamicWaveColor by animateColorAsState(
                 targetValue = if (isHighAmplitude) {
                     MaterialTheme.colorScheme.tertiary
                 } else {
@@ -184,11 +187,11 @@ fun RecordScreen(
                 label = "waveformColor"
             )
 
-            // Mengirim waveformColor ke komponen (lu perlu nambahin param color di AudioWaveform.kt)
-            // Gue lempar sebagai parameter, lu modif AudioWaveform lu nerima param ini.
+            // Mengirim parameter style dan color ke engine Waveform
             AudioWaveform(
                 amplitude = amplitude,
-                // color = waveformColor, // UNCOMMENT INI JIKA AUDIO WAVEFORM UDAH DIUPDATE
+                style = waveformStyle,
+                color = dynamicWaveColor,
                 modifier = Modifier
                     .padding(vertical = 32.dp)
                     .animateEnterExit(enter = fadeIn())
@@ -199,9 +202,6 @@ fun RecordScreen(
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
 
-            // --- CONTAINER HIERARCHY & COLOR SHIFT ---
-            // Menggunakan surfaceContainerHigh untuk elevasi tonal yang lebih menonjol.
-            // Menambahkan efek 'breathing' saat recording.
             val infiniteTransition = rememberInfiniteTransition(label = "breathing")
             val breathingAlpha by infiniteTransition.animateFloat(
                 initialValue = 1f,
@@ -219,21 +219,27 @@ fun RecordScreen(
                     .height(160.dp)
                     .animateEnterExit(enter = scaleIn(initialScale = 0.9f) + fadeIn())
                     .clip(MaterialTheme.shapes.extraLarge)
-                    // Elevasi tonal M3 Expressive: surfaceContainerHigh
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = breathingAlpha))
                     .clickable { showLiveTextSheet = true }
                     .padding(24.dp)
+                    .verticalScroll(scrollState)
             ) {
-                Text(
-                    text = displayLiveText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    // Kontras warna teks menyesuaikan container
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
-                )
+                // Live Text Typing Effect M3: Pergantian string dibungkus crossfade halus
+                AnimatedContent(
+                    targetState = displayLiveText,
+                    transitionSpec = { 
+                        fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300)) 
+                    },
+                    label = "LiveTextTypingEffect"
+                ) { targetText ->
+                    Text(
+                        text = targetText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -292,6 +298,9 @@ fun RecordScreen(
                             .pointerInput(isSplit, isPaused) {
                                 detectTapGestures(
                                     onPress = {
+                                        // Haptic feedback saat Record/Pause/Resume
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        
                                         isLeftPressed = true
                                         tryAwaitRelease()
                                         isLeftPressed = false
@@ -355,6 +364,9 @@ fun RecordScreen(
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onPress = {
+                                            // Haptic feedback saat Stop
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            
                                             isStopPressed = true
                                             tryAwaitRelease()
                                             isStopPressed = false
