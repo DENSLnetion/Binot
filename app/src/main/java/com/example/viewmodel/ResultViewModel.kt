@@ -260,7 +260,6 @@ class ResultViewModel(
             try {
                 val provider = settingsRepository.aiProviderFlow.first()
                 val apiKey = if (provider == 1) settingsRepository.groqApiKeyFlow.first() else settingsRepository.geminiApiKeyFlow.first()
-                // Mengambil preferensi bahasa AI global untuk explain text
                 val targetLanguage = settingsRepository.aiLanguageFlow.first()
                 
                 if (apiKey.isBlank()) {
@@ -278,6 +277,7 @@ class ResultViewModel(
                     2. NO conversational filler, pleasantries, or introductions.
                     3. Format nicely using Markdown if needed, but ABSOLUTELY NO BACKTICKS (`).
                     4. CRITICAL: DO NOT generate tables under any circumstances.
+                    5. STRICT MATH RULE: DO NOT translate math formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. NEVER spell out math in the target language.
                 """.trimIndent()
                 
                 val userPrompt = "Term to explain: \"$selectedText\""
@@ -569,7 +569,7 @@ class ResultViewModel(
                     CRITICAL STRICT RULES YOU MUST OBEY:
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
-                    3. MANDATORY LATEX CONVERSION: If you detect ANY numbers, mathematical concepts, formulas, equations, or scientific symbols in the original text, convert them into valid LaTeX directly — NO wrapping in any extra characters. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol. ONLY apply this IF the original text naturally contains math. DO NOT hallucinate math if there is none.
+                    3. MANDATORY LATEX CONVERSION & STRICT MATH RULE: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. DO NOT wrap in any extra characters. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol. ABSOLUTELY DO NOT translate math formulas into spoken words (e.g., NEVER write "sigma dari i sama dengan 1", write `\sum_{i=1}` instead). Math MUST remain as universal LaTeX symbols and MUST NOT be translated into the target language.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
                 """.trimIndent()
                 
