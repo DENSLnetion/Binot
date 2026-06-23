@@ -128,6 +128,7 @@ fun HistoryScreen(
         catch (e: Exception) { "1.0.0" }
     }
 
+    // Deteksi status animasi jalan atau ngga
     val isTransitioning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
 
     LaunchedEffect(Unit) {
@@ -371,6 +372,7 @@ fun HistoryScreen(
                         LazyVerticalStaggeredGrid(
                             columns = StaggeredGridCells.Fixed(2),
                             state = gridState,
+                            userScrollEnabled = !isTransitioning, // FIX: Kunci scroll murni selama transisi
                             modifier = Modifier
                                 .fillMaxSize()
                                 .weight(1f)
@@ -700,8 +702,8 @@ fun DismissibleNoteCard(
                 modifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("note-${note.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    renderInOverlayDuringTransition = false // FIX: Bypass Overlay agar tidak goyang saat di-scroll
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    // renderInOverlay kita biarkan default aja (true) biar lebih smooth
                 ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
