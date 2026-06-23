@@ -12,6 +12,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +36,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -59,10 +63,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // --- IMMERSIVE MODE (FULL SCREEN TANPA STATUS BAR) ---
+        // --- IMMERSIVE MODE: HANYA HIDE STATUS BAR (ATAS) ---
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
         // ----------------------------------------------------
 
         val appContainer = (application as BinotApplication).container
@@ -104,6 +108,10 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     
     val isRecordingGlobal by appContainer.audioRecorderManager.isRecording.collectAsState()
+
+    // Amankan padding atas (Minimal 36dp atau seukuran poni kamera)
+    val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val safeTop = max(36.dp, cutoutTop)
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -150,7 +158,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             NavHost(
                 navController = navController, 
                 startDestination = startDestination,
-                modifier = Modifier.padding(innerPadding),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .padding(top = safeTop), // <- INJEKSI GLOBAL PADDING ATAS 
                 enterTransition = { fadeIn(animationSpec = tween(300)) },
                 exitTransition = { fadeOut(animationSpec = tween(300)) },
                 popEnterTransition = { fadeIn(animationSpec = tween(300)) },
