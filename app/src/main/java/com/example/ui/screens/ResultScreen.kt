@@ -324,7 +324,6 @@ fun ResultScreen(
         action(newClip.trim())
     }
     
-    // FIX PADDING: Kita ambil batas poni (cutout) buat mastiin TopAppBar tetep solid tanpa tabrakan.
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
@@ -336,12 +335,12 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                    renderInOverlayDuringTransition = false // FIX: Bypass Overlay agar tidak goyang saat di-scroll
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
-                    // FIX PADDING: Terapin jarak amannya di sini biar nggantiin posisi status bar lama.
                     windowInsets = WindowInsets(top = safeTopMargin),
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
