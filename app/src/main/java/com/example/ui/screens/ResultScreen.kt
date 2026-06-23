@@ -325,13 +325,9 @@ fun ResultScreen(
         action(newClip.trim())
     }
 
-    val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    val safeTop = maxOf(36.dp, cutoutTop)
-
     with(sharedTransitionScope) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = MaterialTheme.colorScheme.surface, 
             modifier = Modifier
                 .sharedBounds(
@@ -342,7 +338,6 @@ fun ResultScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
-                    windowInsets = WindowInsets(left = 0.dp, top = safeTop, right = 0.dp, bottom = 0.dp),
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
@@ -794,8 +789,7 @@ fun ResultScreen(
                 showAiExplainSheet = false
                 viewModel.clearExplainResult()
             },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
             Column(
                 modifier = Modifier
@@ -1023,8 +1017,7 @@ fun ResultScreen(
                 if (hasUnsavedChanges) showCancelConfirmDialog = true
                 else showEditSheet = false
             },
-            sheetState = editSheetState,
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
+            sheetState = editSheetState
         ) {
             val scrollWall = remember {
                 object : NestedScrollConnection {
@@ -1168,8 +1161,7 @@ fun ResultScreen(
     if (showSidePanel && note != null) {
         ModalBottomSheet(
             onDismissRequest = { showSidePanel = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ) {
             Column(
                 modifier = Modifier
