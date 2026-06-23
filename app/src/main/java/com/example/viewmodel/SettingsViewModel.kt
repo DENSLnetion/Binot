@@ -78,7 +78,7 @@ class SettingsViewModel(
     val aiProvider: StateFlow<Int> = settingsRepository.aiProviderFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = 0 // 0 = Gemini, 1 = Groq
+        initialValue = 0 
     )
 
     // --- NEW GLOBAL AI PREFERENCES ---
@@ -99,6 +99,12 @@ class SettingsViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 0
     )
+
+    // --- WAVEFORM STYLE STATE ---
+    // Karena SettingsRepository lu belum ada flow buat ini, gue pake StateFlow lokal dulu. 
+    // Nanti lu bisa tambahin fungsi saveWaveformStyle di DataStore/SettingsRepository lu biar nyimpen permanen.
+    private val _waveformStyle = MutableStateFlow(0) // 0 = Liquid, 1 = Blob, 2 = Bars
+    val waveformStyle: StateFlow<Int> = _waveformStyle.asStateFlow()
 
     private val _updateState = MutableStateFlow(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
@@ -152,7 +158,11 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.saveAiFormat(format) }
     }
 
-    // FUNGSI BARU: Mengeksekusi query reset dan mengirim callback ke UI
+    fun saveWaveformStyle(style: Int) {
+        _waveformStyle.value = style
+        // TODO: Eksekusi ke SettingsRepository lu di sini kalau udah dibikin logic DataStore-nya.
+    }
+
     fun applyAiPreferencesToAllNotes(onResult: (String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
