@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -64,7 +63,7 @@ fun RecordScreen(
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
-    val rawAmplitude by viewModel.amplitude.collectAsState() // Nilai mentah dari mic
+    val rawAmplitude by viewModel.amplitude.collectAsState() // Balik pake raw amplitude murni
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
@@ -85,22 +84,6 @@ fun RecordScreen(
     ) { granted ->
         hasPermission = granted
     }
-
-    // --- DYNAMIC AUTO-CALIBRATOR ---
-    // Logika murni buat mendeteksi batas maksimal mikrofon secara real-time
-    var maxAmpObserved by remember { mutableFloatStateOf(50f) } // Nilai aman awal
-    
-    LaunchedEffect(rawAmplitude) {
-        if (rawAmplitude > maxAmpObserved) {
-            maxAmpObserved = rawAmplitude // Set peak baru kalau suara makin keras
-        } else {
-            // Decay 0.5% agar jika user teriak sekali, suara pelannya tidak mati selamanya
-            maxAmpObserved = maxOf(50f, maxAmpObserved * 0.995f) 
-        }
-    }
-    
-    // Normalisasi absolut dari 0.0 sampai 1.0 (apapun skala library mic lu)
-    val normalizedAmplitude = (rawAmplitude / maxAmpObserved).coerceIn(0f, 1f)
 
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetingTime = when (hour) {
@@ -189,22 +172,13 @@ fun RecordScreen(
 
             Spacer(modifier = Modifier.weight(1f))
             
-            val isHighAmplitude = normalizedAmplitude > 0.5f // Transisi warna
-            val dynamicWaveColor by animateColorAsState(
-                targetValue = if (isHighAmplitude) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                animationSpec = tween(durationMillis = 300, easing = LinearEasing),
-                label = "waveformColor"
-            )
-
-            // Lempar normalizedAmplitude (0-1) yang udah mateng ke komponen
+            // Ngelempar rawAmplitude LANGSUNG ke Waveform tanpa perantara aneh-aneh.
+            // Biar komponennya yang nge-handle matematika sesuai kodingan lama lu.
             AudioWaveform(
-                amplitude = normalizedAmplitude,
+                amplitude = rawAmplitude,
                 style = waveformStyle,
-                color = dynamicWaveColor,
+                primaryColor = MaterialTheme.colorScheme.primary,
+                tertiaryColor = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier
                     .padding(vertical = 32.dp)
                     .animateEnterExit(enter = fadeIn())
