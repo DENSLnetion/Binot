@@ -738,8 +738,9 @@ fun MorphingSearchBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .offset(y = topMargin)
             .padding(horizontal = horizontalPadding)
-            .padding(top = topMargin, bottom = 8.dp)
+            .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surface) 
     ) {
