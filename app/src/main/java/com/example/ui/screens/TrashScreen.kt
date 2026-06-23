@@ -45,7 +45,8 @@ fun TrashScreen(
             if (selectionMode) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
+                    // FIX: Menggunakan displayCutout untuk mengamankan padding dari notch
+                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
                 ) {
                     TopAppBar(
                         title = { Text("${selectedNotes.size} Selected") },
@@ -179,4 +180,3 @@ fun TrashedNoteCard(
         }
     }
 }
-
