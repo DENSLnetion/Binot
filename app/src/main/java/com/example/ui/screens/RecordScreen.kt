@@ -345,6 +345,7 @@ fun RecordScreen(
         ModalBottomSheet(
             onDismissRequest = { showLiveTextSheet = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+            windowInsets = WindowInsets(0, 0, 0, 0),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
         ) {
             Column(
