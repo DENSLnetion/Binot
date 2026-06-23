@@ -19,10 +19,15 @@ class SettingsRepository(private val context: Context) {
         val RECORD_MODE_KEY = intPreferencesKey("record_mode") 
         val AI_PROVIDER_KEY = intPreferencesKey("ai_provider") // 0 = Gemini, 1 = Groq
         
-        // --- NEW GLOBAL AI PREFERENCES ---
+        // --- GLOBAL AI PREFERENCES ---
         val AI_LANGUAGE_KEY = stringPreferencesKey("ai_language")
         val AI_TASK_KEY = intPreferencesKey("ai_task") // 0: Tidy Up, 1: Summarize, 2: Analyze
         val AI_FORMAT_KEY = intPreferencesKey("ai_format") // 0: Paragraphs, 1: Bullets
+
+        // --- TUTORIAL / COACH MARKS FLAGS ---
+        val HAS_SEEN_RECORD_TOUR = booleanPreferencesKey("has_seen_record_tour")
+        val HAS_SEEN_HISTORY_TOUR = booleanPreferencesKey("has_seen_history_tour")
+        val HAS_SEEN_RESULT_TOUR = booleanPreferencesKey("has_seen_result_tour")
     }
 
     val userNameFlow: Flow<String> = context.dataStore.data.map { it[USER_NAME_KEY] ?: "" }
@@ -30,12 +35,19 @@ class SettingsRepository(private val context: Context) {
     val groqApiKeyFlow: Flow<String> = context.dataStore.data.map { it[GROQ_API_KEY] ?: "" }
     val themeModeFlow: Flow<Int> = context.dataStore.data.map { it[THEME_MODE_KEY] ?: 0 }
     val recordModeFlow: Flow<Int> = context.dataStore.data.map { it[RECORD_MODE_KEY] ?: 0 } 
-    val aiProviderFlow: Flow<Int> = context.dataStore.data.map { it[AI_PROVIDER_KEY] ?: 0 }
+    
+    // Default fallback diubah jadi 1 (Groq) karena lebih ramah untuk user mainstream
+    val aiProviderFlow: Flow<Int> = context.dataStore.data.map { it[AI_PROVIDER_KEY] ?: 1 }
 
     // Default: English, Tidy Up (0), Paragraphs (0)
     val aiLanguageFlow: Flow<String> = context.dataStore.data.map { it[AI_LANGUAGE_KEY] ?: "English" }
     val aiTaskFlow: Flow<Int> = context.dataStore.data.map { it[AI_TASK_KEY] ?: 0 }
     val aiFormatFlow: Flow<Int> = context.dataStore.data.map { it[AI_FORMAT_KEY] ?: 0 }
+
+    // Tutorial Flags
+    val hasSeenRecordTourFlow: Flow<Boolean> = context.dataStore.data.map { it[HAS_SEEN_RECORD_TOUR] ?: false }
+    val hasSeenHistoryTourFlow: Flow<Boolean> = context.dataStore.data.map { it[HAS_SEEN_HISTORY_TOUR] ?: false }
+    val hasSeenResultTourFlow: Flow<Boolean> = context.dataStore.data.map { it[HAS_SEEN_RESULT_TOUR] ?: false }
 
     suspend fun saveUserName(name: String) {
         context.dataStore.edit { it[USER_NAME_KEY] = name }
@@ -71,5 +83,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun saveAiFormat(format: Int) {
         context.dataStore.edit { it[AI_FORMAT_KEY] = format }
+    }
+
+    suspend fun setRecordTourSeen() {
+        context.dataStore.edit { it[HAS_SEEN_RECORD_TOUR] = true }
+    }
+
+    suspend fun setHistoryTourSeen() {
+        context.dataStore.edit { it[HAS_SEEN_HISTORY_TOUR] = true }
+    }
+
+    suspend fun setResultTourSeen() {
+        context.dataStore.edit { it[HAS_SEEN_RESULT_TOUR] = true }
     }
 }
