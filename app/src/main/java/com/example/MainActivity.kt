@@ -113,9 +113,13 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTop = max(36.dp, cutoutTop)
 
+    // ResultScreen butuh warna surface (bukan surfaceContainer) biar tidak belang
+    val isResultScreen = currentRoute?.startsWith("result/") == true
+    val scaffoldContainerColor = if (isResultScreen) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = scaffoldContainerColor,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
@@ -160,7 +164,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 startDestination = startDestination,
                 modifier = Modifier
                     .padding(innerPadding)
-                    .padding(top = safeTop), // <- INJEKSI GLOBAL PADDING ATAS 
+                    .then(if (!isResultScreen) Modifier.padding(top = safeTop) else Modifier), // <- INJEKSI GLOBAL PADDING ATAS (skip untuk ResultScreen)
                 enterTransition = { fadeIn(animationSpec = tween(300)) },
                 exitTransition = { fadeOut(animationSpec = tween(300)) },
                 popEnterTransition = { fadeIn(animationSpec = tween(300)) },
@@ -210,7 +214,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         animatedVisibilityScope = this@composable,
                         sharedTransitionScope = this@SharedTransitionLayout,
                         onNoteClick = { id -> navController.navigate("result/$id") },
-                        onTrashClick = { navController.navigate("trash") }
+                        onTrashClick = { navController.navigate("trash") },
+                        safeTop = safeTop
                     )
                 }
                 composable("trash") {
