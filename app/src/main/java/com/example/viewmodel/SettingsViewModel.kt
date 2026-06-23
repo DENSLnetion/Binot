@@ -78,10 +78,9 @@ class SettingsViewModel(
     val aiProvider: StateFlow<Int> = settingsRepository.aiProviderFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = 0 // 0 = Gemini, 1 = Groq
+        initialValue = 1 // Default Groq
     )
 
-    // --- NEW GLOBAL AI PREFERENCES ---
     val aiLanguage: StateFlow<String> = settingsRepository.aiLanguageFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -98,6 +97,25 @@ class SettingsViewModel(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = 0
+    )
+
+    // Tutorial Flags
+    val hasSeenRecordTour: StateFlow<Boolean> = settingsRepository.hasSeenRecordTourFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val hasSeenHistoryTour: StateFlow<Boolean> = settingsRepository.hasSeenHistoryTourFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val hasSeenResultTour: StateFlow<Boolean> = settingsRepository.hasSeenResultTourFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
     )
 
     private val _updateState = MutableStateFlow(UpdateState.Idle)
@@ -152,7 +170,19 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepository.saveAiFormat(format) }
     }
 
-    // FUNGSI BARU: Mengeksekusi query reset dan mengirim callback ke UI
+    // Flag Setters
+    fun markRecordTourSeen() {
+        viewModelScope.launch { settingsRepository.setRecordTourSeen() }
+    }
+
+    fun markHistoryTourSeen() {
+        viewModelScope.launch { settingsRepository.setHistoryTourSeen() }
+    }
+
+    fun markResultTourSeen() {
+        viewModelScope.launch { settingsRepository.setResultTourSeen() }
+    }
+
     fun applyAiPreferencesToAllNotes(onResult: (String) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
