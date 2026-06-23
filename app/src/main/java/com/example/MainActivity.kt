@@ -12,8 +12,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -36,11 +34,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -62,13 +55,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // --- IMMERSIVE MODE: HANYA HIDE STATUS BAR (ATAS) ---
-        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
-        // ----------------------------------------------------
-
         val appContainer = (application as BinotApplication).container
 
         setContent {
@@ -109,17 +95,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
     
     val isRecordingGlobal by appContainer.audioRecorderManager.isRecording.collectAsState()
 
-    // Amankan padding atas (Minimal 36dp atau seukuran poni kamera)
-    val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    val safeTop = max(36.dp, cutoutTop)
-
-    // ResultScreen butuh warna surface (bukan surfaceContainer) biar tidak belang
-    val isResultScreen = currentRoute?.startsWith("result/") == true
-    val scaffoldContainerColor = if (isResultScreen) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = scaffoldContainerColor,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (currentRoute in listOf("record", "history", "settings")) {
@@ -162,9 +140,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             NavHost(
                 navController = navController, 
                 startDestination = startDestination,
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .then(if (!isResultScreen) Modifier.padding(top = safeTop) else Modifier), // <- INJEKSI GLOBAL PADDING ATAS (skip untuk ResultScreen)
+                modifier = Modifier.padding(innerPadding),
                 enterTransition = { fadeIn(animationSpec = tween(300)) },
                 exitTransition = { fadeOut(animationSpec = tween(300)) },
                 popEnterTransition = { fadeIn(animationSpec = tween(300)) },
@@ -214,8 +190,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         animatedVisibilityScope = this@composable,
                         sharedTransitionScope = this@SharedTransitionLayout,
                         onNoteClick = { id -> navController.navigate("result/$id") },
-                        onTrashClick = { navController.navigate("trash") },
-                        safeTop = safeTop
+                        onTrashClick = { navController.navigate("trash") }
                     )
                 }
                 composable("trash") {
@@ -243,6 +218,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                     
+                    // Kita membuang passing API Key satu persatu, dan langsung menggunakan appContainer.settingsRepository
                     val resultViewModel: ResultViewModel = viewModel(
                         factory = ResultViewModel.provideFactory(
                             noteId = noteId, 
