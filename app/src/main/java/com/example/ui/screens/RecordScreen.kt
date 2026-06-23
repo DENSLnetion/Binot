@@ -1,682 +1,372 @@
 package com.example.ui.screens
 
-import android.content.Intent
-import android.net.Uri
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.viewmodel.SettingsViewModel
-import com.example.viewmodel.UpdateState
+import androidx.core.content.ContextCompat
+import com.example.ui.components.AudioWaveform
+import com.example.viewmodel.RecordViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-@Composable
-private fun BouncyButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable RowScope.() -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "buttonBounce"
-    )
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        modifier = modifier.scale(scale),
-        content = content
-    )
-}
-
-@Composable
-private fun BouncyOutlinedButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable RowScope.() -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "outlinedButtonBounce"
-    )
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = interactionSource,
-        modifier = modifier.scale(scale),
-        content = content
-    )
-}
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
-    viewModel: SettingsViewModel,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    isRecording: Boolean = false,
-    onDiscardRecording: () -> Unit = {}
+fun RecordScreen(
+    viewModel: RecordViewModel,
+    userName: String,
+    recordMode: Int,
+    snackbarHostState: SnackbarHostState,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
-    val userName by viewModel.userName.collectAsState()
-    val geminiApiKey by viewModel.apiKey.collectAsState()
-    val groqApiKey by viewModel.groqApiKey.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
-    val recordMode by viewModel.recordMode.collectAsState() 
-    val aiProvider by viewModel.aiProvider.collectAsState() 
-    
-    // AI Preferences State (Actual Saved Data)
-    val aiLanguage by viewModel.aiLanguage.collectAsState()
-    val aiTask by viewModel.aiTask.collectAsState()
-    val aiFormat by viewModel.aiFormat.collectAsState()
+    val isRecording by viewModel.isRecording.collectAsState()
+    val isPaused by viewModel.isPaused.collectAsState()
+    val amplitude by viewModel.amplitude.collectAsState()
+    val recognizedText by viewModel.recognizedText.collectAsState()
+    val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
-    // Temporary State (Prevents auto-save if user navigates away)
-    var tempAiLanguage by remember(aiLanguage) { mutableStateOf(aiLanguage) }
-    var tempAiTask by remember(aiTask) { mutableStateOf(aiTask) }
-    var tempAiFormat by remember(aiFormat) { mutableStateOf(aiFormat) }
-
-    val updateState by viewModel.updateState.collectAsState()
-    val downloadProgress by viewModel.downloadProgress.collectAsState()
-    val latestVersionStr by viewModel.latestVersionStr.collectAsState()
-
-    // Input States
-    var nameInput by remember(userName) { mutableStateOf(userName) }
-    var geminiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
-    var groqKeyInput by remember(groqApiKey) { mutableStateOf(groqApiKey) }
-
-    // Dirty Flags (Buat deteksi apakah ada pergerakan ketikan di kolom input)
-    var isNameDirty by remember { mutableStateOf(false) }
-    var isGeminiKeyDirty by remember { mutableStateOf(false) }
-    var isGroqKeyDirty by remember { mutableStateOf(false) }
-
-    var showInfoDialog by remember { mutableStateOf(false) }
-    var showAiInfoDialog by remember { mutableStateOf(false) }
-    var showWarningDialog by remember { mutableStateOf(false) }
-    var pendingModeSelection by remember { mutableStateOf(-1) }
-    
-    // Dialog untuk Save Apply to All
-    var showApplyAllDialog by remember { mutableStateOf(false) }
-
-    // Bottom Sheet for Language Selection
-    var showLanguageSheet by remember { mutableStateOf(false) }
-    var languageSearchQuery by remember { mutableStateOf("") }
-    
-    val supportedLanguages = listOf(
-        "English", "Indonesia", "Spanish", "French", "German", "Chinese (Simplified)", 
-        "Chinese (Traditional)", "Japanese", "Korean", "Arabic", "Russian", "Portuguese", 
-        "Italian", "Hindi", "Bengali", "Urdu", "Turkish", "Vietnamese", "Thai", 
-        "Dutch", "Polish", "Swedish", "Malay"
-    ).sorted()
-
-    val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-    
-    val currentVersion = remember {
-        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0" } catch (e: Exception) { "1.0.0" }
-    }
-    
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let { viewModel.exportBackup(context, it) { msg -> coroutineScope.launch { snackbarHostState.showSnackbar(msg) } } }
-    }
 
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { viewModel.importBackup(context, it) { msg -> coroutineScope.launch { snackbarHostState.showSnackbar(msg) } } }
-    }
+    var showLiveTextSheet by remember { mutableStateOf(false) }
 
-    if (showInfoDialog) {
-        AlertDialog(
-            onDismissRequest = { showInfoDialog = false },
-            title = { Text("Recording Modes") },
-            text = { Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled.") },
-            confirmButton = { TextButton(onClick = { showInfoDialog = false }) { Text("Got it") } }
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    if (showAiInfoDialog) {
-        AlertDialog(
-            onDismissRequest = { showAiInfoDialog = false },
-            title = { Text("AI Providers") },
-            text = { Text("Google Gemini:\nHighly reliable for summarizing and capable of processing massive audio files (hours long). The downside is Google's strict rate limits for free API keys.\n\nGroq AI (Recommended):\nBlazing fast processing and generous rate limits for text. The downside is audio files are limited to a maximum of 25MB (approx. 30 minutes).") },
-            confirmButton = { TextButton(onClick = { showAiInfoDialog = false }) { Text("Got it") } }
-        )
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
     }
 
-    if (showWarningDialog) {
-        AlertDialog(
-            onDismissRequest = { showWarningDialog = false; pendingModeSelection = -1 },
-            title = { Text("Warning") },
-            text = { Text("Recording will be stopped and discarded. Continue?") },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        onDiscardRecording()
-                        if (pendingModeSelection != -1) {
-                            viewModel.saveRecordMode(pendingModeSelection)
-                        }
-                        showWarningDialog = false
-                        pendingModeSelection = -1
-                    }
-                ) { Text("Continue") }
-            },
-            dismissButton = { TextButton(onClick = { showWarningDialog = false; pendingModeSelection = -1 }) { Text("Cancel") } }
-        )
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    val greetingTime = when (hour) {
+        in 0..11 -> "Good morning"
+        in 12..17 -> "Good afternoon"
+        else -> "Good evening"
     }
-    
-    if (showApplyAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showApplyAllDialog = false },
-            title = { Text("Save & Apply to All Notes?") },
-            text = { Text("This will save your new preferences and reset the AI-generated results for all previous notes. They will be re-processed using your new preferences the next time you open them. Your original raw transcripts are completely safe.\n\nContinue?") },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    onClick = {
-                        showApplyAllDialog = false
-                        viewModel.saveAiLanguage(tempAiLanguage)
-                        viewModel.saveAiTask(tempAiTask)
-                        viewModel.saveAiFormat(tempAiFormat)
-                        viewModel.applyAiPreferencesToAllNotes { msg ->
-                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
-                        }
-                    }
-                ) { Text("Save & Apply") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showApplyAllDialog = false }) { Text("Cancel") }
-            }
-        )
+    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
+
+    val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
+    val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
+    val timeString = "$minutes:$seconds"
+
+    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    // Variabel penentu Teks di UI berdasarkan State Mode
+    val displayLiveText = if (recordMode == 1) {
+        "Direct recording mode is active.\nLive transcription is disabled."
+    } else {
+        if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText
     }
 
-    if (showLanguageSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showLanguageSheet = false; languageSearchQuery = "" },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
+    with(animatedVisibilityScope) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.7f).padding(horizontal = 16.dp)) {
+            Spacer(modifier = Modifier.height(topInsets + 40.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()), 
+                horizontalAlignment = Alignment.Start
+            ) {
                 Text(
-                    text = "Select Language",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = greeting,
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Start
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Surface(
+                    shape = CircleShape,
+                    color = when {
+                        isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+                        isRecording -> MaterialTheme.colorScheme.errorContainer
+                        else -> MaterialTheme.colorScheme.secondaryContainer
+                    },
                     modifier = Modifier.padding(bottom = 16.dp)
-                )
-                OutlinedTextField(
-                    value = languageSearchQuery,
-                    onValueChange = { languageSearchQuery = it },
-                    label = { Text("Search Language...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                )
-                
-                val filteredLanguages = supportedLanguages.filter { 
-                    it.contains(languageSearchQuery, ignoreCase = true) 
+                ) {
+                    Text(
+                        text = timeString,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = when {
+                            isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
+                            isRecording -> MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
-                
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(filteredLanguages) { lang ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    tempAiLanguage = lang
-                                    showLanguageSheet = false
-                                    languageSearchQuery = ""
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            AudioWaveform(
+                amplitude = amplitude,
+                modifier = Modifier
+                    .padding(vertical = 32.dp)
+                    .animateEnterExit(enter = fadeIn())
+            )
+
+            val scrollState = rememberScrollState()
+            LaunchedEffect(recognizedText) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .animateEnterExit(enter = scaleIn(initialScale = 0.9f) + fadeIn())
+                    .clip(MaterialTheme.shapes.extraLarge)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { showLiveTextSheet = true }
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = displayLiveText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            val isSplit = isRecording || isPaused
+            val totalAreaWidth = 280.dp
+
+            Box(
+                modifier = Modifier
+                    .widthIn(min = totalAreaWidth)
+                    .height(80.dp)
+                    .animateEnterExit(enter = scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))),
+                contentAlignment = Alignment.Center
+            ) {
+                var isLeftPressed by remember { mutableStateOf(false) }
+                var isStopPressed by remember { mutableStateOf(false) }
+
+                val leftTargetWidth = when {
+                    isStopPressed && isSplit -> 88.dp 
+                    isLeftPressed && isSplit -> 152.dp  
+                    isLeftPressed            -> totalAreaWidth + 56.dp 
+                    isSplit                  -> 120.dp
+                    else                     -> totalAreaWidth
+                }
+                val rightTargetWidth = when {
+                    !isSplit                  -> 0.dp
+                    isStopPressed              -> 152.dp 
+                    isLeftPressed               -> 88.dp  
+                    else                        -> 120.dp
+                }
+                val gapTarget = if (isSplit) 16.dp else 0.dp
+
+                val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
+                val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
+                val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
+                val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
+                val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(gapWidth),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(leftButtonWidth)
+                            .height(80.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
+                                    else                 -> MaterialTheme.colorScheme.primary
                                 }
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            )
+                            .pointerInput(isSplit, isPaused) {
+                                detectTapGestures(
+                                    onPress = {
+                                        isLeftPressed = true
+                                        tryAwaitRelease()
+                                        isLeftPressed = false
+                                        when {
+                                            !isSplit -> {
+                                                if (!hasPermission) {
+                                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                                } else {
+                                                    val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                    // Logic Fix: Panggil toggleRecording dengan parameter recordMode
+                                                    viewModel.toggleRecording(isEmulator, recordMode)
+                                                }
+                                            }
+                                            isPaused -> viewModel.resumeRecording()
+                                            else     -> viewModel.pauseRecording()
+                                        }
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when {
+                                    isSplit && isPaused -> Icons.Default.PlayArrow
+                                    isSplit            -> Icons.Default.Pause
+                                    else               -> Icons.Default.Mic
+                                },
+                                contentDescription = when {
+                                    isSplit && isPaused -> "Resume"
+                                    isSplit            -> "Pause"
+                                    else               -> "Record"
+                                },
+                                tint = when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    else                 -> MaterialTheme.colorScheme.onPrimary
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .scale(leftIconScale)
+                            )
+                            if (!isSplit) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Record",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+
+                    if (rightButtonWidth > 0.dp) {
+                        Box(
+                            modifier = Modifier
+                                .width(rightButtonWidth)
+                                .height(80.dp)
+                                .alpha(rightButtonAlpha)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.tertiary)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            isStopPressed = true
+                                            tryAwaitRelease()
+                                            isStopPressed = false
+
+                                            viewModel.stopRecordingInstant()
+
+                                            coroutineScope.launch {
+                                                // Logic Fix: Save data pake parameter recordMode
+                                                val saved = viewModel.saveNote(recordMode)
+                                                snackbarHostState.showSnackbar(
+                                                    message = if (saved) "Note saved" else "No text to save",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                            }
+                                        }
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(text = lang, style = MaterialTheme.typography.bodyLarge)
-                            if (lang == tempAiLanguage) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                            if (isStopPressed && recordMode == 1) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.onTertiary,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Stop",
+                                    tint = MaterialTheme.colorScheme.onTertiary,
+                                    modifier = Modifier.size(32.dp)
+                                )
                             }
                         }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-        with(animatedVisibilityScope) {
+    if (showLiveTextSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLiveTextSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = innerPadding.calculateBottomPadding())
-                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .padding(24.dp)
                     .verticalScroll(rememberScrollState())
-                    .animateEnterExit(enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(topInsets + 4.dp))
-
                 Text(
-                    text = "Settings", 
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    text = "Live Transcription",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Personalization", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = nameInput, 
-                            onValueChange = { 
-                                nameInput = it
-                                isNameDirty = true // Langsung nyalain flag kotor pas ngetik
-                            }, 
-                            label = { Text("Your Name") }, 
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        BouncyButton(
-                            onClick = { 
-                                viewModel.saveUserName(nameInput)
-                                isNameDirty = false // Matiin flag setelah disave
-                                coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } 
-                            }, 
-                            enabled = isNameDirty, // Tombol cuma nyala kalo flag kotor nyala
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Save Name")
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Global AI Preferences", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("Notes will be automatically processed using these settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
-                        
-                        // Output Language Selector (Temporary State)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .clickable { showLanguageSheet = true }
-                                .padding(16.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Language, contentDescription = "Language", tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text("Output Language", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                    Text(tempAiLanguage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Select", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // AI Task (Temporary State)
-                        Text("Processing Task", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                onClick = { tempAiTask = 0 },
-                                selected = tempAiTask == 0
-                            ) { Text("Tidy Up", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                onClick = { tempAiTask = 1 },
-                                selected = tempAiTask == 1
-                            ) { Text("Summary", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                onClick = { tempAiTask = 2 },
-                                selected = tempAiTask == 2
-                            ) { Text("Analyze", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // AI Format (Temporary State)
-                        Text("Output Format", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                onClick = { tempAiFormat = 0 },
-                                selected = tempAiFormat == 0
-                            ) { Text("Paragraphs") }
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                onClick = { tempAiFormat = 1 },
-                                selected = tempAiFormat == 1
-                            ) { Text("Bullets") }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        val isChanged = tempAiLanguage != aiLanguage || tempAiTask != aiTask || tempAiFormat != aiFormat
-                        
-                        BouncyButton(
-                            onClick = { showApplyAllDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = isChanged 
-                        ) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Save & Apply to All Notes")
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("AI Configuration", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.weight(1f))
-                            IconButton(onClick = { showAiInfoDialog = true }) {
-                                Icon(Icons.Default.Info, contentDescription = "AI Info", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                onClick = { viewModel.saveAiProvider(0) },
-                                selected = aiProvider == 0
-                            ) { Text("Gemini") }
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                onClick = { viewModel.saveAiProvider(1) },
-                                selected = aiProvider == 1
-                            ) { Text("Groq") }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        AnimatedContent(targetState = aiProvider, label = "ApiKeyInput") { provider ->
-                            if (provider == 0) {
-                                Column {
-                                    OutlinedTextField(
-                                        value = geminiKeyInput, 
-                                        onValueChange = { 
-                                            geminiKeyInput = it
-                                            isGeminiKeyDirty = true 
-                                        }, 
-                                        label = { Text("Gemini API Key") }, 
-                                        visualTransformation = PasswordVisualTransformation(), 
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))) })
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    BouncyButton(
-                                        onClick = { 
-                                            viewModel.saveApiKey(geminiKeyInput)
-                                            isGeminiKeyDirty = false
-                                            coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Key saved securely!") } 
-                                        }, 
-                                        enabled = isGeminiKeyDirty,
-                                        modifier = Modifier.align(Alignment.End)
-                                    ) { 
-                                        Text("Save Key") 
-                                    }
-                                }
-                            } else {
-                                Column {
-                                    OutlinedTextField(
-                                        value = groqKeyInput, 
-                                        onValueChange = { 
-                                            groqKeyInput = it
-                                            isGroqKeyDirty = true 
-                                        }, 
-                                        label = { Text("Groq API Key") }, 
-                                        visualTransformation = PasswordVisualTransformation(), 
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))) })
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    BouncyButton(
-                                        onClick = { 
-                                            viewModel.saveGroqApiKey(groqKeyInput)
-                                            isGroqKeyDirty = false
-                                            coroutineScope.launch { snackbarHostState.showSnackbar("Groq Key saved securely!") } 
-                                        }, 
-                                        enabled = isGroqKeyDirty,
-                                        modifier = Modifier.align(Alignment.End)
-                                    ) { 
-                                        Text("Save Key") 
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Recording Mode", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.weight(1f))
-                            IconButton(onClick = { showInfoDialog = true }) {
-                                Icon(Icons.Default.Info, contentDescription = "Mode Info", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                onClick = { 
-                                    if (recordMode != 0) {
-                                        if (isRecording) {
-                                            pendingModeSelection = 0
-                                            showWarningDialog = true
-                                        } else {
-                                            viewModel.saveRecordMode(0) 
-                                        }
-                                    }
-                                },
-                                selected = recordMode == 0
-                            ) { Text("Fast") }
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                onClick = { 
-                                    if (recordMode != 1) {
-                                        if (isRecording) {
-                                            pendingModeSelection = 1
-                                            showWarningDialog = true
-                                        } else {
-                                            viewModel.saveRecordMode(1) 
-                                        }
-                                    }
-                                },
-                                selected = recordMode == 1
-                            ) { Text("Accurate") }
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Appearance", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4), onClick = { viewModel.saveThemeMode(0) }, selected = themeMode == 0) { Text("Auto") }
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4), onClick = { viewModel.saveThemeMode(1) }, selected = themeMode == 1) { Text("Light") }
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4), onClick = { viewModel.saveThemeMode(2) }, selected = themeMode == 2) { Text("Dark") }
-                            SegmentedButton(shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4), onClick = { viewModel.saveThemeMode(3) }, selected = themeMode == 3) { Text("Amoled", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp) }
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Data & System", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Notes Backup", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                            Row(horizontalArrangement = Arrangement.End) {
-                                BouncyOutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, modifier = Modifier.padding(end = 8.dp)) { Text("Restore") }
-                                BouncyButton(onClick = { exportLauncher.launch("Binot_Backup_${formatter.format(Date())}.json") }) { Text("Backup") }
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text("App Version", style = MaterialTheme.typography.bodyLarge)
-                                Text("v$currentVersion", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                
-                                if (updateState == UpdateState.Downloading) {
-                                    val animatedProgress by animateFloatAsState(targetValue = downloadProgress / 100f, label = "progress")
-                                    Spacer(Modifier.height(8.dp))
-                                    LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small), color = MaterialTheme.colorScheme.primary)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("Downloading... $downloadProgress%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                } else if (updateState == UpdateState.Available) {
-                                    Text("New version ready: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                } else if (updateState == UpdateState.Error) {
-                                    Text("Failed: $latestVersionStr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                } else if (updateState == UpdateState.Idle && latestVersionStr.isNotBlank()) {
-                                    Text("App is up to date.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                            
-                            AnimatedContent(targetState = updateState, label = "update_btn") { state ->
-                                when (state) {
-                                    UpdateState.Idle -> BouncyButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Text("Check Update") }
-                                    UpdateState.Checking -> Button(onClick = {}, enabled = false) { CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) }
-                                    UpdateState.Available -> BouncyButton(onClick = { viewModel.startDownload(context) }) { Text("Update App") }
-                                    UpdateState.Downloading -> OutlinedButton(onClick = {}) { Text("Downloading") }
-                                    UpdateState.Downloaded -> BouncyButton(onClick = { viewModel.promptInstall(context) }) { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Install") }
-                                    UpdateState.Error -> BouncyOutlinedButton(onClick = { viewModel.checkForUpdate(currentVersion) }) { Icon(Icons.Default.Error, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(6.dp)); Text("Retry") }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://saweria.co/Densl"))
-                        context.startActivity(intent)
-                    }
-                ) {
-                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("Support Development", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                            Text("Donate via Saweria", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DENSLnetion/Binot"))
-                        context.startActivity(intent)
-                    }
-                ) {
-                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("GitHub Repository", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                            Text("Star the repo or report an issue", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (recordMode == 1) "Transcription will be processed by Gemini later." else if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }
 }
+
