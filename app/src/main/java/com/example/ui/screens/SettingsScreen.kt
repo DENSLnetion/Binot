@@ -291,7 +291,10 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
-        val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        
+        // FIX: Menggunakan displayCutout untuk margin aman bagian atas
+        val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+        val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
         with(animatedVisibilityScope) {
             Column(
@@ -303,7 +306,7 @@ fun SettingsScreen(
                     .animateEnterExit(enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(topInsets + 4.dp))
+                Spacer(modifier = Modifier.height(safeTopMargin + 4.dp))
 
                 Text(
                     text = "Settings", 
@@ -323,7 +326,7 @@ fun SettingsScreen(
                             value = nameInput, 
                             onValueChange = { 
                                 nameInput = it
-                                isNameDirty = true // Langsung nyalain flag kotor pas ngetik
+                                isNameDirty = true 
                             }, 
                             label = { Text("Your Name") }, 
                             modifier = Modifier.fillMaxWidth()
@@ -332,10 +335,10 @@ fun SettingsScreen(
                         BouncyButton(
                             onClick = { 
                                 viewModel.saveUserName(nameInput)
-                                isNameDirty = false // Matiin flag setelah disave
+                                isNameDirty = false 
                                 coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } 
                             }, 
-                            enabled = isNameDirty, // Tombol cuma nyala kalo flag kotor nyala
+                            enabled = isNameDirty, 
                             modifier = Modifier.align(Alignment.End)
                         ) {
                             Text("Save Name")
@@ -351,7 +354,7 @@ fun SettingsScreen(
                         Text("Global AI Preferences", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Text("Notes will be automatically processed using these settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
                         
-                        // Output Language Selector (Temporary State)
+                        // Output Language Selector
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -375,7 +378,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Task (Temporary State)
+                        // AI Task
                         Text("Processing Task", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
@@ -397,7 +400,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Format (Temporary State)
+                        // AI Format
                         Text("Output Format", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
