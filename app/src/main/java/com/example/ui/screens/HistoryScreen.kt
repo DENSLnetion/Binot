@@ -299,7 +299,8 @@ fun HistoryScreen(
                 if (selectionMode) {
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)
+                        // Fix: Menggunakan displayCutout untuk mengamankan padding dari notch
+                        modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
                     ) {
                         TopAppBar(
                             title = { Text("${selectedNotes.size} Selected") },
@@ -645,8 +646,6 @@ fun DismissibleNoteCard(
     onSelect: () -> Unit,
     onLongSelect: () -> Unit
 ) {
-    // FIX PALING LOGIS: Biarkan Compose nge-reset animasi visualnya ke tengah (Return FALSE).
-    // Data tetap kehapus kok karena viewModel.deleteMultiple() jalan duluan.
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
@@ -663,8 +662,6 @@ fun DismissibleNoteCard(
                         viewModel.clearRecentlyDeleted()
                     }
                 }
-                // RETURN FALSE!
-                // Supaya mesin Jetpack Compose langsung mutus status "kegeser" tanpa perlawanan.
                 false
             } else {
                 false
@@ -724,11 +721,14 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier 
 ) {
-    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // FIX: Menggunakan displayCutout dan membuat batas minimum yang sangat aman (24.dp)
+    val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
+    
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
-    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
+    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else safeTopMargin + 8.dp, animationSpec = spring(), label = "tMargin")
+    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) safeTopMargin + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
         modifier = modifier
