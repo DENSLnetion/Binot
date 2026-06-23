@@ -239,6 +239,7 @@ fun SettingsScreen(
         ModalBottomSheet(
             onDismissRequest = { showLanguageSheet = false; languageSearchQuery = "" },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            windowInsets = WindowInsets(0, 0, 0, 0),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
         ) {
             Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.7f).padding(horizontal = 16.dp)) {
