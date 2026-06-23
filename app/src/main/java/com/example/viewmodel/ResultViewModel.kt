@@ -546,15 +546,15 @@ class ResultViewModel(
                 }
 
                 val taskInstruction = when (task) {
-                    0 -> "Task: STRICT PROOFREADING (TIDY UP). Your ONLY job is to fix typos, fix grammar, and remove filler/stuttering words. You MUST preserve the exact original meaning, tone, and length. DO NOT add any explanations, analysis, facts, or context. If the input is just a phrase, output ONLY the corrected phrase. Example: if user inputs 'halo halo bandung, ibukota periangan', you output EXACTLY 'Halo-halo Bandung, ibukota Priangan.' NOTHING ELSE."
+                    0 -> "Task: STRICT PROOFREADING (TIDY UP). Fix typos, grammar, and remove filler words. Preserve the exact original meaning and tone. DO NOT add outside facts. If it's a multi-sentence text, divide it logically into sections."
                     1 -> "Task: SUMMARIZE. Extract the core information and make a concise summary. Ignore filler words."
                     2 -> "Task: ANALYZE. Extract the main points, underlying sentiments, and any action items."
                     else -> "Task: STRICT PROOFREADING (TIDY UP)."
                 }
 
                 val formatInstruction = when (format) {
-                    0 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use PARAGRAPHS for the details. DO NOT use bullet points. Use **bold** for key concepts/terms, *italic* for tone emphasis or foreign words, and > blockquotes for direct statements/quotes. DO NOT wrap your text in single quotes (') or double quotes (\")."
-                    1 -> "Format: Structure the text with Markdown headers (#, ##) ONLY IF the text is long enough to have topic shifts. Use BULLET POINTS (strictly the minus sign '-') for details. NEVER use asterisks ('*'). Use **bold** to highlight the start of a bullet point or key concepts, *italic* for tone emphasis, and > blockquotes for direct statements/quotes."
+                    0 -> "Format: MANDATORY: You MUST structure the text using a Main Title (#) and logical Subheadings (##). Do not output a flat wall of text. Use PARAGRAPHS for the details under each heading. DO NOT use bullet points. Use **bold** for key concepts, *italic* for emphasis, and > for quotes. DO NOT wrap text in quotes."
+                    1 -> "Format: MANDATORY: You MUST structure the text using a Main Title (#) and logical Subheadings (##). Use BULLET POINTS ('-') for the details under each heading. NEVER use asterisks ('*'). Use **bold** for key concepts."
                     else -> ""
                 }
 
