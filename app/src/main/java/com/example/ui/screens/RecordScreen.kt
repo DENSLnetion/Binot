@@ -89,9 +89,13 @@ fun RecordScreen(
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // PERUBAHAN KUNCI: Menggunakan displayCutout (Notch) sebagai pengaman patokan layar atas. 
+    // Ini mengamankan padding agar UI tidak tertelan batas atas fisik meskipun status bar menghilang.
+    val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    
+    // Memberikan batas minimum yang wajar jika layar tidak punya poni besar (seperti beberapa tablet/HP flat).
+    val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
-    // Variabel penentu Teks di UI berdasarkan State Mode
     val displayLiveText = if (recordMode == 1) {
         "Direct recording mode is active.\nLive transcription is disabled."
     } else {
@@ -106,7 +110,7 @@ fun RecordScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(topInsets + 40.dp))
+            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp)) // Menggunakan safeTopMargin
 
             Column(
                 modifier = Modifier
@@ -244,7 +248,6 @@ fun RecordScreen(
                                                     launcher.launch(Manifest.permission.RECORD_AUDIO)
                                                 } else {
                                                     val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                                    // Logic Fix: Panggil toggleRecording dengan parameter recordMode
                                                     viewModel.toggleRecording(isEmulator, recordMode)
                                                 }
                                             }
@@ -306,7 +309,6 @@ fun RecordScreen(
                                             viewModel.stopRecordingInstant()
 
                                             coroutineScope.launch {
-                                                // Logic Fix: Save data pake parameter recordMode
                                                 val saved = viewModel.saveNote(recordMode)
                                                 snackbarHostState.showSnackbar(
                                                     message = if (saved) "Note saved" else "No text to save",
@@ -368,4 +370,3 @@ fun RecordScreen(
         }
     }
 }
-
