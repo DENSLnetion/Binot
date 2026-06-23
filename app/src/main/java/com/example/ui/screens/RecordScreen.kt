@@ -55,16 +55,16 @@ fun RecordScreen(
     viewModel: RecordViewModel,
     userName: String,
     recordMode: Int,
-    waveformStyle: Int, // Parameter injeksi untuk bentuk Waveform
+    waveformStyle: Int,
     snackbarHostState: SnackbarHostState,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current // Injection sensori taktil M3
+    val haptic = LocalHapticFeedback.current 
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
-    val amplitude by viewModel.amplitude.collectAsState()
+    val rawAmplitude by viewModel.amplitude.collectAsState() // Nilai mentah dari mic
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
@@ -86,6 +86,22 @@ fun RecordScreen(
         hasPermission = granted
     }
 
+    // --- DYNAMIC AUTO-CALIBRATOR ---
+    // Logika murni buat mendeteksi batas maksimal mikrofon secara real-time
+    var maxAmpObserved by remember { mutableFloatStateOf(50f) } // Nilai aman awal
+    
+    LaunchedEffect(rawAmplitude) {
+        if (rawAmplitude > maxAmpObserved) {
+            maxAmpObserved = rawAmplitude // Set peak baru kalau suara makin keras
+        } else {
+            // Decay 0.5% agar jika user teriak sekali, suara pelannya tidak mati selamanya
+            maxAmpObserved = maxOf(50f, maxAmpObserved * 0.995f) 
+        }
+    }
+    
+    // Normalisasi absolut dari 0.0 sampai 1.0 (apapun skala library mic lu)
+    val normalizedAmplitude = (rawAmplitude / maxAmpObserved).coerceIn(0f, 1f)
+
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetingTime = when (hour) {
         in 0..11 -> "Good morning"
@@ -93,7 +109,6 @@ fun RecordScreen(
         else -> "Good evening"
     }
 
-    // Typography Contrast M3 Expressive
     val greetingText = buildAnnotatedString {
         withStyle(style = SpanStyle(fontWeight = FontWeight.Light)) {
             append("$greetingTime")
@@ -173,10 +188,8 @@ fun RecordScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-
-            val normalizedAmplitude = (amplitude / 32767f).coerceIn(0f, 1f)
-            val isHighAmplitude = normalizedAmplitude > 0.5f
             
+            val isHighAmplitude = normalizedAmplitude > 0.5f // Transisi warna
             val dynamicWaveColor by animateColorAsState(
                 targetValue = if (isHighAmplitude) {
                     MaterialTheme.colorScheme.tertiary
@@ -187,9 +200,9 @@ fun RecordScreen(
                 label = "waveformColor"
             )
 
-            // Mengirim parameter style dan color ke engine Waveform
+            // Lempar normalizedAmplitude (0-1) yang udah mateng ke komponen
             AudioWaveform(
-                amplitude = amplitude,
+                amplitude = normalizedAmplitude,
                 style = waveformStyle,
                 color = dynamicWaveColor,
                 modifier = Modifier
@@ -224,7 +237,6 @@ fun RecordScreen(
                     .padding(24.dp)
                     .verticalScroll(scrollState)
             ) {
-                // Live Text Typing Effect M3: Pergantian string dibungkus crossfade halus
                 AnimatedContent(
                     targetState = displayLiveText,
                     transitionSpec = { 
@@ -298,9 +310,7 @@ fun RecordScreen(
                             .pointerInput(isSplit, isPaused) {
                                 detectTapGestures(
                                     onPress = {
-                                        // Haptic feedback saat Record/Pause/Resume
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        
                                         isLeftPressed = true
                                         tryAwaitRelease()
                                         isLeftPressed = false
@@ -364,9 +374,7 @@ fun RecordScreen(
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         onPress = {
-                                            // Haptic feedback saat Stop
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            
                                             isStopPressed = true
                                             tryAwaitRelease()
                                             isStopPressed = false
