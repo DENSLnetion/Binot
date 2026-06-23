@@ -82,8 +82,7 @@ fun HistoryScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit,
-    onTrashClick: () -> Unit,
-    safeTop: androidx.compose.ui.unit.Dp = 36.dp
+    onTrashClick: () -> Unit
 ) {
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
@@ -157,7 +156,6 @@ fun HistoryScreen(
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 modifier = Modifier.width(280.dp)
             ) {
                 Column(
@@ -165,7 +163,7 @@ fun HistoryScreen(
                         .fillMaxHeight()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    Spacer(Modifier.height(safeTop + 8.dp))
+                    Spacer(Modifier.height(24.dp))
                     Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -331,7 +329,6 @@ fun HistoryScreen(
                                     coroutineScope.launch { drawerState.open() }
                                 }
                             },
-                            safeTop = safeTop,
                             modifier = Modifier.animateEnterExit(
                                 enter = scaleIn(initialScale = 0.9f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
                                 exit = scaleOut(targetScale = 0.9f) + fadeOut()
@@ -609,7 +606,7 @@ fun HistoryScreen(
     }
 
     if (latestRelease != null) {
-        ModalBottomSheet(onDismissRequest = { viewModel.dismissUpdateNotification() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false), contentWindowInsets = { WindowInsets(0, 0, 0, 0) }) {
+        ModalBottomSheet(onDismissRequest = { viewModel.dismissUpdateNotification() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.NewReleases, contentDescription = "Update", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
@@ -725,22 +722,19 @@ fun MorphingSearchBar(
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit,
     onMenuClick: () -> Unit,
-    safeTop: androidx.compose.ui.unit.Dp = 36.dp,
     modifier: Modifier = Modifier 
 ) {
-    // Gunakan safeTop yang sudah dikelola MainActivity (bukan WindowInsets.statusBars yang 0 karena hidden)
+    val topInsets = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
     val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
-    // topMargin: saat focused, bar naik ke 0 (karena safeTop sudah dihandle NavHost)
-    val topMargin by animateDpAsState(targetValue = if (isFocused) (-safeTop) else 8.dp, animationSpec = spring(), label = "tMargin")
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) safeTop + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
+    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else topInsets + 8.dp, animationSpec = spring(), label = "tMargin")
+    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) topInsets + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .offset(y = topMargin)
             .padding(horizontal = horizontalPadding)
-            .padding(bottom = 8.dp)
+            .padding(top = topMargin, bottom = 8.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surface) 
     ) {
