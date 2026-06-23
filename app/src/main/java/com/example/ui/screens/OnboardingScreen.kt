@@ -90,11 +90,16 @@ fun OnboardingScreen(
             }
         }
     ) { paddingValues ->
+        // FIX PADDING: Pakai display cutout untuk menjaga agar teks atas nggak ketelen notch
+        val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+        val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
+        
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .padding(top = safeTopMargin) // Mengamankan area atap
         ) { page ->
             Column(
                 modifier = Modifier
@@ -215,4 +220,3 @@ fun OnboardingScreen(
         }
     }
 }
-
