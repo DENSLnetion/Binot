@@ -177,7 +177,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showInfoDialog = false },
             title = { Text("Recording Modes") },
-            text = { Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription, but original audio is NOT SAVED on your device.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled but original audio is SAVED on your device.") },
+            text = { Text("Fast:\nFaster, battery efficient, moderate accuracy. Real-time transcription. Original audio is NOT SAVED on your device.\n\nAccurate:\nHigher accuracy, requires internet. Transcription processes later when you open the note. Live transcription is disabled. Original audio is SAVED on your device.") },
             confirmButton = { TextButton(onClick = { showInfoDialog = false }) { Text("Got it") } }
         )
     }
