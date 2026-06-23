@@ -125,9 +125,15 @@ fun SettingsScreen(
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val latestVersionStr by viewModel.latestVersionStr.collectAsState()
 
+    // Input States
     var nameInput by remember(userName) { mutableStateOf(userName) }
     var geminiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
     var groqKeyInput by remember(groqApiKey) { mutableStateOf(groqApiKey) }
+
+    // Dirty Flags (Buat deteksi apakah ada pergerakan ketikan di kolom input)
+    var isNameDirty by remember { mutableStateOf(false) }
+    var isGeminiKeyDirty by remember { mutableStateOf(false) }
+    var isGroqKeyDirty by remember { mutableStateOf(false) }
 
     var showInfoDialog by remember { mutableStateOf(false) }
     var showAiInfoDialog by remember { mutableStateOf(false) }
@@ -214,11 +220,9 @@ fun SettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     onClick = {
                         showApplyAllDialog = false
-                        // Eksekusi Save Permanen ke DB
                         viewModel.saveAiLanguage(tempAiLanguage)
                         viewModel.saveAiTask(tempAiTask)
                         viewModel.saveAiFormat(tempAiFormat)
-                        // Trigger re-process semua notes
                         viewModel.applyAiPreferencesToAllNotes { msg ->
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         }
@@ -315,9 +319,25 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Personalization", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, label = { Text("Your Name") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            value = nameInput, 
+                            onValueChange = { 
+                                nameInput = it
+                                isNameDirty = true // Langsung nyalain flag kotor pas ngetik
+                            }, 
+                            label = { Text("Your Name") }, 
+                            modifier = Modifier.fillMaxWidth()
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
-                        BouncyButton(onClick = { viewModel.saveUserName(nameInput); coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } }, modifier = Modifier.align(Alignment.End)) {
+                        BouncyButton(
+                            onClick = { 
+                                viewModel.saveUserName(nameInput)
+                                isNameDirty = false // Matiin flag setelah disave
+                                coroutineScope.launch { snackbarHostState.showSnackbar("Name saved successfully!") } 
+                            }, 
+                            enabled = isNameDirty, // Tombol cuma nyala kalo flag kotor nyala
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
                             Text("Save Name")
                         }
                     }
@@ -392,14 +412,13 @@ fun SettingsScreen(
                             ) { Text("Bullets") }
                         }
                         
-                        // FUNGSI BARU: Tombol Apply ke Seluruh Catatan
                         Spacer(modifier = Modifier.height(24.dp))
                         val isChanged = tempAiLanguage != aiLanguage || tempAiTask != aiTask || tempAiFormat != aiFormat
                         
                         BouncyButton(
                             onClick = { showApplyAllDialog = true },
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = isChanged // Tombol nonaktif kalau ga ada perubahan biar UX bagus
+                            enabled = isChanged 
                         ) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
@@ -443,19 +462,57 @@ fun SettingsScreen(
                         AnimatedContent(targetState = aiProvider, label = "ApiKeyInput") { provider ->
                             if (provider == 0) {
                                 Column {
-                                    OutlinedTextField(value = geminiKeyInput, onValueChange = { geminiKeyInput = it }, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(
+                                        value = geminiKeyInput, 
+                                        onValueChange = { 
+                                            geminiKeyInput = it
+                                            isGeminiKeyDirty = true 
+                                        }, 
+                                        label = { Text("Gemini API Key") }, 
+                                        visualTransformation = PasswordVisualTransformation(), 
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))) })
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    BouncyButton(onClick = { viewModel.saveApiKey(geminiKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
+                                    BouncyButton(
+                                        onClick = { 
+                                            viewModel.saveApiKey(geminiKeyInput)
+                                            isGeminiKeyDirty = false
+                                            coroutineScope.launch { snackbarHostState.showSnackbar("Gemini Key saved securely!") } 
+                                        }, 
+                                        enabled = isGeminiKeyDirty,
+                                        modifier = Modifier.align(Alignment.End)
+                                    ) { 
+                                        Text("Save Key") 
+                                    }
                                 }
                             } else {
                                 Column {
-                                    OutlinedTextField(value = groqKeyInput, onValueChange = { groqKeyInput = it }, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(
+                                        value = groqKeyInput, 
+                                        onValueChange = { 
+                                            groqKeyInput = it
+                                            isGroqKeyDirty = true 
+                                        }, 
+                                        label = { Text("Groq API Key") }, 
+                                        visualTransformation = PasswordVisualTransformation(), 
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text("Click here to get the API Key", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.groq.com/keys"))) })
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    BouncyButton(onClick = { viewModel.saveGroqApiKey(groqKeyInput); coroutineScope.launch { snackbarHostState.showSnackbar("Groq Key saved securely!") } }, modifier = Modifier.align(Alignment.End)) { Text("Save Key") }
+                                    BouncyButton(
+                                        onClick = { 
+                                            viewModel.saveGroqApiKey(groqKeyInput)
+                                            isGroqKeyDirty = false
+                                            coroutineScope.launch { snackbarHostState.showSnackbar("Groq Key saved securely!") } 
+                                        }, 
+                                        enabled = isGroqKeyDirty,
+                                        modifier = Modifier.align(Alignment.End)
+                                    ) { 
+                                        Text("Save Key") 
+                                    }
                                 }
                             }
                         }
