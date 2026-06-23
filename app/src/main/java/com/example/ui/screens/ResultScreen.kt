@@ -335,8 +335,8 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    renderInOverlayDuringTransition = false // FIX: Bypass Overlay agar tidak goyang saat di-scroll
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
+                    // renderInOverlay dicabut, dibiarkan default supaya tetep smooth di layar utama
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
