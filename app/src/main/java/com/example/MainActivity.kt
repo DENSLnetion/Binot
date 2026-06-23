@@ -58,10 +58,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Setup Edge-to-Edge murni
         enableEdgeToEdge()
         
-        // Menyembunyikan Status Bar secara permanen tanpa merusak arsitektur Window
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
@@ -177,6 +175,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     val apiKey by settingsViewModel.apiKey.collectAsState()
                     val recordMode by settingsViewModel.recordMode.collectAsState()
                     
+                    // Nangkep preferensi Waveform dari Settings
+                    val waveformStyle by settingsViewModel.waveformStyle.collectAsState()
+                    
                     val recordViewModel: RecordViewModel = viewModel(
                         factory = RecordViewModel.provideFactory(
                             appContainer.audioRecorderManager,
@@ -188,6 +189,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         viewModel = recordViewModel,
                         userName = userName,
                         recordMode = recordMode, 
+                        waveformStyle = waveformStyle, // Lempar ke parameter baru
                         snackbarHostState = snackbarHostState,
                         animatedVisibilityScope = this@composable
                     )
