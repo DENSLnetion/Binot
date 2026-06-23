@@ -34,6 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -54,7 +57,15 @@ import com.example.viewmodel.SettingsViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Setup Edge-to-Edge murni
         enableEdgeToEdge()
+        
+        // Menyembunyikan Status Bar secara permanen tanpa merusak arsitektur Window
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
+
         val appContainer = (application as BinotApplication).container
 
         setContent {
@@ -218,7 +229,6 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 composable("result/{noteId}") { backStackEntry ->
                     val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: return@composable
                     
-                    // Kita membuang passing API Key satu persatu, dan langsung menggunakan appContainer.settingsRepository
                     val resultViewModel: ResultViewModel = viewModel(
                         factory = ResultViewModel.provideFactory(
                             noteId = noteId, 
