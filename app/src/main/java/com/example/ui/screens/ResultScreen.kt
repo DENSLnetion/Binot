@@ -258,7 +258,6 @@ fun ResultScreen(
         }
     )
 
-    // Hardware Back Button Override
     BackHandler(enabled = true) {
         if (isTextSelected || showCustomMenu) {
             clearSelection()
@@ -324,6 +323,10 @@ fun ResultScreen(
         clearSelection()
         action(newClip.trim())
     }
+    
+    // FIX PADDING: Kita ambil batas poni (cutout) buat mastiin TopAppBar tetep solid tanpa tabrakan.
+    val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
     with(sharedTransitionScope) {
         Scaffold(
@@ -338,6 +341,8 @@ fun ResultScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
+                    // FIX PADDING: Terapin jarak amannya di sini biar nggantiin posisi status bar lama.
+                    windowInsets = WindowInsets(top = safeTopMargin),
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
@@ -467,7 +472,6 @@ fun ResultScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                         ) {
-                            // --- AI SKELETON LOADING ---
                             if (isLoading) {
                                 val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
                                 val alpha by infiniteTransition.animateFloat(
@@ -512,7 +516,6 @@ fun ResultScreen(
                                 }
                             }
 
-                            // --- ERROR & AUDIO FALLBACK UI ---
                             if (error != null && note!!.rawText == "Pending Transcription" && note!!.audioPath != null) {
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -577,7 +580,6 @@ fun ResultScreen(
                             }
 
                             if (!note!!.summary.isNullOrEmpty() && !isLoading) {
-                                // Mencegat dan menghapus Metadata Tag khusus UI
                                 val cleanSummary = note!!.summary!!.replace(Regex("<!--BINOT_META:.*?-->"), "").trimEnd()
                                 MarkdownText(
                                     text = cleanSummary, 
@@ -1224,7 +1226,6 @@ fun ResultScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Membersihkan Meta dari fitur Search
                 val cleanSummaryForSearch = note!!.summary?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trimEnd()
                 val textToSearch = cleanSummaryForSearch ?: note!!.rawText
                 val lines = textToSearch.split("\n")
