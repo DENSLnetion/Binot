@@ -6,16 +6,10 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
@@ -40,13 +34,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
-import com.example.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -54,7 +46,6 @@ import java.util.Calendar
 @Composable
 fun RecordScreen(
     viewModel: RecordViewModel,
-    settingsViewModel: SettingsViewModel,
     userName: String,
     recordMode: Int,
     snackbarHostState: SnackbarHostState,
@@ -66,8 +57,6 @@ fun RecordScreen(
     val amplitude by viewModel.amplitude.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
-    
-    val hasSeenRecordTour by settingsViewModel.hasSeenRecordTour.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -94,13 +83,17 @@ fun RecordScreen(
         in 12..17 -> "Good afternoon"
         else -> "Good evening"
     }
-    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime."
+    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
 
     val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
+    // PERUBAHAN KUNCI: Menggunakan displayCutout (Notch) sebagai pengaman patokan layar atas. 
+    // Ini mengamankan padding agar UI tidak tertelan batas atas fisik meskipun status bar menghilang.
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    
+    // Memberikan batas minimum yang wajar jika layar tidak punya poni besar (seperti beberapa tablet/HP flat).
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
     val displayLiveText = if (recordMode == 1) {
@@ -117,7 +110,7 @@ fun RecordScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
+            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp)) // Menggunakan safeTopMargin
 
             Column(
                 modifier = Modifier
@@ -226,113 +219,74 @@ fun RecordScreen(
                 val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
                 val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
 
-                // Pulse Animation Logic
-                val infiniteTransition = rememberInfiniteTransition(label = "pulse_anim")
-                val pulseScale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1.15f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1500, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "pulse_scale"
-                )
-                val pulseAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.6f,
-                    targetValue = 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1500, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "pulse_alpha"
-                )
-
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(gapWidth),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.wrapContentWidth()
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        // Latar belakang Pulse yang memancar saat First Time
-                        if (!hasSeenRecordTour && !isSplit) {
-                            Box(
-                                modifier = Modifier
-                                    .width(leftButtonWidth)
-                                    .height(80.dp)
-                                    .scale(pulseScale)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha))
+                    Box(
+                        modifier = Modifier
+                            .width(leftButtonWidth)
+                            .height(80.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
+                                    else                 -> MaterialTheme.colorScheme.primary
+                                }
                             )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .width(leftButtonWidth)
-                                .height(80.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
-                                        isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                        else                 -> MaterialTheme.colorScheme.primary
+                            .pointerInput(isSplit, isPaused) {
+                                detectTapGestures(
+                                    onPress = {
+                                        isLeftPressed = true
+                                        tryAwaitRelease()
+                                        isLeftPressed = false
+                                        when {
+                                            !isSplit -> {
+                                                if (!hasPermission) {
+                                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                                } else {
+                                                    val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                    viewModel.toggleRecording(isEmulator, recordMode)
+                                                }
+                                            }
+                                            isPaused -> viewModel.resumeRecording()
+                                            else     -> viewModel.pauseRecording()
+                                        }
                                     }
                                 )
-                                .pointerInput(isSplit, isPaused) {
-                                    detectTapGestures(
-                                        onPress = {
-                                            if (!hasSeenRecordTour) {
-                                                settingsViewModel.markRecordTourSeen()
-                                            }
-                                            isLeftPressed = true
-                                            tryAwaitRelease()
-                                            isLeftPressed = false
-                                            when {
-                                                !isSplit -> {
-                                                    if (!hasPermission) {
-                                                        launcher.launch(Manifest.permission.RECORD_AUDIO)
-                                                    } else {
-                                                        val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                                        viewModel.toggleRecording(isEmulator, recordMode)
-                                                    }
-                                                }
-                                                isPaused -> viewModel.resumeRecording()
-                                                else     -> viewModel.pauseRecording()
-                                            }
-                                        }
-                                    )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when {
+                                    isSplit && isPaused -> Icons.Default.PlayArrow
+                                    isSplit            -> Icons.Default.Pause
+                                    else               -> Icons.Default.Mic
                                 },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = when {
-                                        isSplit && isPaused -> Icons.Default.PlayArrow
-                                        isSplit            -> Icons.Default.Pause
-                                        else               -> Icons.Default.Mic
-                                    },
-                                    contentDescription = when {
-                                        isSplit && isPaused -> "Resume"
-                                        isSplit            -> "Pause"
-                                        else               -> "Record"
-                                    },
-                                    tint = when {
-                                        isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
-                                        isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        else                 -> MaterialTheme.colorScheme.onPrimary
-                                    },
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .scale(leftIconScale)
+                                contentDescription = when {
+                                    isSplit && isPaused -> "Resume"
+                                    isSplit            -> "Pause"
+                                    else               -> "Record"
+                                },
+                                tint = when {
+                                    isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                    isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    else                 -> MaterialTheme.colorScheme.onPrimary
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .scale(leftIconScale)
+                            )
+                            if (!isSplit) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Record",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.titleMedium
                                 )
-                                if (!isSplit) {
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = "Record",
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
                             }
                         }
                     }
@@ -403,12 +357,11 @@ fun RecordScreen(
                 Text(
                     text = "Live Transcription",
                     style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = if (recordMode == 1) "Transcription will be processed by the AI later." else if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
+                    text = if (recordMode == 1) "Transcription will be processed by Gemini later." else if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
