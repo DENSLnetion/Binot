@@ -22,15 +22,18 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun AudioWaveform(
-    amplitude: Float,
-    style: Int = 0, // Diterima dari Setting via RecordScreen (0=Liquid, 1=Blob, 2=Bars)
+    amplitude: Float, // Sekarang ini DIJAMIN murni 0.0 sampai 1.0 (hasil auto-kalibrasi)
+    style: Int = 0,
     color: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier
 ) {
-    // Smoother inersia fisik untuk menangani lonjakan mic yang kasar
+    // Boost visual: Angka kecil dinaikkan biar lebih reaktif, mentok di 1.0
+    val visualAmp = if (amplitude > 0.02f) (amplitude * 1.5f).coerceIn(0f, 1f) else 0f
+
+    // Spring dibuat lebih "stiff" (kaku/cepat) biar nggak telat ngerespons suara patah-patah
     val smoothedAmp by animateFloatAsState(
-        targetValue = (amplitude / 32767f).coerceIn(0f, 1f),
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 150f),
+        targetValue = visualAmp,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
         label = "smoothedAmp"
     )
 
@@ -57,10 +60,9 @@ private fun LiquidStringWaveform(amplitude: Float, color: Color) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val centerY = size.height / 2
         val width = size.width
-        val baseHeight = 4f
+        val baseHeight = 6f // Kasih riak kecil pas lagi hening
         val maxAmpHeight = size.height / 2f
 
-        // Menggambar 3 lapisan garis dengan kecepatan dan ketinggian berbeda
         for (i in 0..2) {
             val path = Path()
             path.moveTo(0f, centerY)
@@ -73,7 +75,6 @@ private fun LiquidStringWaveform(amplitude: Float, color: Color) {
             var x = 0f
             while (x <= width) {
                 val normalizedX = x / width
-                // Efek "easing" di tepi biar kurva halus ke tengah
                 val edgeEasing = sin(normalizedX * PI).toFloat()
                 
                 val yOffset = sin((normalizedX * PI * waveFrequency) + wavePhase).toFloat() * (baseHeight + (amplitude * maxAmpHeight * ampMultiplier)) * edgeEasing
@@ -106,10 +107,9 @@ private fun AiBlobWaveform(amplitude: Float, color: Color) {
         val center = Offset(size.width / 2, size.height / 2)
         val baseRadius = 24f
         
-        // Menggambar lapisan aura di belakang inti (Blob berlapis)
         for (i in 0..2) {
-            // Reaksi radius dari amplitude yang memantul dan bernapas
-            val pulseRadius = baseRadius + (amplitude * 80f * (3 - i)) * breathing
+            // Evaluasi matematika diubah agar breathing berefek baik saat ada suara maupun hening
+            val pulseRadius = (baseRadius + (amplitude * 80f * (3 - i))) * breathing
             drawCircle(
                 color = color.copy(alpha = 0.15f + (0.1f * i)),
                 radius = pulseRadius + (i * 12f),
@@ -117,10 +117,9 @@ private fun AiBlobWaveform(amplitude: Float, color: Color) {
             )
         }
         
-        // Inti bola energi yang reaktif kuat terhadap suara
         drawCircle(
             color = color,
-            radius = baseRadius + (amplitude * 24f) * breathing,
+            radius = (baseRadius + (amplitude * 24f)) * breathing,
             center = center
         )
     }
@@ -132,14 +131,13 @@ private fun PixelBarsWaveform(amplitude: Float, color: Color) {
     val barCount = 42
     var history by remember { mutableStateOf(List(barCount) { 0f }) }
     
-    // rememberUpdatedState menjaga agar while-loop mendapatkan nilai amplitude terbaru tanpa me-restart LaunchedEffect
+    // Perhatikan: Menarik nilai amplitude yang udah kena efek "spring" di atasnya
     val currentAmp by rememberUpdatedState(amplitude)
     
     LaunchedEffect(Unit) {
         while (true) {
-            // Geser array ke kanan (history queue) setiap frame waktu tertentu
             history = listOf(currentAmp) + history.take(barCount - 1)
-            delay(40) // Memberikan FPS halus dan *decay* organik
+            delay(30) // Dicepetin dikit biar animasi batangnya lebih mulus (sekitar 30fps)
         }
     }
     
@@ -149,11 +147,9 @@ private fun PixelBarsWaveform(amplitude: Float, color: Color) {
         val centerY = size.height / 2
         
         history.forEachIndexed { index, amp ->
-            // Menghitung dari tengah atau dari kanan ke kiri
             val x = size.width - (index * (barWidth + gap)) - barWidth
             if (x < 0) return@forEachIndexed
             
-            // Batas minimal ketinggian (idle statis)
             val height = 8f + (amp * size.height * 0.85f)
             
             drawRoundRect(
