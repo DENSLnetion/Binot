@@ -58,10 +58,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Setup Edge-to-Edge murni
         enableEdgeToEdge()
         
-        // Menyembunyikan Status Bar secara permanen tanpa merusak arsitektur Window
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
@@ -159,7 +157,8 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
-                        onComplete = { name, provider, key ->
+                        // Signature onComplete diupdate untuk menangkap preferensi AI
+                        onComplete = { name, provider, key, lang, task, format ->
                             settingsViewModel.saveUserName(name)
                             settingsViewModel.saveAiProvider(provider)
                             if (provider == 0) {
@@ -167,6 +166,10 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                             } else {
                                 settingsViewModel.saveGroqApiKey(key)
                             }
+                            settingsViewModel.saveAiLanguage(lang)
+                            settingsViewModel.saveAiTask(task)
+                            settingsViewModel.saveAiFormat(format)
+                            
                             navController.navigate("record") {
                                 popUpTo("onboarding") { inclusive = true }
                             }
@@ -186,6 +189,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     RecordScreen(
                         viewModel = recordViewModel,
+                        settingsViewModel = settingsViewModel, // Pass settingsViewModel for tours
                         userName = userName,
                         recordMode = recordMode, 
                         snackbarHostState = snackbarHostState,
@@ -198,6 +202,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     HistoryScreen(
                         viewModel = historyViewModel,
+                        settingsViewModel = settingsViewModel, // Pass settingsViewModel for tours
                         animatedVisibilityScope = this@composable,
                         sharedTransitionScope = this@SharedTransitionLayout,
                         onNoteClick = { id -> navController.navigate("result/$id") },
@@ -238,6 +243,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                     )
                     ResultScreen(
                         viewModel = resultViewModel,
+                        settingsViewModel = settingsViewModel, // Pass settingsViewModel for tours
                         noteId = noteId,
                         animatedVisibilityScope = this@composable,
                         sharedTransitionScope = this@SharedTransitionLayout,
