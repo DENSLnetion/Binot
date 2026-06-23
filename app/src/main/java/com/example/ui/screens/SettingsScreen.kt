@@ -111,10 +111,15 @@ fun SettingsScreen(
     val recordMode by viewModel.recordMode.collectAsState() 
     val aiProvider by viewModel.aiProvider.collectAsState() 
     
-    // AI Preferences State
+    // AI Preferences State (Actual Saved Data)
     val aiLanguage by viewModel.aiLanguage.collectAsState()
     val aiTask by viewModel.aiTask.collectAsState()
     val aiFormat by viewModel.aiFormat.collectAsState()
+
+    // Temporary State (Prevents auto-save if user navigates away)
+    var tempAiLanguage by remember(aiLanguage) { mutableStateOf(aiLanguage) }
+    var tempAiTask by remember(aiTask) { mutableStateOf(aiTask) }
+    var tempAiFormat by remember(aiFormat) { mutableStateOf(aiFormat) }
 
     val updateState by viewModel.updateState.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
@@ -202,18 +207,23 @@ fun SettingsScreen(
     if (showApplyAllDialog) {
         AlertDialog(
             onDismissRequest = { showApplyAllDialog = false },
-            title = { Text("Apply to All Notes?") },
-            text = { Text("This action will reset the AI-generated results for all your previous notes. They will be re-processed using your new preferences the next time you open them. Your original raw transcripts are completely safe.\n\nContinue?") },
+            title = { Text("Save & Apply to All Notes?") },
+            text = { Text("This will save your new preferences and reset the AI-generated results for all previous notes. They will be re-processed using your new preferences the next time you open them. Your original raw transcripts are completely safe.\n\nContinue?") },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     onClick = {
                         showApplyAllDialog = false
+                        // Eksekusi Save Permanen ke DB
+                        viewModel.saveAiLanguage(tempAiLanguage)
+                        viewModel.saveAiTask(tempAiTask)
+                        viewModel.saveAiFormat(tempAiFormat)
+                        // Trigger re-process semua notes
                         viewModel.applyAiPreferencesToAllNotes { msg ->
                             coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
                         }
                     }
-                ) { Text("Continue") }
+                ) { Text("Save & Apply") }
             },
             dismissButton = {
                 TextButton(onClick = { showApplyAllDialog = false }) { Text("Cancel") }
@@ -254,7 +264,7 @@ fun SettingsScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
-                                    viewModel.saveAiLanguage(lang)
+                                    tempAiLanguage = lang
                                     showLanguageSheet = false
                                     languageSearchQuery = ""
                                 }
@@ -263,7 +273,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = lang, style = MaterialTheme.typography.bodyLarge)
-                            if (lang == aiLanguage) {
+                            if (lang == tempAiLanguage) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
@@ -321,7 +331,7 @@ fun SettingsScreen(
                         Text("Global AI Preferences", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                         Text("Notes will be automatically processed using these settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
                         
-                        // Output Language Selector
+                        // Output Language Selector (Temporary State)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -337,7 +347,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text("Output Language", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                    Text(aiLanguage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tempAiLanguage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Select", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -345,48 +355,51 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Task
+                        // AI Task (Temporary State)
                         Text("Processing Task", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                onClick = { viewModel.saveAiTask(0) },
-                                selected = aiTask == 0
+                                onClick = { tempAiTask = 0 },
+                                selected = tempAiTask == 0
                             ) { Text("Tidy Up", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                onClick = { viewModel.saveAiTask(1) },
-                                selected = aiTask == 1
+                                onClick = { tempAiTask = 1 },
+                                selected = tempAiTask == 1
                             ) { Text("Summary", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                onClick = { viewModel.saveAiTask(2) },
-                                selected = aiTask == 2
+                                onClick = { tempAiTask = 2 },
+                                selected = tempAiTask == 2
                             ) { Text("Analyze", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // AI Format
+                        // AI Format (Temporary State)
                         Text("Output Format", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                onClick = { viewModel.saveAiFormat(0) },
-                                selected = aiFormat == 0
+                                onClick = { tempAiFormat = 0 },
+                                selected = tempAiFormat == 0
                             ) { Text("Paragraphs") }
                             SegmentedButton(
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                onClick = { viewModel.saveAiFormat(1) },
-                                selected = aiFormat == 1
+                                onClick = { tempAiFormat = 1 },
+                                selected = tempAiFormat == 1
                             ) { Text("Bullets") }
                         }
                         
                         // FUNGSI BARU: Tombol Apply ke Seluruh Catatan
                         Spacer(modifier = Modifier.height(24.dp))
+                        val isChanged = tempAiLanguage != aiLanguage || tempAiTask != aiTask || tempAiFormat != aiFormat
+                        
                         BouncyButton(
                             onClick = { showApplyAllDialog = true },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = isChanged // Tombol nonaktif kalau ga ada perubahan biar UX bagus
                         ) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
