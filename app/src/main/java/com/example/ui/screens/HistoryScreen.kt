@@ -182,7 +182,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Latest"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Oldest"),
-                            SortOption(androidx.compose.material.icons.AutoMirrored.Default.Sort, "A–Z")
+                            SortOption(Icons.AutoMirrored.Filled.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
