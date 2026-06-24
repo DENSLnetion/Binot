@@ -238,7 +238,7 @@ fun RecordScreen(
                     )
                 }
 
-                // Morphing Box (Dengan logic Swipe + Tap)
+                // Morphing Box
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -246,22 +246,16 @@ fun RecordScreen(
                         .height(boxHeight)
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(containerColor)
-                        // Gesture Drag/Swipe. Cerdas membaca scrollState agar tak tabrakan dengan Scroll Text.
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onVerticalDrag = { _, dragAmount ->
-                                    if (!isExpanded && dragAmount < -5) {
-                                        // Swipe up untuk membuka
-                                        isTappedExpanded = true
-                                    } else if (isExpanded && dragAmount > 5 && scrollState.value == 0) {
-                                        // Swipe down untuk menutup (HANYA kalau teks sedang ada di puncak/mentok atas)
-                                        isTappedExpanded = false
-                                    }
+                        // Gesture ke atas (Buka), hanya aktif saat NGUNCUP biar nggak tabrakan sama scroll
+                        .pointerInput(isExpanded) {
+                            detectVerticalDragGestures { _, dragAmount ->
+                                if (!isExpanded && dragAmount < -5) {
+                                    isTappedExpanded = true
                                 }
-                            )
+                            }
                         }
                         // Gesture Tap & Hold
-                        .pointerInput(Unit) {
+                        .pointerInput(isExpanded) {
                             detectTapGestures(
                                 onPress = {
                                     val startTime = System.currentTimeMillis()
@@ -286,8 +280,10 @@ fun RecordScreen(
                         }
                         .padding(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
                 ) {
+                    
+                    // Memastikan scroll selalu berada di bawah saat ada teks baru, biarpun touch scroll dimatikan
                     LaunchedEffect(recognizedText, isExpanded) {
-                        if (isExpanded && recognizedText.isNotEmpty()) {
+                        if (recognizedText.isNotEmpty()) {
                             scrollState.animateScrollTo(scrollState.maxValue)
                         }
                     }
@@ -295,12 +291,20 @@ fun RecordScreen(
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // M3 Drag Handle Indicator
+                        // M3 Drag Handle Indicator - Hitbox Sengaja Ditebalkan Biar Gampang Ditarik
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            contentAlignment = Alignment.Center
+                                .height(32.dp) // Hitbox lumayan besar
+                                .pointerInput(isExpanded) {
+                                    detectVerticalDragGestures { _, dragAmount ->
+                                        if (isExpanded && dragAmount > 5) {
+                                            // Tarik drag handle ke bawah -> Mutlak Tutup
+                                            isTappedExpanded = false
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.TopCenter
                         ) {
                             Box(
                                 modifier = Modifier
@@ -323,7 +327,8 @@ fun RecordScreen(
                             }
                         }
 
-                        // Teks yang bisa di-scroll secara independen
+                        // Teks yang BISA DI-SCROLL HANYA SAAT EXPANDED. 
+                        // Saat nguncup, scroll jari mati.
                         Text(
                             text = displayLiveText,
                             style = MaterialTheme.typography.bodyLarge,
@@ -331,7 +336,7 @@ fun RecordScreen(
                             textAlign = TextAlign.Start,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .verticalScroll(scrollState)
+                                .verticalScroll(scrollState, enabled = isExpanded) 
                         )
                     }
                 }
