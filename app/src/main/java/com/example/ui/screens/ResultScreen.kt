@@ -417,7 +417,13 @@ fun ResultScreen(
                             modifier = Modifier
                                 .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
-                                .then(with(animatedVisibilityScope) { Modifier.animateEnterExit(enter = scaleIn(initialScale = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))) })
+                                .then(with(animatedVisibilityScope) { 
+                                    Modifier.animateEnterExit(
+                                        // FIX 4: Ubah spring ke absolute tween
+                                        enter = scaleIn(initialScale = 0f, animationSpec = tween(300)),
+                                        exit = scaleOut(targetScale = 0f, animationSpec = tween(300))
+                                    ) 
+                                })
                         )
                     }
                 }
