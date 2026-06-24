@@ -469,44 +469,59 @@ fun HistoryScreen(
         )
     }
 
+    // Modal Pop-Up Tengah untuk Kelola Label (Menggantikan BottomSheet)
     if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { labelBeingManaged = null },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
-                Text(
-                    text = labelBeingManaged ?: "",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        androidx.compose.ui.window.Dialog(onDismissRequest = { labelBeingManaged = null }) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                    Text(
+                        text = "Manage Label",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = labelBeingManaged ?: "",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showRenameLabelDialog = true }
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
-                    Spacer(Modifier.width(16.dp))
-                    Text("Rename Label", color = MaterialTheme.colorScheme.onSurface)
-                }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showRenameLabelDialog = true }
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.width(16.dp))
+                        Text("Rename Label", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                    }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDeleteLabelDialog = true }
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(16.dp))
-                    Text("Delete Label", color = MaterialTheme.colorScheme.error)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDeleteLabelDialog = true }
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(16.dp))
+                        Text("Delete Label", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
