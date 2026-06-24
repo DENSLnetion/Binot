@@ -235,14 +235,7 @@ fun ResultScreen(
         }
     }
 
-    var showContent by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(60)
-        showContent = true
-    }
-
     val closeNote: () -> Unit = {
-        showContent = false
         onNavigateBack()
     }
 
@@ -335,8 +328,7 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    // FIX Opsi 3: Samakan boundsTransform di sisi ResultScreen
+                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
                     boundsTransform = { _, _ ->
                         spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
@@ -353,7 +345,7 @@ fun ResultScreen(
                         scrolledContainerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = { 
-                        if (note != null && showContent) {
+                        if (note != null) {
                             BasicTextField(
                                 value = note!!.title,
                                 onValueChange = { viewModel.updateTitle(it) },
@@ -378,14 +370,6 @@ fun ResultScreen(
                                     }
                                 }
                             )
-                        } else if (note != null) {
-                            Text(
-                                text = note!!.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
                         }
                     },
                     navigationIcon = {
@@ -397,7 +381,7 @@ fun ResultScreen(
                     },
                     actions = {
                         AnimatedVisibility(
-                            visible = !isTitleFocused && showContent && note?.rawText != "Pending Transcription",
+                            visible = !isTitleFocused && note?.rawText != "Pending Transcription",
                             enter = fadeIn() + scaleIn(),
                             exit = fadeOut() + scaleOut()
                         ) {
@@ -410,7 +394,7 @@ fun ResultScreen(
                 )
             },
             floatingActionButton = {
-                if (note != null && note!!.summary.isNullOrEmpty() && !isLoading && showContent && note!!.rawText != "Pending Transcription") {
+                if (note != null && note!!.summary.isNullOrEmpty() && !isLoading && note!!.rawText != "Pending Transcription") {
                     val isFabExpanded by remember { derivedStateOf { rawTextScrollState.value == 0 } }
                     with(sharedTransitionScope) {
                         ExtendedFloatingActionButton(
@@ -429,7 +413,7 @@ fun ResultScreen(
                 }
             }
         ) { paddingValues ->
-            if (note == null || !showContent) {
+            if (note == null) {
                 Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                 }
