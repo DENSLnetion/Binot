@@ -660,7 +660,7 @@ fun DismissibleNoteCard(
                             stiffness = Spring.StiffnessHigh
                         )
                     }
-                ),
+                ).skipToLookaheadSize(),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
                 onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
