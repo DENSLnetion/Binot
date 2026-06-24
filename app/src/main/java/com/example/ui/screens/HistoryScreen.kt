@@ -15,6 +15,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -23,6 +24,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -382,7 +385,7 @@ fun HistoryScreen(
                                 .padding(horizontal = 8.dp)
                                 .animateEnterExit(
                                     enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                                    exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
+                                    exit = slideOutVertically(targetOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeOut()
                                 ),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalItemSpacing = 8.dp
@@ -474,7 +477,7 @@ fun HistoryScreen(
         )
     }
 
-    // Modal Dinamis Melar-Nguncup (Morphing)
+    // Modal Dinamis Melar-Nguncup (Morphing) Fix Import
     if (labelBeingManaged != null && !showDeleteLabelDialog) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { 
             if (isRenamingLabelMode) {
@@ -536,8 +539,8 @@ fun HistoryScreen(
                     // Baris Delete (Bakal ngilang kalau mode Rename nyala)
                     AnimatedVisibility(
                         visible = !isRenamingLabelMode,
-                        enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-                        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)),
+                        exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(150))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -555,8 +558,8 @@ fun HistoryScreen(
                     // Tampilan Form Input & Tombol (Bakal muncul memanjang kalau mode Rename nyala)
                     AnimatedVisibility(
                         visible = isRenamingLabelMode,
-                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) + expandVertically(expandFrom = Alignment.Top),
-                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) + shrinkVertically(shrinkTowards = Alignment.Top)
+                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) + expandVertically(expandFrom = Alignment.Top, animationSpec = spring(stiffness = Spring.StiffnessLow)),
+                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = spring(stiffness = Spring.StiffnessLow))
                     ) {
                         Column {
                             OutlinedTextField(
