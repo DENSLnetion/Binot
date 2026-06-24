@@ -17,6 +17,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -86,14 +87,38 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // Smart & Dynamic Greeting dengan Bold Username
+    // Smart & Dynamic Greeting - Mainstream & English
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetings = remember(hour) {
         when (hour) {
-            in 5..11 -> listOf("Ready to focus,", "Start strong,", "Morning logic,")
-            in 12..16 -> listOf("Keep the momentum,", "Afternoon grind,", "Stay sharp,")
-            in 17..20 -> listOf("Wrap up the day,", "Evening reflection,", "Clear your mind,")
-            else -> listOf("Midnight thoughts,", "Still going,", "Nightcap,")
+            in 5..11 -> listOf(
+                "Good morning,", 
+                "Rise and shine,", 
+                "A fresh start,", 
+                "Morning inspiration,", 
+                "Start your day right,"
+            )
+            in 12..16 -> listOf(
+                "Good afternoon,", 
+                "Midday thoughts,", 
+                "Keep it going,", 
+                "Stay productive,", 
+                "Afternoon check-in,"
+            )
+            in 17..20 -> listOf(
+                "Good evening,", 
+                "Winding down,", 
+                "Evening reflection,", 
+                "Time to relax,", 
+                "Sunset thoughts,"
+            )
+            else -> listOf(
+                "Late night thoughts,", 
+                "Midnight notes,", 
+                "Still awake?,", 
+                "Quiet hours,", 
+                "Rest well,"
+            )
         }
     }
     val randomGreeting = remember(hour) { greetings.random() }
@@ -116,8 +141,10 @@ fun RecordScreen(
     val displayLiveText = if (recordMode == 1) {
         "Direct recording mode is active.\nLive transcription is disabled."
     } else {
-        if (recognizedText.isEmpty()) "Waiting for voice..." else recognizedText
+        if (recognizedText.isEmpty()) "Waiting for voice input..." else recognizedText
     }
+
+    val scrollState = rememberScrollState()
 
     with(animatedVisibilityScope) {
         Column(
@@ -129,8 +156,6 @@ fun RecordScreen(
         ) {
             Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
 
-            // Menggunakan Box agar elemen atas dan bawah saling tumpuk (overlap)
-            // Ini mencegah layout atas dipaksa menjadi 0 height yang menyebabkan Force Close.
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -165,11 +190,11 @@ fun RecordScreen(
                     label = "contentColor"
                 )
 
-                // 1. Area Atas: Selalu dibatasi ukurannya agar AudioWaveform tidak pernah tergencet layout
+                // Area Atas (Sapaan & Waveform)
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(bottom = 176.dp) // Sisakan ruang pasti (160dp box + 16dp spacing)
+                        .padding(bottom = 176.dp)
                         .alpha(topAlpha)
                         .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
                     horizontalAlignment = Alignment.Start
@@ -213,7 +238,7 @@ fun RecordScreen(
                     )
                 }
 
-                // 2. Morphing Box: Memanjang dari dasar Box ke atas menutupi layout belakang
+                // Morphing Box (Dengan logic Swipe + Tap)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -221,42 +246,71 @@ fun RecordScreen(
                         .height(boxHeight)
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(containerColor)
+                        // Gesture Drag/Swipe. Cerdas membaca scrollState agar tak tabrakan dengan Scroll Text.
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (!isExpanded && dragAmount < -5) {
+                                        // Swipe up untuk membuka
+                                        isTappedExpanded = true
+                                    } else if (isExpanded && dragAmount > 5 && scrollState.value == 0) {
+                                        // Swipe down untuk menutup (HANYA kalau teks sedang ada di puncak/mentok atas)
+                                        isTappedExpanded = false
+                                    }
+                                }
+                            )
+                        }
+                        // Gesture Tap & Hold
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = {
                                     val startTime = System.currentTimeMillis()
-                                    isPressExpanded = true
+                                    // Kalau belum terekspansi, tekan untuk Hold (mengintip)
+                                    if (!isTappedExpanded) isPressExpanded = true
                                     
                                     val released = tryAwaitRelease()
-                                    isPressExpanded = false
+                                    isPressExpanded = false // Reset peek state
                                     
                                     if (released) {
-                                        // Cek apakah ketukan ini cepat (tap) atau lama (hold)
-                                        if (System.currentTimeMillis() - startTime < 300) {
+                                        val duration = System.currentTimeMillis() - startTime
+                                        if (duration < 300) {
+                                            // Tap cepat membalikkan state utama
                                             isTappedExpanded = !isTappedExpanded
                                         } else {
-                                            isTappedExpanded = false 
+                                            // Kalau ditahan lama lalu dilepas, pastikan kotak tertutup
+                                            isTappedExpanded = false
                                         }
                                     }
                                 }
                             )
                         }
-                        .padding(24.dp)
+                        .padding(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
                 ) {
-                    val scrollState = rememberScrollState()
-                    
                     LaunchedEffect(recognizedText, isExpanded) {
-                        // Scroll otomatis berjalan saat expanded untuk mencegah UI lompat-lompat
                         if (isExpanded && recognizedText.isNotEmpty()) {
                             scrollState.animateScrollTo(scrollState.maxValue)
                         }
                     }
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
+                        modifier = Modifier.fillMaxSize()
                     ) {
+                        // M3 Drag Handle Indicator
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(32.dp)
+                                    .height(4.dp)
+                                    .clip(CircleShape)
+                                    .background(contentColor.copy(alpha = 0.3f))
+                            )
+                        }
+
                         AnimatedVisibility(visible = isExpanded) {
                             Column {
                                 Text(
@@ -269,12 +323,15 @@ fun RecordScreen(
                             }
                         }
 
+                        // Teks yang bisa di-scroll secara independen
                         Text(
                             text = displayLiveText,
                             style = MaterialTheme.typography.bodyLarge,
                             color = contentColor,
                             textAlign = TextAlign.Start,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
                         )
                     }
                 }
