@@ -170,7 +170,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -298,7 +298,6 @@ fun HistoryScreen(
                 if (selectionMode) {
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        // Fix: Menggunakan displayCutout untuk mengamankan padding dari notch
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
                     ) {
                         TopAppBar(
@@ -653,14 +652,9 @@ fun DismissibleNoteCard(
                 modifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("note-${note.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                    boundsTransform = { _, _ ->
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessHigh
-                        )
-                    }
-                ).skipToLookaheadSize(),
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                    boundsTransform = { _, _ -> tween(300) }
+                ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
                 onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
@@ -679,7 +673,6 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier 
 ) {
-    // FIX: Menggunakan displayCutout dan membuat batas minimum yang sangat aman (24.dp)
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
     
@@ -740,7 +733,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
