@@ -329,8 +329,9 @@ fun HistoryScreen(
                                 }
                             },
                             modifier = Modifier.animateEnterExit(
-                                enter = scaleIn(initialScale = 0.9f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
-                                exit = scaleOut(targetScale = 0.9f) + fadeOut()
+                                // FIX 1: Ubah spring ke absolute tween
+                                enter = scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(tween(300)),
+                                exit = scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(tween(300))
                             )
                         )
                     }
@@ -349,7 +350,13 @@ fun HistoryScreen(
                             modifier = Modifier
                                 .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
-                                .then(with(animatedVisibilityScope) { Modifier.animateEnterExit(enter = scaleIn(initialScale = 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))) })
+                                .then(with(animatedVisibilityScope) { 
+                                    Modifier.animateEnterExit(
+                                        // FIX 2: Ubah spring ke absolute tween
+                                        enter = scaleIn(initialScale = 0f, animationSpec = tween(300)),
+                                        exit = scaleOut(targetScale = 0f, animationSpec = tween(300))
+                                    ) 
+                                })
                         )
                     }
                 }
@@ -375,8 +382,9 @@ fun HistoryScreen(
                                 .weight(1f)
                                 .padding(horizontal = 8.dp)
                                 .animateEnterExit(
-                                    enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                                    exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
+                                    // FIX 3: Ubah spring ke absolute tween
+                                    enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = tween(300)) + fadeIn(tween(300)),
+                                    exit = slideOutVertically(targetOffsetY = { 100 }, animationSpec = tween(300)) + fadeOut(tween(300))
                                 ),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalItemSpacing = 8.dp
