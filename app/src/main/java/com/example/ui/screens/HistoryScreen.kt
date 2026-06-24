@@ -14,6 +14,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -100,9 +101,7 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
-    // States untuk manajemen label
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
-    var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var renameLabelInput by remember { mutableStateOf("") }
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
@@ -171,7 +170,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A-Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -299,6 +298,7 @@ fun HistoryScreen(
                 if (selectionMode) {
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
+                        // Fix: Menggunakan displayCutout untuk mengamankan padding dari notch
                         modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
                     ) {
                         TopAppBar(
@@ -377,7 +377,7 @@ fun HistoryScreen(
                                 .padding(horizontal = 8.dp)
                                 .animateEnterExit(
                                     enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                                    exit = slideOutVertically(targetOffsetY = { 100 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeOut()
+                                    exit = slideOutVertically(targetOffsetY = { 100 }) + fadeOut()
                                 ),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalItemSpacing = 8.dp
@@ -469,13 +469,12 @@ fun HistoryScreen(
         )
     }
 
-    // Modal Manage Label - rename + delete dalam 1 dialog
-    if (labelBeingManaged != null && !showDeleteLabelDialog) {
+    if (labelBeingManaged != null) {
         AlertDialog(
             onDismissRequest = { labelBeingManaged = null },
-            title = { Text("Manage Label") },
+            title = { Text("Edit Label") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = renameLabelInput,
                         onValueChange = { renameLabelInput = it },
@@ -483,14 +482,16 @@ fun HistoryScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     TextButton(
-                        onClick = { showDeleteLabelDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        onClick = {
+                            labelBeingManaged?.let { viewModel.deleteLabel(it) }
+                            labelBeingManaged = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text("Delete Label")
                     }
                 }
@@ -506,24 +507,6 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { labelBeingManaged = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showDeleteLabelDialog && labelBeingManaged != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteLabelDialog = false; labelBeingManaged = null },
-            title = { Text("Delete Label") },
-            text = { Text("Label \"${labelBeingManaged}\" will be removed from all notes. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    labelBeingManaged?.let { viewModel.deleteLabel(it) }
-                    showDeleteLabelDialog = false
-                    labelBeingManaged = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteLabelDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -670,13 +653,7 @@ fun DismissibleNoteCard(
                 modifier = Modifier.sharedBounds(
                     sharedContentState = rememberSharedContentState("note-${note.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    boundsTransform = { _, _ ->
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessHigh
-                        )
-                    }
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
                 ),
                 onLongClick = onLongSelect,
                 onClick = onSelect,
@@ -696,6 +673,7 @@ fun MorphingSearchBar(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier 
 ) {
+    // FIX: Menggunakan displayCutout dan membuat batas minimum yang sangat aman (24.dp)
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
     
@@ -756,7 +734,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
