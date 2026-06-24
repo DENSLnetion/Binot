@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
@@ -17,23 +16,19 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -107,8 +102,6 @@ fun HistoryScreen(
     var newLabelInput by remember { mutableStateOf("") }
 
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
-    var showRenameLabelDialog by remember { mutableStateOf(false) }
-    var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var renameLabelInput by remember { mutableStateOf("") }
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
@@ -477,122 +470,43 @@ fun HistoryScreen(
     }
 
     if (labelBeingManaged != null) {
-        ModalBottomSheet(
-            onDismissRequest = {
-                labelBeingManaged = null
-                showRenameLabelDialog = false
-            },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ) {
-            AnimatedContent(
-                targetState = showRenameLabelDialog,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(220, delayMillis = 90)) +
-                        expandVertically(animationSpec = tween(300)) togetherWith
-                    fadeOut(animationSpec = tween(90)) +
-                        shrinkVertically(animationSpec = tween(220))
-                },
-                label = "label_sheet_content"
-            ) { isRenaming ->
-                if (!isRenaming) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
+        AlertDialog(
+            onDismissRequest = { labelBeingManaged = null },
+            title = { Text("Edit Label") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = renameLabelInput,
+                        onValueChange = { renameLabelInput = it },
+                        label = { Text("Label Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        onClick = {
+                            labelBeingManaged?.let { viewModel.deleteLabel(it) }
+                            labelBeingManaged = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = labelBeingManaged ?: "",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showRenameLabelDialog = true }
-                                .padding(horizontal = 16.dp, vertical = 16.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
-                            Spacer(Modifier.width(16.dp))
-                            Text("Rename Label", color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showDeleteLabelDialog = true }
-                                .padding(horizontal = 16.dp, vertical = 16.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(16.dp))
-                            Text("Delete Label", color = MaterialTheme.colorScheme.error)
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .imePadding()
-                    ) {
-                        Text(
-                            text = "Rename Label",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
-                        OutlinedTextField(
-                            value = renameLabelInput,
-                            onValueChange = { renameLabelInput = it },
-                            label = { Text("Label Name") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(onClick = {
-                                showRenameLabelDialog = false
-                                labelBeingManaged = null
-                            }) { Text("Cancel") }
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = {
-                                val oldLabel = labelBeingManaged
-                                if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
-                                    viewModel.renameLabel(oldLabel, renameLabelInput.trim())
-                                }
-                                showRenameLabelDialog = false
-                                labelBeingManaged = null
-                            }) { Text("Save") }
-                        }
-                        Spacer(Modifier.height(16.dp))
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Delete Label")
                     }
                 }
-            }
-        }
-    }
-
-    if (showDeleteLabelDialog && labelBeingManaged != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteLabelDialog = false; labelBeingManaged = null },
-            title = { Text("Delete Label") },
-            text = { Text("Label \"${labelBeingManaged}\" will be removed from all notes. This can't be undone.") },
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    labelBeingManaged?.let { viewModel.deleteLabel(it) }
-                    showDeleteLabelDialog = false
+                Button(onClick = {
+                    val oldLabel = labelBeingManaged
+                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
+                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                    }
                     labelBeingManaged = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text("Save") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+                TextButton(onClick = { labelBeingManaged = null }) { Text("Cancel") }
             }
         )
     }
