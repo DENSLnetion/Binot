@@ -16,8 +16,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -238,7 +240,7 @@ fun RecordScreen(
                     )
                 }
 
-                // Morphing Box
+                // Morphing Box UTAMA (Menangani logika BUKA dan NGINTIP saat nguncup)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -246,31 +248,33 @@ fun RecordScreen(
                         .height(boxHeight)
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(containerColor)
-                        // Gesture BUKA: Hanya aktif kalau lagi nguncup (!isExpanded)
-                        .pointerInput(isExpanded) {
-                            if (!isExpanded) {
-                                detectVerticalDragGestures { _, dragAmount ->
-                                    if (dragAmount < -5) isTappedExpanded = true // Swipe Up
+                        // Gesture BUKA via Swipe Up (Hanya aktif saat nguncup)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { _, dragAmount ->
+                                if (!isExpanded && dragAmount < -5) {
+                                    isTappedExpanded = true
                                 }
                             }
                         }
-                        // Gesture Ngintip (Hold) & Tap Buka: Hanya aktif kalau lagi nguncup
-                        .pointerInput(isExpanded) {
-                            if (!isExpanded) {
-                                detectTapGestures(
-                                    onPress = {
+                        // Gesture NGINTIP (Hold) & TAP BUKA (Hanya aktif saat nguncup)
+                        // Sengaja pakai key 'Unit' biar coroutine gesture ga dibunuh Compose di tengah jalan
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = {
+                                    if (!isExpanded) {
                                         val startTime = System.currentTimeMillis()
-                                        isPressExpanded = true // Start Ngintip
+                                        isPressExpanded = true // Start Ngintip (Otomatis isExpanded jadi true)
                                         
-                                        val released = tryAwaitRelease()
-                                        isPressExpanded = false // End Ngintip (Lepas langsung nutup)
+                                        val released = tryAwaitRelease() // Tunggu jari lepas
+                                        isPressExpanded = false // End Ngintip
                                         
+                                        // Kalau dilepas cepat (< 300ms), anggap sebagai Tap -> Stay Open
                                         if (released && (System.currentTimeMillis() - startTime < 300)) {
-                                            isTappedExpanded = true // Tap cepat -> Stay Open
+                                            isTappedExpanded = true
                                         }
                                     }
-                                )
-                            }
+                                }
+                            )
                         }
                         .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
                 ) {
@@ -285,26 +289,29 @@ fun RecordScreen(
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // DRAG HANDLE - Ini sekarang punya hit target yang tebal (48dp) 
-                        // dan spesifik nanganin logic TUTUP.
+                        // DRAG HANDLE - Terisolasi khusus nanganin TUTUP
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
-                                .pointerInput(isExpanded) {
-                                    if (isExpanded) {
-                                        // Swipe Handle ke bawah -> Tutup
-                                        detectVerticalDragGestures { _, dragAmount ->
-                                            if (dragAmount > 5) isTappedExpanded = false
-                                        }
-                                    }
+                                // Tap untuk nutup instan tanpa delay (aktif hanya saat ngembang)
+                                .clickable(
+                                    enabled = isExpanded,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null // Hilangin ripple biar tetep elegan
+                                ) {
+                                    isTappedExpanded = false
+                                    isPressExpanded = false
                                 }
+                                // Swipe ke bawah untuk nutup (aktif hanya saat ngembang)
                                 .pointerInput(isExpanded) {
                                     if (isExpanded) {
-                                        // Tap sekali di Handle -> Tutup
-                                        detectTapGestures(
-                                            onTap = { isTappedExpanded = false }
-                                        )
+                                        detectVerticalDragGestures { _, dragAmount ->
+                                            if (dragAmount > 5) {
+                                                isTappedExpanded = false
+                                                isPressExpanded = false
+                                            }
+                                        }
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -330,7 +337,7 @@ fun RecordScreen(
                             }
                         }
 
-                        // Area Teks: Murni cuma buat Scroll (kalau lagi expanded)
+                        // Area Teks: Murni cuma buat Scroll, nggak bakal mengganggu gesture Drag Handle
                         Text(
                             text = displayLiveText,
                             style = MaterialTheme.typography.bodyLarge,
