@@ -16,13 +16,13 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -142,7 +142,7 @@ fun HistoryScreen(
 
     BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode || drawerState.isOpen || (labelBeingManaged != null && isRenamingLabelMode)) {
         if (labelBeingManaged != null && isRenamingLabelMode) {
-            isRenamingLabelMode = false // Batalin rename, balik ke mode pilihan
+            isRenamingLabelMode = false // Batalin rename, kotak bakal nguncup lagi
         } else if (drawerState.isOpen) {
             coroutineScope.launch { drawerState.close() }
         } else if (selectionMode) {
@@ -474,11 +474,11 @@ fun HistoryScreen(
         )
     }
 
-    // Modal Dinamis untuk Kelola Label (Rename & Delete)
+    // Modal Dinamis Melar-Nguncup (Morphing)
     if (labelBeingManaged != null && !showDeleteLabelDialog) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { 
             if (isRenamingLabelMode) {
-                isRenamingLabelMode = false
+                isRenamingLabelMode = false // Batalin rename pake klik luar, balik ke awal
             } else {
                 labelBeingManaged = null 
             }
@@ -489,41 +489,56 @@ fun HistoryScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) // Animasi dinamis
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) 
             ) {
                 Column(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)) {
                     Text(
-                        text = if (isRenamingLabelMode) "Rename Label" else "Manage Label",
+                        text = if (isRenamingLabelMode) "Renaming Label" else "Manage Label",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     
-                    if (!isRenamingLabelMode) {
-                        Text(
-                            text = labelBeingManaged ?: "",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 24.dp)
+                    Text(
+                        text = labelBeingManaged ?: "",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Baris Rename (Tetap ada, nggak ngilang)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isRenamingLabelMode) { isRenamingLabelMode = true }
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Edit, 
+                            contentDescription = "Rename", 
+                            tint = if (isRenamingLabelMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = "Rename Label", 
+                            color = if (isRenamingLabelMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, 
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isRenamingLabelMode) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isRenamingLabelMode = true }
-                                .padding(horizontal = 24.dp, vertical = 16.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
-                            Spacer(Modifier.width(16.dp))
-                            Text("Rename Label", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                        }
-
+                    // Baris Delete (Bakal ngilang kalau mode Rename nyala)
+                    AnimatedVisibility(
+                        visible = !isRenamingLabelMode,
+                        enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                    ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -535,38 +550,45 @@ fun HistoryScreen(
                             Spacer(Modifier.width(16.dp))
                             Text("Delete Label", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
                         }
-                    } else {
-                        // Tampilan saat mode Rename aktif
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = renameLabelInput,
-                            onValueChange = { renameLabelInput = it },
-                            label = { Text("New Name") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(onClick = { isRenamingLabelMode = false }) {
-                                Text("Cancel")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(onClick = {
-                                val oldLabel = labelBeingManaged
-                                if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
-                                    viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                    }
+
+                    // Tampilan Form Input & Tombol (Bakal muncul memanjang kalau mode Rename nyala)
+                    AnimatedVisibility(
+                        visible = isRenamingLabelMode,
+                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) + expandVertically(expandFrom = Alignment.Top),
+                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) + shrinkVertically(shrinkTowards = Alignment.Top)
+                    ) {
+                        Column {
+                            OutlinedTextField(
+                                value = renameLabelInput,
+                                onValueChange = { renameLabelInput = it },
+                                label = { Text("New Name") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { isRenamingLabelMode = false }) {
+                                    Text("Cancel")
                                 }
-                                isRenamingLabelMode = false
-                                labelBeingManaged = null
-                            }) {
-                                Text("Save")
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(onClick = {
+                                    val oldLabel = labelBeingManaged
+                                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
+                                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                                    }
+                                    isRenamingLabelMode = false
+                                    labelBeingManaged = null
+                                }) {
+                                    Text("Save")
+                                }
                             }
                         }
                     }
