@@ -11,6 +11,7 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -100,8 +101,9 @@ fun HistoryScreen(
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
 
+    // States untuk manajemen label
     var labelBeingManaged by remember { mutableStateOf<String?>(null) }
-    var showRenameLabelDialog by remember { mutableStateOf(false) }
+    var isRenamingLabelMode by remember { mutableStateOf(false) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var renameLabelInput by remember { mutableStateOf("") }
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
@@ -138,8 +140,10 @@ fun HistoryScreen(
         uri?.let { viewModel.importAudio(context, it) { newNoteId -> onNoteClick(newNoteId) } }
     }
 
-    BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode || drawerState.isOpen) {
-        if (drawerState.isOpen) {
+    BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode || drawerState.isOpen || (labelBeingManaged != null && isRenamingLabelMode)) {
+        if (labelBeingManaged != null && isRenamingLabelMode) {
+            isRenamingLabelMode = false // Batalin rename, balik ke mode pilihan
+        } else if (drawerState.isOpen) {
             coroutineScope.launch { drawerState.close() }
         } else if (selectionMode) {
             selectionMode = false; selectedNotes = emptySet()
@@ -239,6 +243,7 @@ fun HistoryScreen(
                                     },
                                     onLongClick = {
                                         labelBeingManaged = label
+                                        isRenamingLabelMode = false
                                         renameLabelInput = label
                                     }
                                 )
@@ -469,90 +474,105 @@ fun HistoryScreen(
         )
     }
 
-    // Modal Pop-Up Tengah untuk Kelola Label (Menggantikan BottomSheet)
-    if (labelBeingManaged != null && !showRenameLabelDialog && !showDeleteLabelDialog) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { labelBeingManaged = null }) {
+    // Modal Dinamis untuk Kelola Label (Rename & Delete)
+    if (labelBeingManaged != null && !showDeleteLabelDialog) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { 
+            if (isRenamingLabelMode) {
+                isRenamingLabelMode = false
+            } else {
+                labelBeingManaged = null 
+            }
+        }) {
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) // Animasi dinamis
             ) {
-                Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                Column(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)) {
                     Text(
-                        text = "Manage Label",
+                        text = if (isRenamingLabelMode) "Rename Label" else "Manage Label",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = labelBeingManaged ?: "",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    )
                     
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(8.dp))
+                    if (!isRenamingLabelMode) {
+                        Text(
+                            text = labelBeingManaged ?: "",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showRenameLabelDialog = true }
-                            .padding(horizontal = 24.dp, vertical = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
-                        Spacer(Modifier.width(16.dp))
-                        Text("Rename Label", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
-                    }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isRenamingLabelMode = true }
+                                .padding(horizontal = 24.dp, vertical = 16.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.width(16.dp))
+                            Text("Rename Label", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                        }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showDeleteLabelDialog = true }
-                            .padding(horizontal = 24.dp, vertical = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(16.dp))
-                        Text("Delete Label", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showDeleteLabelDialog = true }
+                                .padding(horizontal = 24.dp, vertical = 16.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.width(16.dp))
+                            Text("Delete Label", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    } else {
+                        // Tampilan saat mode Rename aktif
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = renameLabelInput,
+                            onValueChange = { renameLabelInput = it },
+                            label = { Text("New Name") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { isRenamingLabelMode = false }) {
+                                Text("Cancel")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = {
+                                val oldLabel = labelBeingManaged
+                                if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
+                                    viewModel.renameLabel(oldLabel, renameLabelInput.trim())
+                                }
+                                isRenamingLabelMode = false
+                                labelBeingManaged = null
+                            }) {
+                                Text("Save")
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-
-    if (showRenameLabelDialog && labelBeingManaged != null) {
-        AlertDialog(
-            onDismissRequest = { showRenameLabelDialog = false; labelBeingManaged = null },
-            title = { Text("Rename Label") },
-            text = {
-                OutlinedTextField(
-                    value = renameLabelInput,
-                    onValueChange = { renameLabelInput = it },
-                    label = { Text("Label Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val oldLabel = labelBeingManaged
-                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
-                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
-                    }
-                    showRenameLabelDialog = false
-                    labelBeingManaged = null
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
-            }
-        )
     }
 
     if (showDeleteLabelDialog && labelBeingManaged != null) {
@@ -565,10 +585,11 @@ fun HistoryScreen(
                     labelBeingManaged?.let { viewModel.deleteLabel(it) }
                     showDeleteLabelDialog = false
                     labelBeingManaged = null
+                    isRenamingLabelMode = false
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteLabelDialog = false; labelBeingManaged = null }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteLabelDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -716,7 +737,6 @@ fun DismissibleNoteCard(
                     sharedContentState = rememberSharedContentState("note-${note.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
                     resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    // FIX Opsi 3: Animasi dibikin seinstan dan sekaku mungkin biar ga ngambang pas di-scroll
                     boundsTransform = { _, _ ->
                         spring(
                             dampingRatio = Spring.DampingRatioNoBouncy,
