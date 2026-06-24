@@ -50,9 +50,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
@@ -97,6 +99,7 @@ fun HistoryScreen(
 
     var selectionMode by remember { mutableStateOf(false) }
     var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
+    var showSelectionMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
     var newLabelInput by remember { mutableStateOf("") }
@@ -306,11 +309,50 @@ fun HistoryScreen(
                                 IconButton(onClick = { selectionMode = false; selectedNotes = emptySet() }) { Icon(Icons.Default.Close, "Cancel") }
                             },
                             actions = {
-                                IconButton(onClick = { viewModel.togglePinMultiple(selectedNotes, !isAllPinned); selectionMode = false; selectedNotes = emptySet() }) {
-                                    Icon(Icons.Default.PushPin, "Pin", tint = if (isAllPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                IconButton(onClick = { showSelectionMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
                                 }
-                                IconButton(onClick = { viewModel.cloneMultiple(selectedNotes); selectionMode = false; selectedNotes = emptySet() }) { Icon(Icons.Default.ContentCopy, "Clone") }
-                                IconButton(onClick = { showDeleteDialog = true }) { Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error) }
+                                DropdownMenu(
+                                    expanded = showSelectionMenu,
+                                    onDismissRequest = { showSelectionMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Select All") },
+                                        leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
+                                        onClick = {
+                                            selectedNotes = notes.map { it.id }.toSet()
+                                            showSelectionMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (isAllPinned) "Unpin" else "Pin") },
+                                        leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null) },
+                                        onClick = {
+                                            viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
+                                            selectionMode = false
+                                            selectedNotes = emptySet()
+                                            showSelectionMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Clone") },
+                                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                                        onClick = {
+                                            viewModel.cloneMultiple(selectedNotes)
+                                            selectionMode = false
+                                            selectedNotes = emptySet()
+                                            showSelectionMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            showDeleteDialog = true
+                                            showSelectionMenu = false
+                                        }
+                                    )
+                                }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                         )
@@ -329,7 +371,6 @@ fun HistoryScreen(
                                 }
                             },
                             modifier = Modifier.animateEnterExit(
-                                // FIX 1: Ubah spring ke absolute tween
                                 enter = scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(tween(300)),
                                 exit = scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(tween(300))
                             )
@@ -352,7 +393,6 @@ fun HistoryScreen(
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
                                 .then(with(animatedVisibilityScope) { 
                                     Modifier.animateEnterExit(
-                                        // FIX 2: Ubah spring ke absolute tween
                                         enter = scaleIn(initialScale = 0f, animationSpec = tween(300)),
                                         exit = scaleOut(targetScale = 0f, animationSpec = tween(300))
                                     ) 
@@ -382,7 +422,6 @@ fun HistoryScreen(
                                 .weight(1f)
                                 .padding(horizontal = 8.dp)
                                 .animateEnterExit(
-                                    // FIX 3: Ubah spring ke absolute tween
                                     enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = tween(300)) + fadeIn(tween(300)),
                                     exit = slideOutVertically(targetOffsetY = { 100 }, animationSpec = tween(300)) + fadeOut(tween(300))
                                 ),
