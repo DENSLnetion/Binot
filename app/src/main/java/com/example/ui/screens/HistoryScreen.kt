@@ -477,7 +477,7 @@ fun HistoryScreen(
         )
     }
 
-    // Modal Dinamis Melar-Nguncup (Morphing) Fix Import
+    // Modal Dinamis Melar-Nguncup (Morphing) Fix Import & Animasi Halus
     if (labelBeingManaged != null && !showDeleteLabelDialog) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { 
             if (isRenamingLabelMode) {
@@ -492,7 +492,13 @@ fun HistoryScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) 
+                    // Mengubah spring supaya transisinya mulus dan mentulnya kerasa natural
+                    .animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy, 
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    ) 
             ) {
                 Column(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp)) {
                     Text(
@@ -539,8 +545,8 @@ fun HistoryScreen(
                     // Baris Delete (Bakal ngilang kalau mode Rename nyala)
                     AnimatedVisibility(
                         visible = !isRenamingLabelMode,
-                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)),
-                        exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(150))
+                        enter = fadeIn(animationSpec = tween(250)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)),
+                        exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -558,8 +564,8 @@ fun HistoryScreen(
                     // Tampilan Form Input & Tombol (Bakal muncul memanjang kalau mode Rename nyala)
                     AnimatedVisibility(
                         visible = isRenamingLabelMode,
-                        enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) + expandVertically(expandFrom = Alignment.Top, animationSpec = spring(stiffness = Spring.StiffnessLow)),
-                        exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = spring(stiffness = Spring.StiffnessLow))
+                        enter = fadeIn(animationSpec = tween(300, delayMillis = 100)) + expandVertically(expandFrom = Alignment.Top, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)),
+                        exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
                     ) {
                         Column {
                             OutlinedTextField(
