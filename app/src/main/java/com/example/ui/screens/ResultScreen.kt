@@ -335,8 +335,14 @@ fun ResultScreen(
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "note-$noteId"),
                     animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds()
-                    // renderInOverlay dicabut, dibiarkan default supaya tetep smooth di layar utama
+                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                    // FIX Opsi 3: Samakan boundsTransform di sisi ResultScreen
+                    boundsTransform = { _, _ ->
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessHigh
+                        )
+                    }
                 )
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
