@@ -74,6 +74,12 @@ fun RecordScreen(
     var isPressExpanded by remember { mutableStateOf(false) }
     val isExpanded = isTappedExpanded || isPressExpanded
 
+    // Easter egg state
+    var greetingTapCount by remember { mutableStateOf(0) }
+    var showEasterEggDialog by remember { mutableStateOf(false) }
+    var easterEggAnswer by remember { mutableStateOf("") }
+    var showLovePopup by remember { mutableStateOf(false) }
+
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -216,7 +222,19 @@ fun RecordScreen(
                         text = greetingText,
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Start
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = {
+                                    greetingTapCount++
+                                    if (greetingTapCount > 4) {
+                                        greetingTapCount = 0
+                                        showEasterEggDialog = true
+                                        easterEggAnswer = ""
+                                    }
+                                }
+                            )
+                        }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -224,7 +242,7 @@ fun RecordScreen(
                         shape = CircleShape,
                         color = when {
                             isPaused -> MaterialTheme.colorScheme.tertiaryContainer
-                            isRecording -> MaterialTheme.colorScheme.errorContainer
+                            isRecording -> MaterialTheme.colorScheme.primaryContainer
                             else -> MaterialTheme.colorScheme.secondaryContainer
                         },
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -234,7 +252,7 @@ fun RecordScreen(
                             style = MaterialTheme.typography.labelLarge,
                             color = when {
                                 isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
-                                isRecording -> MaterialTheme.colorScheme.onErrorContainer
+                                isRecording -> MaterialTheme.colorScheme.onPrimaryContainer
                                 else -> MaterialTheme.colorScheme.onSecondaryContainer
                             },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -267,23 +285,25 @@ fun RecordScreen(
                                 }
                             }
                         }
-                        // Gesture NGINTIP (Hold) & TAP BUKA (Hanya aktif saat nguncup)
-                        // Pakai key 'isExpanded' supaya saat expanded, pointerInput ini idle total
-                        // dan event tap bisa tembus ke drag handle untuk TUTUP
-                        .pointerInput(isExpanded) {
-                            if (!isExpanded) {
+                        // TAP: open permanently (only when collapsed)
+                        .pointerInput("tap", isTappedExpanded) {
+                            if (!isTappedExpanded) {
+                                detectTapGestures(
+                                    onTap = {
+                                        isTappedExpanded = true
+                                    }
+                                )
+                            }
+                        }
+                        // HOLD: peek while finger down, close on release (only when collapsed)
+                        .pointerInput("hold", isTappedExpanded) {
+                            if (!isTappedExpanded) {
                                 detectTapGestures(
                                     onPress = {
-                                        val startTime = System.currentTimeMillis()
-                                        isPressExpanded = true // Start Ngintip (Otomatis isExpanded jadi true)
-                                        
-                                        val released = tryAwaitRelease() // Tunggu jari lepas
-                                        isPressExpanded = false // End Ngintip
-                                        
-                                        // Kalau dilepas cepat (< 300ms), anggap sebagai Tap -> Stay Open
-                                        if (released && (System.currentTimeMillis() - startTime < 300)) {
-                                            isTappedExpanded = true
-                                        }
+                                        isPressExpanded = true
+                                        tryAwaitRelease()
+                                        isPressExpanded = false
+                                        // Release always closes — tap is handled separately above
                                     }
                                 )
                             }
@@ -522,5 +542,115 @@ fun RecordScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // Easter Egg: Question Dialog
+    if (showEasterEggDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEasterEggDialog = false
+                easterEggAnswer = ""
+            },
+            title = {
+                Text(
+                    text = "🔐 Secret Question",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Who is the developer's sweetheart?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = easterEggAnswer,
+                        onValueChange = { if (it.length <= 5) easterEggAnswer = it },
+                        singleLine = true,
+                        placeholder = { Text("Your answer...") },
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = {
+                        if (easterEggAnswer.trim().equals("dinda", ignoreCase = true)) {
+                            showEasterEggDialog = false
+                            showLovePopup = true
+                        }
+                        easterEggAnswer = ""
+                    }
+                ) {
+                    Text("Submit")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showEasterEggDialog = false
+                    easterEggAnswer = ""
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Easter Egg: Love Popup
+    if (showLovePopup) {
+        AlertDialog(
+            onDismissRequest = { showLovePopup = false },
+            title = null,
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "💖",
+                        style = MaterialTheme.typography.displayMedium
+                    )
+                    Text(
+                        text = "For Dinda",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "In every line of code I write,\nin every bug I fix at night —\nit's always you I'm thinking of.\nYou are my favorite feature,\nmy most beautiful exception.\n\nForever yours,\nThe Developer 🌸",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(20.dp)
+                        )
+                    }
+                    Text(
+                        text = "✨ With all the love in the codebase ✨",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                FilledTonalButton(
+                    onClick = { showLovePopup = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🌹 Close")
+                }
+            }
+        )
     }
 }
