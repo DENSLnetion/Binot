@@ -5,7 +5,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,11 +16,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
@@ -34,7 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ui.components.AudioWaveform
@@ -60,7 +66,10 @@ fun RecordScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    var showLiveTextSheet by remember { mutableStateOf(false) }
+    // State untuk kontrol morphing
+    var isTappedExpanded by remember { mutableStateOf(false) }
+    var isPressExpanded by remember { mutableStateOf(false) }
+    val isExpanded = isTappedExpanded || isPressExpanded
 
     var hasPermission by remember {
         mutableStateOf(
@@ -77,23 +86,31 @@ fun RecordScreen(
         hasPermission = granted
     }
 
+    // Smart & Dynamic Greeting dengan Bold Username
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    val greetingTime = when (hour) {
-        in 0..11 -> "Good morning"
-        in 12..17 -> "Good afternoon"
-        else -> "Good evening"
+    val greetings = remember(hour) {
+        when (hour) {
+            in 5..11 -> listOf("Ready to focus,", "Start strong,", "Morning logic,")
+            in 12..16 -> listOf("Keep the momentum,", "Afternoon grind,", "Stay sharp,")
+            in 17..20 -> listOf("Wrap up the day,", "Evening reflection,", "Clear your mind,")
+            else -> listOf("Midnight thoughts,", "Still going,", "Nightcap,")
+        }
     }
-    val greeting = if (userName.isNotBlank()) "$greetingTime,\n$userName." else "$greetingTime!"
+    val randomGreeting = remember(hour) { greetings.random() }
+
+    val greetingText = buildAnnotatedString {
+        append("$randomGreeting\n")
+        withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+            append(if (userName.isNotBlank()) userName else "Guest")
+        }
+        append(".")
+    }
 
     val minutes = (recordingSeconds / 60).toString().padStart(2, '0')
     val seconds = (recordingSeconds % 60).toString().padStart(2, '0')
     val timeString = "$minutes:$seconds"
 
-    // PERUBAHAN KUNCI: Menggunakan displayCutout (Notch) sebagai pengaman patokan layar atas. 
-    // Ini mengamankan padding agar UI tidak tertelan batas atas fisik meskipun status bar menghilang.
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    
-    // Memberikan batas minimum yang wajar jika layar tidak punya poni besar (seperti beberapa tablet/HP flat).
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
     val displayLiveText = if (recordMode == 1) {
@@ -110,81 +127,170 @@ fun RecordScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp)) // Menggunakan safeTopMargin
+            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
 
-            Column(
+            // Area Utama yang Morphing (Sapaan, Waveform, Text Box)
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()), 
-                horizontalAlignment = Alignment.Start
+                    .weight(1f) // Mengambil sisa ruang layar secara dinamis
             ) {
-                Text(
-                    text = greeting,
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Start
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                val availableHeight = maxHeight
                 
-                Surface(
-                    shape = CircleShape,
-                    color = when {
-                        isPaused -> MaterialTheme.colorScheme.tertiaryContainer
-                        isRecording -> MaterialTheme.colorScheme.errorContainer
-                        else -> MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    modifier = Modifier.padding(bottom = 16.dp)
-                ) {
-                    Text(
-                        text = timeString,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = when {
-                            isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
-                            isRecording -> MaterialTheme.colorScheme.onErrorContainer
-                            else -> MaterialTheme.colorScheme.onSecondaryContainer
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            AudioWaveform(
-                amplitude = amplitude,
-                modifier = Modifier
-                    .padding(vertical = 32.dp)
-                    .animateEnterExit(enter = fadeIn())
-            )
-
-            val scrollState = rememberScrollState()
-            LaunchedEffect(recognizedText) {
-                scrollState.animateScrollTo(scrollState.maxValue)
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .animateEnterExit(enter = scaleIn(initialScale = 0.9f) + fadeIn())
-                    .clip(MaterialTheme.shapes.extraLarge)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .clickable { showLiveTextSheet = true }
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = displayLiveText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
+                // State Animasi Morphing
+                val boxHeight by animateDpAsState(
+                    targetValue = if (isExpanded) availableHeight else 160.dp,
+                    animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessLow),
+                    label = "boxHeight"
                 )
+                val topAlpha by animateFloatAsState(
+                    targetValue = if (isExpanded) 0f else 1f,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "topAlpha"
+                )
+                val cornerRadius by animateDpAsState(
+                    targetValue = if (isExpanded) 40.dp else 32.dp,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "cornerRadius"
+                )
+                val containerColor by animateColorAsState(
+                    targetValue = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "containerColor"
+                )
+                val contentColor by animateColorAsState(
+                    targetValue = if (isExpanded) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "contentColor"
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    // Area Atas (Sapaan & Waveform) yang akan menyusut
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .alpha(topAlpha)
+                            .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = greetingText,
+                            style = MaterialTheme.typography.displaySmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Start
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Surface(
+                            shape = CircleShape,
+                            color = when {
+                                isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+                                isRecording -> MaterialTheme.colorScheme.errorContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        ) {
+                            Text(
+                                text = timeString,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = when {
+                                    isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    isRecording -> MaterialTheme.colorScheme.onErrorContainer
+                                    else -> MaterialTheme.colorScheme.onSecondaryContainer
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        AudioWaveform(
+                            amplitude = amplitude,
+                            modifier = Modifier
+                                .padding(vertical = 32.dp)
+                                .animateEnterExit(enter = fadeIn())
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    // Morphing Live Text Box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(boxHeight)
+                            .clip(RoundedCornerShape(cornerRadius))
+                            .background(containerColor)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        val startTime = System.currentTimeMillis()
+                                        isPressExpanded = true
+                                        
+                                        val released = tryAwaitRelease()
+                                        isPressExpanded = false
+                                        
+                                        if (released) {
+                                            // Evaluasi apakah ini tap cepat atau hold yang dilepas
+                                            if (System.currentTimeMillis() - startTime < 300) {
+                                                isTappedExpanded = !isTappedExpanded
+                                            } else {
+                                                // Jika ditahan lama lalu dilepas, pastikan force close
+                                                isTappedExpanded = false 
+                                            }
+                                        }
+                                        // Jika !released (dibatalkan, misal karena user scroll text di dalamnya),
+                                        // JANGAN ubah isTappedExpanded. Biarkan dia tetap di state terakhirnya.
+                                    }
+                                )
+                            }
+                            .padding(24.dp)
+                    ) {
+                        val scrollState = rememberScrollState()
+                        
+                        LaunchedEffect(recognizedText) {
+                            // Cuma autoscroll kalo lagi mode ngebuka biar ga ganggu
+                            if (isExpanded) {
+                                scrollState.animateScrollTo(scrollState.maxValue)
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                        ) {
+                            AnimatedVisibility(visible = isExpanded) {
+                                Column {
+                                    Text(
+                                        text = "Live Transcription",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+                            }
+
+                            Text(
+                                text = displayLiveText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = contentColor,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Area Tombol
             val isSplit = isRecording || isPaused
             val totalAreaWidth = 280.dp
 
@@ -340,33 +446,6 @@ fun RecordScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
-        }
-    }
-
-    if (showLiveTextSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showLiveTextSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    text = "Live Transcription",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (recordMode == 1) "Transcription will be processed by Gemini later." else if (recognizedText.isEmpty()) "No words detected yet..." else recognizedText,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(48.dp))
-            }
         }
     }
 }
