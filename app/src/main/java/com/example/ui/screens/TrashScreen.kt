@@ -39,16 +39,21 @@ fun TrashScreen(
     var showEmptyTrashDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    // Kalkulasi margin aman untuk notch/cutout supaya konsisten dengan screen lain
+    val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         topBar = {
             if (selectionMode) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    // FIX: Menggunakan displayCutout untuk mengamankan padding dari notch
-                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
+                    modifier = Modifier.fillMaxWidth() 
                 ) {
                     TopAppBar(
+                        // Terapkan batas aman notch di sini
+                        windowInsets = WindowInsets(top = safeTopMargin),
                         title = { Text("${selectedNotes.size} Selected") },
                         navigationIcon = {
                             IconButton(onClick = { selectionMode = false; selectedNotes = emptySet() }) { Icon(Icons.Default.Close, "Cancel") }
@@ -66,6 +71,8 @@ fun TrashScreen(
                 }
             } else {
                 TopAppBar(
+                    // Terapkan batas aman notch di sini juga
+                    windowInsets = WindowInsets(top = safeTopMargin),
                     title = { Text("Trash") },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
