@@ -153,7 +153,18 @@ fun RecordScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                // Tap di area kosong mana saja (atas/bawah) untuk TUTUP saat expanded
+                .pointerInput(isExpanded) {
+                    if (isExpanded) {
+                        detectTapGestures(
+                            onTap = {
+                                isTappedExpanded = false
+                                isPressExpanded = false
+                            }
+                        )
+                    }
+                },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
@@ -257,11 +268,12 @@ fun RecordScreen(
                             }
                         }
                         // Gesture NGINTIP (Hold) & TAP BUKA (Hanya aktif saat nguncup)
-                        // Sengaja pakai key 'Unit' biar coroutine gesture ga dibunuh Compose di tengah jalan
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    if (!isExpanded) {
+                        // Pakai key 'isExpanded' supaya saat expanded, pointerInput ini idle total
+                        // dan event tap bisa tembus ke drag handle untuk TUTUP
+                        .pointerInput(isExpanded) {
+                            if (!isExpanded) {
+                                detectTapGestures(
+                                    onPress = {
                                         val startTime = System.currentTimeMillis()
                                         isPressExpanded = true // Start Ngintip (Otomatis isExpanded jadi true)
                                         
@@ -273,8 +285,8 @@ fun RecordScreen(
                                             isTappedExpanded = true
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                         .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
                 ) {
