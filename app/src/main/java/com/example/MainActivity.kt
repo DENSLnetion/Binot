@@ -152,10 +152,38 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                 navController = navController, 
                 startDestination = startDestination,
                 modifier = Modifier.padding(innerPadding),
-                enterTransition = { fadeIn(animationSpec = tween(300)) },
-                exitTransition = { fadeOut(animationSpec = tween(300)) },
-                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
-                popExitTransition = { fadeOut(animationSpec = tween(300)) }
+                enterTransition = {
+                    if (targetState.destination.route?.startsWith("result") == true ||
+                        initialState.destination.route?.startsWith("result") == true) {
+                        fadeIn(animationSpec = tween(0))
+                    } else {
+                        fadeIn(animationSpec = tween(300))
+                    }
+                },
+                exitTransition = {
+                    if (targetState.destination.route?.startsWith("result") == true ||
+                        initialState.destination.route?.startsWith("result") == true) {
+                        fadeOut(animationSpec = tween(0))
+                    } else {
+                        fadeOut(animationSpec = tween(300))
+                    }
+                },
+                popEnterTransition = {
+                    if (targetState.destination.route?.startsWith("result") == true ||
+                        initialState.destination.route?.startsWith("result") == true) {
+                        fadeIn(animationSpec = tween(0))
+                    } else {
+                        fadeIn(animationSpec = tween(300))
+                    }
+                },
+                popExitTransition = {
+                    if (targetState.destination.route?.startsWith("result") == true ||
+                        initialState.destination.route?.startsWith("result") == true) {
+                        fadeOut(animationSpec = tween(0))
+                    } else {
+                        fadeOut(animationSpec = tween(300))
+                    }
+                }
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
