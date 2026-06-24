@@ -159,7 +159,7 @@ fun RecordScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f) // Fills remaining space
+                    .weight(1f)
             ) {
                 val availableHeight = maxHeight
                 
@@ -246,42 +246,36 @@ fun RecordScreen(
                         .height(boxHeight)
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(containerColor)
-                        // Gesture ke atas (Buka), hanya aktif saat NGUNCUP biar nggak tabrakan sama scroll
+                        // Gesture BUKA: Hanya aktif kalau lagi nguncup (!isExpanded)
                         .pointerInput(isExpanded) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                if (!isExpanded && dragAmount < -5) {
-                                    isTappedExpanded = true
+                            if (!isExpanded) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (dragAmount < -5) isTappedExpanded = true // Swipe Up
                                 }
                             }
                         }
-                        // Gesture Tap & Hold
+                        // Gesture Ngintip (Hold) & Tap Buka: Hanya aktif kalau lagi nguncup
                         .pointerInput(isExpanded) {
-                            detectTapGestures(
-                                onPress = {
-                                    val startTime = System.currentTimeMillis()
-                                    // Kalau belum terekspansi, tekan untuk Hold (mengintip)
-                                    if (!isTappedExpanded) isPressExpanded = true
-                                    
-                                    val released = tryAwaitRelease()
-                                    isPressExpanded = false // Reset peek state
-                                    
-                                    if (released) {
-                                        val duration = System.currentTimeMillis() - startTime
-                                        if (duration < 300) {
-                                            // Tap cepat membalikkan state utama
-                                            isTappedExpanded = !isTappedExpanded
-                                        } else {
-                                            // Kalau ditahan lama lalu dilepas, pastikan kotak tertutup
-                                            isTappedExpanded = false
+                            if (!isExpanded) {
+                                detectTapGestures(
+                                    onPress = {
+                                        val startTime = System.currentTimeMillis()
+                                        isPressExpanded = true // Start Ngintip
+                                        
+                                        val released = tryAwaitRelease()
+                                        isPressExpanded = false // End Ngintip (Lepas langsung nutup)
+                                        
+                                        if (released && (System.currentTimeMillis() - startTime < 300)) {
+                                            isTappedExpanded = true // Tap cepat -> Stay Open
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
-                        .padding(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
+                        .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
                 ) {
                     
-                    // Memastikan scroll selalu berada di bawah saat ada teks baru, biarpun touch scroll dimatikan
+                    // Auto-scroll ke bawah saat ada teks baru
                     LaunchedEffect(recognizedText, isExpanded) {
                         if (recognizedText.isNotEmpty()) {
                             scrollState.animateScrollTo(scrollState.maxValue)
@@ -291,20 +285,29 @@ fun RecordScreen(
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // M3 Drag Handle Indicator - Hitbox Sengaja Ditebalkan Biar Gampang Ditarik
+                        // DRAG HANDLE - Ini sekarang punya hit target yang tebal (48dp) 
+                        // dan spesifik nanganin logic TUTUP.
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(32.dp) // Hitbox lumayan besar
+                                .height(48.dp)
                                 .pointerInput(isExpanded) {
-                                    detectVerticalDragGestures { _, dragAmount ->
-                                        if (isExpanded && dragAmount > 5) {
-                                            // Tarik drag handle ke bawah -> Mutlak Tutup
-                                            isTappedExpanded = false
+                                    if (isExpanded) {
+                                        // Swipe Handle ke bawah -> Tutup
+                                        detectVerticalDragGestures { _, dragAmount ->
+                                            if (dragAmount > 5) isTappedExpanded = false
                                         }
                                     }
+                                }
+                                .pointerInput(isExpanded) {
+                                    if (isExpanded) {
+                                        // Tap sekali di Handle -> Tutup
+                                        detectTapGestures(
+                                            onTap = { isTappedExpanded = false }
+                                        )
+                                    }
                                 },
-                            contentAlignment = Alignment.TopCenter
+                            contentAlignment = Alignment.Center
                         ) {
                             Box(
                                 modifier = Modifier
@@ -327,8 +330,7 @@ fun RecordScreen(
                             }
                         }
 
-                        // Teks yang BISA DI-SCROLL HANYA SAAT EXPANDED. 
-                        // Saat nguncup, scroll jari mati.
+                        // Area Teks: Murni cuma buat Scroll (kalau lagi expanded)
                         Text(
                             text = displayLiveText,
                             style = MaterialTheme.typography.bodyLarge,
