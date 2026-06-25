@@ -186,7 +186,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showAiInfoDialog = false },
             title = { Text("AI Providers") },
-            text = { Text("Google Gemini:\nBest for complex content such as math, chemistry, and Mermaid diagrams. Supports long audio files.\n\nGroq AI (Recommended):\nBlazing fast and ideal for daily use. Audio uploads are limited to 25 MB (~30 minutes).") },
+            text = { Text("Google Gemini:\nBest for complex content such as math, chemistry, and Mermaid diagrams. Supports long audio files.\n\nGroq AI (Recommended):\nBlazing fast and ideal for daily use. Audio uploads are limited to 25 MB.") },
             confirmButton = { TextButton(onClick = { showAiInfoDialog = false }) { Text("Got it") } }
         )
     }
