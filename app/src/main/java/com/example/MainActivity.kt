@@ -187,7 +187,7 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
             ) {
                 composable("onboarding") {
                     OnboardingScreen(
-                        onComplete = { name, provider, key ->
+                        onComplete = { name, provider, key, task, format ->
                             settingsViewModel.saveUserName(name)
                             settingsViewModel.saveAiProvider(provider)
                             if (provider == 0) {
@@ -195,6 +195,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                             } else {
                                 settingsViewModel.saveGroqApiKey(key)
                             }
+                            settingsViewModel.saveAiTask(task)
+                            settingsViewModel.saveAiFormat(format)
+                            
                             navController.navigate("record") {
                                 popUpTo("onboarding") { inclusive = true }
                             }
