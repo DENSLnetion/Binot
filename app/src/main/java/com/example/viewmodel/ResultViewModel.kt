@@ -270,25 +270,15 @@ class ResultViewModel(
                     return@launch
                 }
 
-                var systemPrompt = """
+                val systemPrompt = """
                     You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
                     STRICT RULES YOU MUST OBEY:
                     1. Output language MUST follow: $targetLanguage.
                     2. NO conversational filler, pleasantries, or introductions.
                     3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT if you need to generate a ```mermaid diagram.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. For chemical reactions/formulas, use the `\ce{}` macro inside LaTeX (e.g., `${'$'}\ce{H2O}${'$'}`).
+                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. For chemical reactions/formulas, use the `\ce{}` macro inside LaTeX (e.g., `$\ce{H2O}$`).
                 """.trimIndent()
-                
-                // INJEKSI SPESIFIK GROQ (LLAMA) UNTUK EXPLAIN TEXT
-                if (provider == 1) {
-                    systemPrompt += """
-                        
-                        [GROQ/LLAMA OVERRIDES]
-                        6. STRICT MATH ISOLATION: Keep math symbols inside `${'$'}${'$'}` strictly in Latin/Greek/Numbers. DO NOT put Arabic, Chinese, Korean, or any non-Latin translations INSIDE the math block. Put translated text OUTSIDE.
-                        7. MERMAID ALLOWED: You are ALLOWED and ENCOURAGED to use ` ```mermaid ` blocks for diagrams. Do not avoid backticks for diagrams.
-                    """.trimIndent()
-                }
                 
                 val userPrompt = "Term to explain: \"$selectedText\""
                 
@@ -453,7 +443,7 @@ class ResultViewModel(
                         2. VERBATIM TRANSCRIBE: Transcribe exactly what is spoken word-by-word, including informal words, repeated words, and natural speech flow.
                         3. KEEP PUNCTUATION & CAPITALIZATION: You MUST add accurate punctuation (periods, commas, question marks) and use proper capitalization to make it readable.
                         4. NO GRAMMAR CORRECTION: Absolutely DO NOT fix the speaker's grammatical errors or restructure their sentences.
-                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use ², ^, ${'$'}, or ${'$'}${'$'}).
+                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use Â², ^, ${'$'}, or ${'$'}${'$'}).
                         6. Automatically detect and transcribe in the spoken language.
                     """.trimIndent()
                     
@@ -568,7 +558,7 @@ class ResultViewModel(
                     else -> ""
                 }
 
-                var systemPrompt = """
+                val systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
                     TARGET LANGUAGE: $language. You MUST translate the output to $language if the input is different.
@@ -583,16 +573,6 @@ class ResultViewModel(
                     4. CRITICAL: DO NOT generate tables under any circumstances.
                     5. VISUAL DIAGRAMS: If the text describes a workflow, sequence, timeline, or system architecture, visualize it using a valid Mermaid.js diagram enclosed strictly in ```mermaid ... ``` blocks.
                 """.trimIndent()
-                
-                // INJEKSI SPESIFIK GROQ (LLAMA) UNTUK PROCESS TEXT AUTO
-                if (provider == 1) {
-                    systemPrompt += """
-                        
-                        [GROQ/LLAMA OVERRIDES]
-                        6. MERMAID ALLOWANCE: Rule #2 forbids GLOBAL wrapping, but you MUST use ` ```mermaid ` blocks for diagrams. DO NOT avoid backticks for diagrams!
-                        7. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT translate variables or put Arabic, Chinese, Korean, or any Non-Latin characters INSIDE the math blocks. Put all translated text OUTSIDE the LaTeX blocks.
-                    """.trimIndent()
-                }
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
                 
