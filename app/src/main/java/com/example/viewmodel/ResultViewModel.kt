@@ -270,15 +270,31 @@ class ResultViewModel(
                     return@launch
                 }
 
-                val systemPrompt = """
-                    You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
+                // Sama seperti processTextAuto — Mermaid hanya di Gemini, Groq disunat.
+                val systemPrompt = if (provider == 1) { // === GROQ/LLAMA PROMPT ===
+                    """
+                    You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance.
                     STRICT RULES YOU MUST OBEY:
                     1. Output language MUST follow: $targetLanguage.
                     2. NO conversational filler, pleasantries, or introductions.
-                    3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT if you need to generate a ```mermaid diagram.
+                    3. Format nicely using Markdown. NO backticks except for inline code.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. For chemical reactions/formulas, use the `\ce{}` macro inside LaTeX (e.g., `$\ce{H2O}$`).
-                """.trimIndent()
+                    5. NO DIAGRAMS: DO NOT generate any Mermaid or diagram blocks. Use structured Markdown (headings, bullets, bold) instead.
+                    6. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry into spoken words. Use pure LaTeX. For chemicals, use `\ce{}` (e.g., `${'$'}\ce{H2O}${'$'}`).
+                    7. STRICT MATH ISOLATION: Keep all symbols inside `${'$'}${'$'}` or `${'$'}` strictly in Latin/Greek/Numbers. NO non-Latin characters inside math blocks.
+                    """.trimIndent()
+                } else { // === GEMINI PROMPT ===
+                    """
+                    You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance.
+                    STRICT RULES YOU MUST OBEY:
+                    1. Output language MUST follow: $targetLanguage.
+                    2. NO conversational filler, pleasantries, or introductions.
+                    3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT for ```mermaid diagram blocks.
+                    4. CRITICAL: DO NOT generate tables under any circumstances.
+                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry into spoken words. Use pure LaTeX. For chemicals, use `\ce{}` (e.g., `${'$'}\ce{H2O}${'$'}`).
+                    6. VISUAL DIAGRAMS — GEMINI PRIORITY CAPABILITY: If the term/concept being explained involves a process, sequence, decision flow, or system interaction, generate a Mermaid diagram to visualize it. Enclose in ```mermaid ... ``` blocks. Skip only for purely factual definitions with no process or flow.
+                    """.trimIndent()
+                }
                 
                 val userPrompt = "Term to explain: \"$selectedText\""
                 
@@ -558,7 +574,29 @@ class ResultViewModel(
                     else -> ""
                 }
 
-                val systemPrompt = """
+                // Prompt dipisah per-provider karena kapabilitas Mermaid sangat berbeda.
+                // Gemini: Mermaid diaktifkan agresif dengan contoh trigger eksplisit.
+                // Groq/Llama: Mermaid disunat total — model tidak reliable untuk task ini
+                //             dan sering menghasilkan verbatim error atau output rusak.
+                val systemPrompt = if (provider == 1) { // === GROQ/LLAMA PROMPT ===
+                    """
+                    [SYSTEM: ENGINE MODE ENABLED]
+                    You are a strict text processing engine, NOT a conversational chatbot.
+                    TARGET LANGUAGE: $language. You MUST translate the output to $language if the input is different.
+                    
+                    $taskInstruction
+                    $formatInstruction
+                    
+                    CRITICAL STRICT RULES YOU MUST OBEY:
+                    1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
+                    2. NO GLOBAL WRAPPING: DO NOT wrap your entire output in quotes or a global markdown code block. Plain Markdown only.
+                    3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX (e.g., `${'$'}${'$'} \ce{H2O -> H+ + OH-} ${'$'}${'$'}`). NEVER translate math/chemistry into spoken words.
+                    4. CRITICAL: DO NOT generate tables under any circumstances.
+                    5. NO DIAGRAMS: DO NOT generate any Mermaid or diagram blocks. If the content has a flow or sequence, describe it using structured plain Markdown (headings, bold, bullet points) instead.
+                    6. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT put Arabic, Chinese, Korean, or any non-Latin characters INSIDE the math blocks. Put translated text OUTSIDE.
+                    """.trimIndent()
+                } else { // === GEMINI PROMPT ===
+                    """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
                     TARGET LANGUAGE: $language. You MUST translate the output to $language if the input is different.
@@ -571,8 +609,18 @@ class ResultViewModel(
                     2. NO GLOBAL WRAPPING: DO NOT wrap your entire output in quotes or a global markdown code block.
                     3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX (e.g., `${'$'}${'$'} \ce{H2O -> H+ + OH-} ${'$'}${'$'}`). NEVER translate math/chemistry into spoken words.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. VISUAL DIAGRAMS: If the text describes a workflow, sequence, timeline, or system architecture, visualize it using a valid Mermaid.js diagram enclosed strictly in ```mermaid ... ``` blocks.
-                """.trimIndent()
+                    5. VISUAL DIAGRAMS — GEMINI PRIORITY CAPABILITY: You have strong diagram generation ability. Use it.
+                       - TRIGGER RULE: If the text contains ANY of these patterns, you MUST generate a Mermaid diagram for that section:
+                         * Conditional logic: "jika/if X maka/then Y", "kalau A, kalau tidak B", "when/if/else"
+                         * Sequential steps: "langkah 1... langkah 2...", "pertama... lalu... kemudian..."
+                         * Decision points: scenarios, choices, branches, outcomes
+                         * Processes: workflows, pipelines, system interactions, login flows, data flows
+                         * Timelines or schedules with conditions
+                       - Enclose ALL diagrams strictly in ```mermaid ... ``` blocks.
+                       - Choose the most appropriate diagram type: flowchart TD, sequenceDiagram, stateDiagram-v2, etc.
+                       - REASONING GATE: Only skip diagram if the content is purely factual/informational text with zero process, flow, or conditional logic.
+                    """.trimIndent()
+                }
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
                 
