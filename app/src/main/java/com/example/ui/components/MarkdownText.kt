@@ -274,6 +274,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // STATE CERDAS: Nahan shift layout dan nyalain animasi
     var isRendered by remember(htmlContent) { mutableStateOf(false) }
     var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
+    var mermaidError by remember(htmlContent) { mutableStateOf<String?>(null) }
 
     val density = LocalDensity.current
     val targetHeightDp = remember(webViewHeightPx) {
@@ -405,15 +406,26 @@ body {
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     mermaid.initialize({
-        startOnLoad: true,
+        startOnLoad: false,
         theme: '$theme',
         securityLevel: 'loose'
     });
-    setTimeout(function() {
-        var el = document.querySelector('.mermaid');
-        var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
-    }, 600);
+    var el = document.querySelector('.mermaid');
+    var rawContent = el ? el.textContent.trim() : '(empty)';
+    mermaid.run({
+        nodes: [el],
+        suppressErrors: false
+    }).then(function() {
+        setTimeout(function() {
+            var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
+            if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
+        }, 300);
+    }).catch(function(err) {
+        if (window.ErrorBridge) window.ErrorBridge.onMermaidError(
+            (err && err.message ? err.message : String(err)) + '\n\n--- RAW ---\n' + rawContent
+        );
+        if (window.HeightBridge) window.HeightBridge.onHeightReady(160);
+    });
 });
 </script>
 </body>
@@ -478,6 +490,16 @@ document.addEventListener("DOMContentLoaded", function() {
                             }
                         }
                     }, "HeightBridge")
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onMermaidError(errorMsg: String) {
+                            android.util.Log.e("MermaidDebug", "=== MERMAID ERROR ===\n$errorMsg")
+                            Handler(Looper.getMainLooper()).post {
+                                mermaidError = errorMsg
+                                isRendered = true
+                            }
+                        }
+                    }, "ErrorBridge")
                     tag = ""
                 }
             },
@@ -501,6 +523,20 @@ document.addEventListener("DOMContentLoaded", function() {
             exit = fadeOut(animationSpec = tween(400))
         ) {
             ShimmerBox(modifier = Modifier.fillMaxSize().padding(vertical = 4.dp))
+        }
+    }
+
+    mermaidError?.let { err ->
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF3A1A1A))
+                .padding(10.dp)
+        ) {
+            Text("⚠ Mermaid Error", color = Color(0xFFFF6B6B), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 13.sp)
+            Text(err, color = Color(0xFFFFAAAA), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }
