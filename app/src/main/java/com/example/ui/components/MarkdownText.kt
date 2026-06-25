@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -77,11 +78,12 @@ data class LineLayoutInfo(
 )
 
 /**
- * Sealed class to handle chunking between Native Compose Text and KaTeX WebViews
+ * Sealed class to handle chunking between Native Compose Text, KaTeX WebViews, and Mermaid WebViews
  */
 sealed class MarkdownItem {
     data class NativeLine(val text: String, val lineIndex: Int) : MarkdownItem()
     data class MathBlock(val rawText: String, val startLineIndex: Int) : MarkdownItem()
+    data class MermaidBlock(val rawText: String, val startLineIndex: Int) : MarkdownItem()
 }
 
 private fun resolveRectToPosition(
@@ -131,8 +133,13 @@ private fun resolveRectToPosition(
     return Triple(lineIndex, bestStart, bestStart + selectedText.length)
 }
 
-// Data class untuk membawa KaTeX assets yang sudah dibaca
-data class KaTeXAssets(val css: String, val js: String, val autoRender: String) {
+// Data class untuk membawa KaTeX + mhchem assets
+data class KaTeXAssets(val css: String, val js: String, val autoRender: String, val mhchem: String) {
+    val isReady get() = js.isNotEmpty() && mhchem.isNotEmpty()
+}
+
+// Data class untuk membawa Mermaid.js assets
+data class MermaidAssets(val js: String) {
     val isReady get() = js.isNotEmpty()
 }
 
@@ -239,6 +246,7 @@ li { margin-bottom: 4px; }
 <div id="math-content">${html}</div>
 <script>${assets.js}</script>
 <script>${assets.autoRender}</script>
+<script>${assets.mhchem}</script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     if (typeof renderMathInElement !== 'undefined') {
@@ -353,6 +361,152 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 }
 
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun MermaidWebView(
+    mermaidContent: String,
+    assets: MermaidAssets,
+    isDarkTheme: Boolean,
+    heightCache: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>,
+    modifier: Modifier = Modifier
+) {
+    if (!assets.isReady) return
+
+    val theme = if (isDarkTheme) "dark" else "default"
+
+    val htmlContent = remember(mermaidContent, theme) {
+        """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<style>
+body {
+    background-color: transparent;
+    margin: 0;
+    padding: 8px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+.mermaid-container {
+    display: flex;
+    justify-content: flex-start;
+    min-width: min-content;
+}
+::-webkit-scrollbar { height: 4px; }
+::-webkit-scrollbar-thumb { background: #88888888; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="mermaid-container">
+    <pre class="mermaid">
+    ${mermaidContent.replace("<", "&lt;").replace(">", "&gt;")}
+    </pre>
+</div>
+<script>${assets.js}</script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: '$theme',
+        securityLevel: 'loose'
+    });
+    setTimeout(function() {
+        var el = document.querySelector('.mermaid');
+        var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
+        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
+    }, 600);
+});
+</script>
+</body>
+</html>""".trimIndent()
+    }
+
+    var isRendered by remember(htmlContent) { mutableStateOf(false) }
+    var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
+
+    val density = LocalDensity.current
+    val targetHeightDp = remember(webViewHeightPx) {
+        if (webViewHeightPx == -1) 120.dp // Tinggi box skeleton yang agak besar untuk diagram
+        else with(density) { webViewHeightPx.toDp() }.coerceAtLeast(1.dp)
+    }
+
+    val animatedHeight by animateDpAsState(
+        targetValue = targetHeightDp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+        label = "mermaidHeight"
+    )
+
+    val webViewAlpha by animateFloatAsState(
+        targetValue = if (isRendered) 1f else 0.01f,
+        animationSpec = tween(400),
+        label = "webviewAlpha"
+    )
+
+    val capturedHtmlContent = htmlContent
+    val capturedHeightCache = heightCache
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(animatedHeight)
+    ) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(webViewAlpha),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false 
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.defaultTextEncodingName = "utf-8"
+                    @Suppress("DEPRECATION")
+                    settings.allowFileAccessFromFileURLs = true
+                    webViewClient = android.webkit.WebViewClient()
+                    webChromeClient = android.webkit.WebChromeClient()
+                    
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onHeightReady(height: Int) {
+                            Handler(Looper.getMainLooper()).post {
+                                val d = ctx.resources.displayMetrics.density
+                                val px = (height * d).toInt().coerceAtLeast(1)
+                                capturedHeightCache[capturedHtmlContent] = px
+                                webViewHeightPx = px
+                                isRendered = true
+                            }
+                        }
+                    }, "HeightBridge")
+                    tag = ""
+                }
+            },
+            update = { webView ->
+                if (webView.tag != capturedHtmlContent) {
+                    webView.tag = capturedHtmlContent
+                    webView.loadDataWithBaseURL(
+                        "file:///android_asset/mermaid/",
+                        capturedHtmlContent,
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                }
+            }
+        )
+
+        AnimatedVisibility(
+            visible = !isRendered,
+            enter = fadeIn(),
+            exit = fadeOut(animationSpec = tween(400))
+        ) {
+            ShimmerBox(modifier = Modifier.fillMaxSize().padding(vertical = 4.dp))
+        }
+    }
+}
+
 @Composable
 fun MarkdownText(
     text: String, 
@@ -366,13 +520,21 @@ fun MarkdownText(
 ) {
     val context = LocalContext.current
 
-    var katexAssets by remember { mutableStateOf(KaTeXAssets("", "", "")) }
+    var katexAssets by remember { mutableStateOf(KaTeXAssets("", "", "", "")) }
+    var mermaidAssets by remember { mutableStateOf(MermaidAssets("")) }
+
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
+            // Load KaTeX + mhchem
             val css = try { context.assets.open("katex/katex.min.css").bufferedReader().readText() } catch (e: Exception) { "" }
             val js = try { context.assets.open("katex/katex.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
             val ar = try { context.assets.open("katex/auto-render.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
-            katexAssets = KaTeXAssets(css, js, ar)
+            val mhchem = try { context.assets.open("katex/mhchem.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+            katexAssets = KaTeXAssets(css, js, ar, mhchem)
+
+            // Load Mermaid
+            val mermaidJs = try { context.assets.open("mermaid/mermaid.min.js").bufferedReader().readText() } catch (e: Exception) { "" }
+            mermaidAssets = MermaidAssets(mermaidJs)
         }
     }
 
@@ -384,9 +546,36 @@ fun MarkdownText(
         var mathBlockContent = ""
         var mathBlockStartIndex = -1
 
+        var inMermaidBlock = false
+        var mermaidBlockContent = ""
+        var mermaidBlockStartIndex = -1
+
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
+
+            // 1. Logika Tangkap Mermaid Block
+            if (inMermaidBlock) {
+                if (line.trim() == "```") {
+                    inMermaidBlock = false
+                    items.add(MarkdownItem.MermaidBlock(mermaidBlockContent, mermaidBlockStartIndex))
+                    mermaidBlockContent = ""
+                } else {
+                    mermaidBlockContent += if (mermaidBlockContent.isEmpty()) line else "\n" + line
+                }
+                i++
+                continue
+            }
+
+            if (line.trim().lowercase().startsWith("```mermaid")) {
+                inMermaidBlock = true
+                mermaidBlockStartIndex = i
+                mermaidBlockContent = "" 
+                i++
+                continue
+            }
+
+            // 2. Logika Tangkap KaTeX Block
             if (inMathBlock) {
                 mathBlockContent += "\n" + line
                 if (line.trim().endsWith("$$") || line.trim() == "$$") {
@@ -411,6 +600,7 @@ fun MarkdownText(
                 continue
             }
 
+            // 3. Logika Teks Native dan KaTeX Inline
             val hasInlineMath = Regex("""\$.+?\$""").containsMatchIn(line)
             if (hasInlineMath) {
                 items.add(MarkdownItem.MathBlock(line, i))
@@ -419,9 +609,10 @@ fun MarkdownText(
             }
             i++
         }
-        if (inMathBlock) {
-            items.add(MarkdownItem.MathBlock(mathBlockContent, mathBlockStartIndex))
-        }
+        
+        if (inMathBlock) items.add(MarkdownItem.MathBlock(mathBlockContent, mathBlockStartIndex))
+        if (inMermaidBlock) items.add(MarkdownItem.MermaidBlock(mermaidBlockContent, mermaidBlockStartIndex))
+        
         items
     }
     
@@ -453,6 +644,7 @@ fun MarkdownText(
     val highlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
     val lineRegistry = remember { mutableMapOf<Int, LineLayoutInfo>() }
     val webViewHeightCache = remember { androidx.compose.runtime.snapshots.SnapshotStateMap<String, Int>() }
+    val isDarkTheme = isSystemInDarkTheme()
 
     LaunchedEffect(text) {
         onResolveSelection { rect, selectedText ->
@@ -469,6 +661,7 @@ fun MarkdownText(
         items(markdownItems.size, key = { index -> markdownItems[index].let {
             when (it) {
                 is MarkdownItem.MathBlock -> "math_${it.startLineIndex}"
+                is MarkdownItem.MermaidBlock -> "mermaid_${it.startLineIndex}"
                 is MarkdownItem.NativeLine -> "line_${it.lineIndex}"
             }
         }}) { index ->
@@ -481,6 +674,15 @@ fun MarkdownText(
                         fontFamily = fontFamily,
                         heightCache = webViewHeightCache,
                         modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                is MarkdownItem.MermaidBlock -> {
+                    MermaidWebView(
+                        mermaidContent = item.rawText,
+                        assets = mermaidAssets,
+                        isDarkTheme = isDarkTheme,
+                        heightCache = webViewHeightCache,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
                 }
                 is MarkdownItem.NativeLine -> {
