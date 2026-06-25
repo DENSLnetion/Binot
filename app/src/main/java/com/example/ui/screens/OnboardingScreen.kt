@@ -116,10 +116,12 @@ fun OnboardingScreen(
                                     keyState = KeyVerificationState.LOADING
                                     
                                     try {
-                                        // Sanitisasi Ekstrem: Hapus prefix "Bearer " jika user ga sengaja kopas, dan libas semua karakter aneh/spasi siluman
+                                        // LOGIKA PEMBERSIH AMAN: Hanya membunuh prefix 'Bearer ' dan spasi nyasar.
+                                        // Tidak akan menghancurkan karakter khusus (- _ . +) yang asli bawaan kunci API lu.
                                         val cleanKey = apiKeyInput
-                                            .replace("Bearer ", "", ignoreCase = true)
-                                            .replace(Regex("[^a-zA-Z0-9_\\-]"), "")
+                                            .replace(Regex("(?i)^bearer\\s*"), "")
+                                            .replace(" ", "")
+                                            .trim()
                                         
                                         if (aiProvider == 0) {
                                             val req = GenerateContentRequest(
@@ -127,7 +129,6 @@ fun OnboardingScreen(
                                             )
                                             RetrofitClient.service.generateContent(cleanKey, req)
                                         } else {
-                                            // Menggunakan model Groq yang paling stabil saat ini
                                             val req = GroqChatRequest(
                                                 model = "llama-3.1-8b-instant",
                                                 messages = listOf(GroqMessage(role = "user", content = "hi"))
@@ -141,14 +142,14 @@ fun OnboardingScreen(
                                     } catch (e: Exception) {
                                         delay(800)
                                         
-                                        // SMART BYPASS: Jika Groq melempar 400, 404, atau 422, artinya API KEY VALID (lolos autentikasi 401),
-                                        // server hanya menolak format dummy request-nya. Kita perlakukan sebagai SUKSES.
+                                        // SMART BYPASS untuk Groq
                                         if (e is HttpException && aiProvider == 1 && (e.code() == 400 || e.code() == 404 || e.code() == 422)) {
                                             keyState = KeyVerificationState.SUCCESS
                                         } else {
                                             keyState = KeyVerificationState.ERROR
                                             keyErrorMessage = when (e) {
                                                 is HttpException -> when (e.code()) {
+                                                    400 -> if (aiProvider == 0) "Invalid API Key. Google rejected it. Please ensure no characters are missing." else "Server rejected the test. Check your key."
                                                     401 -> "The key is invalid or unauthorized. Please ensure there are no missing characters."
                                                     403 -> "Access denied. Your key might be restricted by the provider."
                                                     429 -> "Rate limit exceeded. The provider's server is busy."
@@ -469,8 +470,8 @@ fun OnboardingScreen(
                                         
                                         Button(
                                             onClick = { 
-                                                // Lempar cleanKey ke Settings agar aplikasi utama tidak memakan raw input yang berpotensi kotor
-                                                val finalCleanKey = apiKeyInput.replace("Bearer ", "", ignoreCase = true).replace(Regex("[^a-zA-Z0-9_\\-]"), "")
+                                                // Lempar cleanKey yang murni ke Settings agar tersimpan sempurna
+                                                val finalCleanKey = apiKeyInput.replace(Regex("(?i)^bearer\\s*"), "").replace(" ", "").trim()
                                                 onComplete(nameInput.trim(), aiProvider, finalCleanKey, aiTask, aiFormat) 
                                             },
                                             modifier = Modifier
