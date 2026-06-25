@@ -2,825 +2,552 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.EnterExitState
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Label
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.data.NoteEntity
-import com.example.viewmodel.HistoryViewModel
-import kotlinx.coroutines.CoroutineScope
+import androidx.compose.ui.unit.sp
+import com.example.data.Content
+import com.example.data.GenerateContentRequest
+import com.example.data.GroqChatRequest
+import com.example.data.GroqMessage
+import com.example.data.Part
+import com.example.data.RetrofitClient
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
+import retrofit2.HttpException
+import java.net.UnknownHostException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
+enum class KeyVerificationState {
+    IDLE, LOADING, SUCCESS, ERROR
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(
-    viewModel: HistoryViewModel,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    sharedTransitionScope: SharedTransitionScope,
-    onNoteClick: (Int) -> Unit,
-    onTrashClick: () -> Unit
+fun OnboardingScreen(
+    onComplete: (String, Int, String, Int, Int) -> Unit // name, aiProvider, apiKey, aiTask, aiFormat
 ) {
-    val context = LocalContext.current
-    val notes by viewModel.filteredNotes.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val latestRelease by viewModel.latestRelease.collectAsState()
-    
-    val uniqueLabels by viewModel.uniqueLabels.collectAsState()
-    val selectedLabels by viewModel.selectedLabels.collectAsState()
-    val isMultiSelectLabelMode by viewModel.isMultiSelectLabelMode.collectAsState()
-    val sortMode by viewModel.sortMode.collectAsState()
-
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedNotes by remember { mutableStateOf(setOf<Int>()) }
-    var showSelectionMenu by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showNewLabelDialog by remember { mutableStateOf(false) }
-    var newLabelInput by remember { mutableStateOf("") }
-
-    var labelBeingManaged by remember { mutableStateOf<String?>(null) }
-    var renameLabelInput by remember { mutableStateOf("") }
-    var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
-
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    var isSearchFocused by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val pagerState = rememberPagerState(pageCount = { 5 })
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-    val isAllPinned = selectedNotes.isNotEmpty() && selectedNotes.all { id -> 
-        notes.find { it.id == id }?.isPinned == true 
-    }
+    var nameInput by remember { mutableStateOf("") }
+    var apiKeyInput by remember { mutableStateOf("") }
+    var aiProvider by remember { mutableStateOf(1) } // Default to Groq (1)
+    
+    var aiTask by remember { mutableStateOf(0) } 
+    var aiFormat by remember { mutableStateOf(0) } 
 
-    val pinnedNotes = notes.filter { it.isPinned }
-    val unpinnedNotes = notes.filter { !it.isPinned }
+    var keyState by remember { mutableStateOf(KeyVerificationState.IDLE) }
+    var keyErrorMessage by remember { mutableStateOf("") }
 
-    val gridState = rememberLazyStaggeredGridState()
-    val isFabExpanded by remember { derivedStateOf { gridState.firstVisibleItemIndex == 0 } }
+    val isFinalPage = pagerState.currentPage == 4
 
-    val currentVersion = remember {
-        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0" } 
-        catch (e: Exception) { "1.0.0" }
-    }
-
-    val isTransitioning = animatedVisibilityScope.transition.currentState != animatedVisibilityScope.transition.targetState
-
-    LaunchedEffect(Unit) {
-        viewModel.checkForAppUpdate(currentVersion)
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { viewModel.importAudio(context, it) { newNoteId -> onNoteClick(newNoteId) } }
-    }
-
-    BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode || drawerState.isOpen) {
-        if (drawerState.isOpen) {
-            coroutineScope.launch { drawerState.close() }
-        } else if (selectionMode) {
-            selectionMode = false; selectedNotes = emptySet()
-        } else if (isSearchFocused) {
-            focusManager.clearFocus() 
-        } else {
-            viewModel.updateSearchQuery("") 
-        }
-    }
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = !isTransitioning, 
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.width(280.dp)
+    Scaffold(
+        bottomBar = {
+            AnimatedVisibility(
+                visible = !isFinalPage,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
             ) {
-                Column(
+                Row(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.height(24.dp))
-                    Text("Sort By", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
-                        val sortOptions = listOf(
-                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
-                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
-                        )
-                        sortOptions.forEachIndexed { index, option ->
-                            SegmentedButton(
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = sortOptions.size),
-                                onClick = { viewModel.setSortMode(index) },
-                                selected = sortMode == index
-                            ) { Icon(option.icon, contentDescription = option.description, modifier = Modifier.size(18.dp)) }
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            "Labels",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (isMultiSelectLabelMode && selectedLabels.isNotEmpty()) {
-                            IconButton(onClick = { showDeleteMultipleLabelsDialog = true }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete Selected Labels", tint = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                        IconButton(onClick = { viewModel.setMultiSelectLabelMode(!isMultiSelectLabelMode) }) {
-                            Icon(
-                                Icons.Default.Checklist,
-                                contentDescription = "Toggle Multi-Select",
-                                tint = if (isMultiSelectLabelMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(4) { index ->
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (pagerState.currentPage == index) MaterialTheme.colorScheme.primary 
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    )
                             )
                         }
                     }
 
-                    NavigationDrawerItem(
-                        label = { Text("All Notes") },
-                        selected = selectedLabels.isEmpty(),
+                    Button(
                         onClick = {
-                            viewModel.clearLabelFilter()
-                            if (!isMultiSelectLabelMode) coroutineScope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-
-                    uniqueLabels.forEach { label ->
-                        val isLabelSelected = label in selectedLabels
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(28.dp))
-                                .background(
-                                    if (isLabelSelected) MaterialTheme.colorScheme.secondaryContainer
-                                    else Color.Transparent
-                                )
-                                .combinedClickable(
-                                    onClick = {
-                                        viewModel.toggleLabelFilter(label)
-                                        if (!isMultiSelectLabelMode) coroutineScope.launch { drawerState.close() }
-                                    },
-                                    onLongClick = {
-                                        labelBeingManaged = label
-                                        renameLabelInput = label
+                            if (pagerState.currentPage < 3) {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
+                            } else if (pagerState.currentPage == 3) {
+                                if (apiKeyInput.isBlank()) return@Button
+                                
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(4)
+                                    keyState = KeyVerificationState.LOADING
+                                    
+                                    try {
+                                        // Sanitisasi Ekstrem: Hapus prefix "Bearer " jika user ga sengaja kopas, dan libas semua karakter aneh/spasi siluman
+                                        val cleanKey = apiKeyInput
+                                            .replace("Bearer ", "", ignoreCase = true)
+                                            .replace(Regex("[^a-zA-Z0-9_\\-]"), "")
+                                        
+                                        if (aiProvider == 0) {
+                                            val req = GenerateContentRequest(
+                                                contents = listOf(Content(parts = listOf(Part(text = "hi"))))
+                                            )
+                                            RetrofitClient.service.generateContent(cleanKey, req)
+                                        } else {
+                                            // Menggunakan model Groq yang paling stabil saat ini
+                                            val req = GroqChatRequest(
+                                                model = "llama-3.1-8b-instant",
+                                                messages = listOf(GroqMessage(role = "user", content = "hi"))
+                                            )
+                                            RetrofitClient.groqService.generateContent("Bearer $cleanKey", req)
+                                        }
+                                        
+                                        delay(800)
+                                        keyState = KeyVerificationState.SUCCESS
+                                        
+                                    } catch (e: Exception) {
+                                        delay(800)
+                                        
+                                        // SMART BYPASS: Jika Groq melempar 400, 404, atau 422, artinya API KEY VALID (lolos autentikasi 401),
+                                        // server hanya menolak format dummy request-nya. Kita perlakukan sebagai SUKSES.
+                                        if (e is HttpException && aiProvider == 1 && (e.code() == 400 || e.code() == 404 || e.code() == 422)) {
+                                            keyState = KeyVerificationState.SUCCESS
+                                        } else {
+                                            keyState = KeyVerificationState.ERROR
+                                            keyErrorMessage = when (e) {
+                                                is HttpException -> when (e.code()) {
+                                                    401 -> "The key is invalid or unauthorized. Please ensure there are no missing characters."
+                                                    403 -> "Access denied. Your key might be restricted by the provider."
+                                                    429 -> "Rate limit exceeded. The provider's server is busy."
+                                                    else -> "Server rejected the test (Code: ${e.code()}). Check your key."
+                                                }
+                                                is UnknownHostException, is ConnectException, is SocketTimeoutException -> 
+                                                    "Network error. We couldn't reach the server."
+                                                else -> "Unexpected error: ${e.localizedMessage}"
+                                            }
+                                        }
                                     }
-                                )
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            if (isMultiSelectLabelMode) {
-                                Checkbox(
-                                    checked = isLabelSelected,
-                                    onCheckedChange = { viewModel.toggleLabelFilter(label) }
+                                }
+                            }
+                        },
+                        enabled = when(pagerState.currentPage) {
+                            1 -> nameInput.isNotBlank()
+                            3 -> apiKeyInput.isNotBlank()
+                            else -> true
+                        },
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            text = if (pagerState.currentPage == 3) "Verify Key" else "Next",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null
+                        )
+                    }
+                }
+            }
+        }
+    ) { paddingValues ->
+        val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+        val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
+        
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = false,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(top = safeTopMargin)
+        ) { page ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                when (page) {
+                    0 -> {
+                        Text(
+                            text = "Welcome to Binot.",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Your intelligent voice workspace. Speak naturally, and let advanced AI structure your thoughts perfectly.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    1 -> {
+                        Text(
+                            text = "Let's get acquainted.",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "What should we call you?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                        OutlinedTextField(
+                            value = nameInput,
+                            onValueChange = { nameInput = it },
+                            label = { Text("Enter your name") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    2 -> {
+                        Text(
+                            text = "Tailor your experience.",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "How would you like Binot to process your voice by default? You can change this later.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        Text(
+                            text = "Processing Task",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp)
+                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                onClick = { aiTask = 0 },
+                                selected = aiTask == 0
+                            ) { Text("Tidy Up", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                onClick = { aiTask = 1 },
+                                selected = aiTask == 1
+                             ) { Text("Summary", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                onClick = { aiTask = 2 },
+                                selected = aiTask == 2
+                            ) { Text("Analyze", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Text(
+                            text = "Output Format",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp)
+                        )
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                onClick = { aiFormat = 0 },
+                                selected = aiFormat == 0
+                            ) { Text("Paragraphs") }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                onClick = { aiFormat = 1 },
+                                selected = aiFormat == 1
+                            ) { Text("Bullets") }
+                         }
+                    }
+                    3 -> {
+                        Text(
+                            text = "Connect the brain.",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Binot needs an AI engine to operate. Choose a provider and claim your free access key.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                onClick = { aiProvider = 0 },
+                                selected = aiProvider == 0
+                            ) { Text("Google Gemini") }
+                            SegmentedButton(
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                onClick = { aiProvider = 1 },
+                                selected = aiProvider == 1
+                            ) { Text("Groq AI") }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        AnimatedContent(targetState = aiProvider, label = "provider_info") { provider ->
+                            if (provider == 1) {
+                                Text(
+                                    text = "Groq is highly recommended for its blazing fast speed.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
                                 )
                             } else {
-                                Icon(
-                                    Icons.Default.Label,
-                                    contentDescription = null,
-                                    tint = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                Text(
+                                    text = "Gemini is great for processing very long audio recordings.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
                                 )
                             }
-                            Spacer(Modifier.width(12.dp))
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Button(
+                            onClick = {
+                                val url = if (aiProvider == 0) "https://aistudio.google.com/app/apikey" else "https://console.groq.com/keys"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = null)
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                label,
-                                color = if (isLabelSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.labelLarge
+                                text = "Get Free API Key",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
                             )
                         }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = apiKeyInput,
+                            onValueChange = { apiKeyInput = it },
+                            label = { Text("Paste your API Key here") },
+                            leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-
-                    NavigationDrawerItem(
-                        label = { Text("Create New Label") },
-                        icon = { Icon(Icons.Default.Add, null) },
-                        selected = false,
-                        onClick = { showNewLabelDialog = true; coroutineScope.launch { drawerState.close() } },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    NavigationDrawerItem(
-                        label = { Text("Trash", color = MaterialTheme.colorScheme.error) },
-                        icon = { Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
-                        selected = false,
-                        onClick = { 
-                            coroutineScope.launch { drawerState.close() }
-                            onTrashClick() 
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-
-                    Spacer(Modifier.height(24.dp))
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            topBar = {
-                if (selectionMode) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
-                    ) {
-                        TopAppBar(
-                            title = { Text("${selectedNotes.size} Selected") },
-                            navigationIcon = {
-                                IconButton(onClick = { selectionMode = false; selectedNotes = emptySet() }) { Icon(Icons.Default.Close, "Cancel") }
-                            },
-                            actions = {
-                                IconButton(onClick = { showSelectionMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                    4 -> {
+                        AnimatedContent(
+                            targetState = keyState, 
+                            label = "verification_state",
+                            transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(400)) }
+                        ) { state ->
+                            when (state) {
+                                KeyVerificationState.IDLE, KeyVerificationState.LOADING -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(72.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 6.dp
+                                        )
+                                        Spacer(modifier = Modifier.height(32.dp))
+                                        Text(
+                                            text = "Connecting to ${if (aiProvider == 0) "Gemini" else "Groq"}...",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Verifying your access key. This will only take a moment.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
-                                DropdownMenu(
-                                    expanded = showSelectionMenu,
-                                    onDismissRequest = { showSelectionMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Select All") },
-                                        leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
-                                        onClick = {
-                                            selectedNotes = notes.map { it.id }.toSet()
-                                            showSelectionMenu = false
+                                KeyVerificationState.SUCCESS -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(96.dp)
+                                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Success",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(48.dp)
+                                            )
                                         }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(if (isAllPinned) "Unpin" else "Pin") },
-                                        leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null) },
-                                        onClick = {
-                                            viewModel.togglePinMultiple(selectedNotes, !isAllPinned)
-                                            selectionMode = false
-                                            selectedNotes = emptySet()
-                                            showSelectionMenu = false
+                                        Spacer(modifier = Modifier.height(32.dp))
+                                        Text(
+                                            text = "Connection Established",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Your API key is active. The AI engine is fully configured and ready to organize your thoughts.",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(48.dp))
+                                        
+                                        Button(
+                                            onClick = { 
+                                                // Lempar cleanKey ke Settings agar aplikasi utama tidak memakan raw input yang berpotensi kotor
+                                                val finalCleanKey = apiKeyInput.replace("Bearer ", "", ignoreCase = true).replace(Regex("[^a-zA-Z0-9_\\-]"), "")
+                                                onComplete(nameInput.trim(), aiProvider, finalCleanKey, aiTask, aiFormat) 
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(64.dp),
+                                            shape = CircleShape,
+                                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "Start Workspace",
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Clone") },
-                                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
-                                        onClick = {
-                                            viewModel.cloneMultiple(selectedNotes)
-                                            selectionMode = false
-                                            selectedNotes = emptySet()
-                                            showSelectionMenu = false
+                                    }
+                                }
+                                KeyVerificationState.ERROR -> {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(96.dp)
+                                                .background(MaterialTheme.colorScheme.errorContainer, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Error,
+                                                contentDescription = "Error",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(48.dp)
+                                            )
                                         }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                        onClick = {
-                                            showDeleteDialog = true
-                                            showSelectionMenu = false
+                                        Spacer(modifier = Modifier.height(32.dp))
+                                        Text(
+                                            text = "Connection Failed",
+                                            style = MaterialTheme.typography.headlineMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = keyErrorMessage,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(48.dp))
+                                        
+                                        OutlinedButton(
+                                            onClick = { 
+                                                coroutineScope.launch { 
+                                                    pagerState.animateScrollToPage(3) 
+                                                    keyState = KeyVerificationState.IDLE
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(56.dp),
+                                            shape = CircleShape
+                                        ) {
+                                            Text(
+                                                text = "Review API Key",
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
-                                    )
+                                    }
                                 }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                        )
-                    }
-                } else {
-                    with(animatedVisibilityScope) {
-                        MorphingSearchBar(
-                            query = searchQuery,
-                            onQueryChange = { viewModel.updateSearchQuery(it) },
-                            isFocused = isSearchFocused,
-                            onFocusChange = { isSearchFocused = it },
-                            onClearFocus = { focusManager.clearFocus() },
-                            onMenuClick = {
-                                if (!isTransitioning) {
-                                    coroutineScope.launch { drawerState.open() }
-                                }
-                            },
-                            modifier = Modifier.animateEnterExit(
-                                enter = scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(tween(300)),
-                                exit = scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(tween(300))
-                            )
-                        )
-                    }
-                }
-            },
-            floatingActionButton = {
-                if (!selectionMode) {
-                    with(sharedTransitionScope) {
-                        ExtendedFloatingActionButton(
-                            onClick = { importLauncher.launch("audio/*") },
-                            expanded = isFabExpanded,
-                            icon = { Icon(Icons.Default.Audiotrack, "Import Audio") },
-                            text = { Text("Import Audio") },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier
-                                .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
-                                .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
-                                .then(with(animatedVisibilityScope) { 
-                                    Modifier.animateEnterExit(
-                                        enter = scaleIn(initialScale = 0f, animationSpec = tween(300)),
-                                        exit = scaleOut(targetScale = 0f, animationSpec = tween(300))
-                                    ) 
-                                })
-                        )
-                    }
-                }
-            }
-        ) { innerPadding ->
-            Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                if (notes.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (searchQuery.isNotEmpty() || selectedLabels.isNotEmpty()) "No results found." else "No notes yet.\nStart recording or import audio!",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                } else {
-                    with(animatedVisibilityScope) {
-                        LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(2),
-                            state = gridState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .weight(1f)
-                                .padding(horizontal = 8.dp)
-                                .animateEnterExit(
-                                    enter = slideInVertically(initialOffsetY = { 100 }, animationSpec = tween(300)) + fadeIn(tween(300)),
-                                    exit = slideOutVertically(targetOffsetY = { 100 }, animationSpec = tween(300)) + fadeOut(tween(300))
-                                ),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalItemSpacing = 8.dp
-                        ) {
-                            if (pinnedNotes.isNotEmpty()) {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    Text("Pinned", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp))
-                                }
-                                items(pinnedNotes, key = { it.id }) { note ->
-                                    DismissibleNoteCard(
-                                        note = note,
-                                        modifier = Modifier.animateItem(),
-                                        isSelected = selectedNotes.contains(note.id),
-                                        selectedLabels = selectedLabels,
-                                        selectionMode = selectionMode,
-                                        sharedTransitionScope = sharedTransitionScope,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        viewModel = viewModel,
-                                        parentScope = coroutineScope,
-                                        snackbarHostState = snackbarHostState,
-                                        onSelect = { 
-                                            if (selectionMode) { 
-                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                                if (selectedNotes.isEmpty()) selectionMode = false 
-                                            } else { onNoteClick(note.id) }
-                                        },
-                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                    )
-                                }
-                            }
-
-                            if (unpinnedNotes.isNotEmpty()) {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    Text("Collection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp))
-                                }
-                                items(unpinnedNotes, key = { it.id }) { note ->
-                                    DismissibleNoteCard(
-                                        note = note,
-                                        modifier = Modifier.animateItem(),
-                                        isSelected = selectedNotes.contains(note.id),
-                                        selectedLabels = selectedLabels,
-                                        selectionMode = selectionMode,
-                                        sharedTransitionScope = sharedTransitionScope,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        viewModel = viewModel,
-                                        parentScope = coroutineScope,
-                                        snackbarHostState = snackbarHostState,
-                                        onSelect = { 
-                                            if (selectionMode) { 
-                                                selectedNotes = if (selectedNotes.contains(note.id)) selectedNotes - note.id else selectedNotes + note.id 
-                                                if (selectedNotes.isEmpty()) selectionMode = false 
-                                            } else { onNoteClick(note.id) }
-                                        },
-                                        onLongSelect = { if (!selectionMode) { selectionMode = true; selectedNotes = setOf(note.id) } }
-                                    )
-                                }
-                            }
-                            item(span = StaggeredGridItemSpan.FullLine) { Spacer(modifier = Modifier.height(100.dp)) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showNewLabelDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewLabelDialog = false },
-            title = { Text("Create New Label") },
-            text = { 
-                OutlinedTextField(
-                    value = newLabelInput, 
-                    onValueChange = { newLabelInput = it }, 
-                    label = { Text("Label Name") }, 
-                    singleLine = true, 
-                    modifier = Modifier.fillMaxWidth()
-                ) 
-            },
-            confirmButton = {
-                Button(onClick = {
-                    if (newLabelInput.isNotBlank()) {
-                        viewModel.createIndependentLabel(newLabelInput.trim())
-                        showNewLabelDialog = false
-                        newLabelInput = ""
-                    }
-                }) { Text("Create Label") }
-            },
-            dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
-        )
-    }
-
-    if (labelBeingManaged != null) {
-        AlertDialog(
-            onDismissRequest = { labelBeingManaged = null },
-            title = { Text("Edit Label") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = renameLabelInput,
-                        onValueChange = { renameLabelInput = it },
-                        label = { Text("Label Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    TextButton(
-                        onClick = {
-                            labelBeingManaged?.let { viewModel.deleteLabel(it) }
-                            labelBeingManaged = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Delete Label")
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val oldLabel = labelBeingManaged
-                    if (oldLabel != null && renameLabelInput.isNotBlank() && renameLabelInput.trim() != oldLabel) {
-                        viewModel.renameLabel(oldLabel, renameLabelInput.trim())
-                    }
-                    labelBeingManaged = null
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { labelBeingManaged = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showDeleteMultipleLabelsDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteMultipleLabelsDialog = false },
-            title = { Text("Delete Labels") },
-            text = { Text("${selectedLabels.size} label${if (selectedLabels.size > 1) "s" else ""} will be removed from all notes. This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteMultipleLabels(selectedLabels)
-                    showDeleteMultipleLabelsDialog = false
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMultipleLabelsDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Notes") },
-            text = { Text("Are you sure you want to delete ${selectedNotes.size} notes?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val idsToDelete = selectedNotes
-                    viewModel.deleteMultiple(idsToDelete)
-                    showDeleteDialog = false
-                    selectionMode = false
-                    selectedNotes = emptySet()
-                    coroutineScope.launch {
-                        val result = snackbarHostState.showSnackbar(
-                            message = "${idsToDelete.size} note${if (idsToDelete.size > 1) "s" else ""} moved to Trash",
-                            actionLabel = "Undo",
-                            duration = SnackbarDuration.Short
-                        )
-                        if (result == SnackbarResult.ActionPerformed) {
-                            viewModel.undoDelete()
-                        } else {
-                            viewModel.clearRecentlyDeleted()
-                        }
-                    }
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
-        )
-    }
-
-    if (latestRelease != null) {
-        ModalBottomSheet(onDismissRequest = { viewModel.dismissUpdateNotification() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.NewReleases, contentDescription = "Update", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("New Update Available!", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Version ${latestRelease!!.tag_name} is ready to download.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.4f), RoundedCornerShape(12.dp)).padding(16.dp)) {
-                    Text(latestRelease!!.body ?: "Performance improvements and new features.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.verticalScroll(rememberScrollState()))
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = { val apkUrl = latestRelease!!.assets?.firstOrNull()?.browser_download_url ?: latestRelease!!.html_url; context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))); viewModel.dismissUpdateNotification() }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Download Update (APK)") }
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(latestRelease!!.html_url))); viewModel.dismissUpdateNotification() }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("View on GitHub") }
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
-@Composable
-fun DismissibleNoteCard(
-    note: NoteEntity,
-    modifier: Modifier = Modifier,
-    isSelected: Boolean,
-    selectedLabels: Set<String>,
-    selectionMode: Boolean,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    viewModel: HistoryViewModel,
-    parentScope: CoroutineScope, 
-    snackbarHostState: SnackbarHostState,
-    onSelect: () -> Unit,
-    onLongSelect: () -> Unit
-) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { dismissValue ->
-            if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
-                viewModel.deleteMultiple(setOf(note.id))
-                parentScope.launch {
-                    val result = snackbarHostState.showSnackbar(
-                        message = "Note moved to Trash",
-                        actionLabel = "Undo",
-                        duration = SnackbarDuration.Short
-                    )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        viewModel.undoDelete()
-                    } else {
-                        viewModel.clearRecentlyDeleted()
-                    }
-                }
-                false
-            } else {
-                false
-            }
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = !selectionMode,
-        enableDismissFromEndToStart = !selectionMode,
-        backgroundContent = {
-            val color by animateColorAsState(
-                targetValue = if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                label = "deleteColor"
-            )
-            val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(color, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 24.dp),
-                contentAlignment = alignment
-            ) {
-                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
-                }
-            }
-        },
-        modifier = modifier
-    ) {
-        with(sharedTransitionScope) {
-            NoteCard(
-                note = note, 
-                isSelected = isSelected,
-                selectedLabels = selectedLabels,
-                modifier = Modifier.sharedBounds(
-                    sharedContentState = rememberSharedContentState("note-${note.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                    boundsTransform = { _, _ -> tween(300) }
-                ),
-                onLongClick = onLongSelect,
-                onClick = onSelect,
-                onLabelClick = { label -> viewModel.toggleLabelFilter(label) }
-            )
-        }
-    }
-}
-
-@Composable
-fun MorphingSearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    isFocused: Boolean,
-    onFocusChange: (Boolean) -> Unit,
-    onClearFocus: () -> Unit,
-    onMenuClick: () -> Unit,
-    modifier: Modifier = Modifier 
-) {
-    val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
-    val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
-    
-    val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
-    val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
-    val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else safeTopMargin + 8.dp, animationSpec = spring(), label = "tMargin")
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) safeTopMargin + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalPadding)
-            .padding(top = topMargin, bottom = 8.dp)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(MaterialTheme.colorScheme.surface) 
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
-                .defaultMinSize(minHeight = 48.dp) 
-        ) {
-            AnimatedVisibility(visible = !isFocused, enter = expandHorizontally(animationSpec = spring()), exit = shrinkHorizontally(animationSpec = spring())) {
-                IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            Spacer(modifier = Modifier.width(if (isFocused) 12.dp else 4.dp))
-            Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                if (query.isEmpty()) { Text("Search notes...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
-                BasicTextField(
-                    value = query, onValueChange = onQueryChange,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), singleLine = true,
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) }
-                )
-            }
-            if (isFocused || query.isNotEmpty()) {
-                Icon(
-                    imageVector = Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { onQueryChange(""); onClearFocus() }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun NoteCard(
-    note: NoteEntity,
-    isSelected: Boolean,
-    selectedLabels: Set<String>,
-    modifier: Modifier = Modifier,
-    onLongClick: () -> Unit,
-    onClick: () -> Unit,
-    onLabelClick: (String) -> Unit
-) {
-    val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
-    val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        ),
-        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = minHeight)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            if (!note.label.isNullOrBlank()) {
-                val labels = note.label.split("|").map { it.trim() }.filter { it.isNotBlank() }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    labels.forEach { label ->
-                        val isLabelActive = label in selectedLabels
-                        Box(
-                            modifier = Modifier
-                                .background(if (isLabelActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f), RoundedCornerShape(50))
-                                .clickable { onLabelClick(label) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Label, null, tint = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(label, style = MaterialTheme.typography.labelSmall, color = if (isLabelActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
             }
-
-            Text(note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(displayText, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-            Spacer(modifier = Modifier.weight(1f))
-            Text(formatter.format(Date(note.timestamp)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
