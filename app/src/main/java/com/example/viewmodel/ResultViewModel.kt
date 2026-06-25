@@ -275,9 +275,9 @@ class ResultViewModel(
                     STRICT RULES YOU MUST OBEY:
                     1. Output language MUST follow: $targetLanguage.
                     2. NO conversational filler, pleasantries, or introductions.
-                    3. Format nicely using Markdown if needed, but ABSOLUTELY NO BACKTICKS (`).
+                    3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT if you need to generate a ```mermaid diagram.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. STRICT MATH RULE: DO NOT translate math formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. NEVER spell out math in the target language.
+                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. For chemical reactions/formulas, use the `\ce{}` macro inside LaTeX (e.g., `$\ce{H2O}$`).
                 """.trimIndent()
                 
                 val userPrompt = "Term to explain: \"$selectedText\""
@@ -568,9 +568,10 @@ class ResultViewModel(
                     
                     CRITICAL STRICT RULES YOU MUST OBEY:
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
-                    2. NO QUOTES FOR ENTIRE TEXT: DO NOT wrap your entire output in quotes or markdown code blocks.
-                    3. MANDATORY LATEX CONVERSION & STRICT MATH RULE: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. DO NOT wrap in any extra characters. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. NEVER use `${'$'}` as a plain text symbol. ABSOLUTELY DO NOT translate math formulas into spoken words (e.g., NEVER write "sigma dari i sama dengan 1", write `\sum_{i=1}` instead). Math MUST remain as universal LaTeX symbols and MUST NOT be translated into the target language.
+                    2. NO GLOBAL WRAPPING: DO NOT wrap your entire output in quotes or a global markdown code block.
+                    3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX (e.g., `${'$'}${'$'} \ce{H2O -> H+ + OH-} ${'$'}${'$'}`). NEVER translate math/chemistry into spoken words.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
+                    5. VISUAL DIAGRAMS: If the text describes a workflow, sequence, timeline, or system architecture, visualize it using a valid Mermaid.js diagram enclosed strictly in ```mermaid ... ``` blocks.
                 """.trimIndent()
                 
                 val userContent = "Process this text strictly into $language:\n\n${currentNote.rawText}"
