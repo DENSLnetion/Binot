@@ -399,9 +399,7 @@ body {
 </head>
 <body>
 <div class="mermaid-container">
-    <pre class="mermaid">
-    ${mermaidContent.replace("<", "&lt;").replace(">", "&gt;")}
-    </pre>
+<pre class="mermaid">${mermaidContent.trim().replace("<", "&lt;").replace(">", "&gt;")}</pre>
 </div>
 <script>${assets.js}</script>
 <script>
@@ -556,7 +554,7 @@ fun MarkdownText(
 
             // 1. Logika Tangkap Mermaid Block
             if (inMermaidBlock) {
-                if (line.trim() == "```") {
+                if (line.trim().startsWith("```") && !line.trim().startsWith("```mermaid")) {
                     inMermaidBlock = false
                     items.add(MarkdownItem.MermaidBlock(mermaidBlockContent, mermaidBlockStartIndex))
                     mermaidBlockContent = ""
