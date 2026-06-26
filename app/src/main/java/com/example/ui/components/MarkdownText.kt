@@ -3,6 +3,7 @@ package com.example.ui.components
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -249,8 +250,10 @@ li { margin-bottom: 4px; }
 <script>${assets.mhchem}</script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    var el = document.getElementById('math-content');
+    
     if (typeof renderMathInElement !== 'undefined') {
-        renderMathInElement(document.getElementById('math-content'), {
+        renderMathInElement(el, {
             delimiters: [
                 {left: "$$", right: "$$", display: true},
                 {left: "\\[", right: "\\]", display: true},
@@ -260,11 +263,20 @@ document.addEventListener("DOMContentLoaded", function() {
             throwOnError: false
         });
     }
-    setTimeout(function() {
-        var el = document.getElementById('math-content');
-        var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-        if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 30);
-    }, 500);
+    
+    // LOGIC UPGRADE: Pakai ResizeObserver biar realtime update tinggi, hindari nge-blank saat di-scroll cepat di LazyColumn
+    if (window.ResizeObserver) {
+        new ResizeObserver(function(entries) {
+            var h = entries[0].target.getBoundingClientRect().height;
+            if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 30);
+        }).observe(el);
+    } else {
+        // Fallback untuk device sangat lama
+        setTimeout(function() {
+            var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
+            if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 30);
+        }, 500);
+    }
 });
 </script>
 </body>
@@ -309,6 +321,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 .alpha(webViewAlpha),
             factory = { ctx ->
                 android.webkit.WebView(ctx).apply {
+                    // LOGIC UPGRADE: Wajib MATCH_PARENT supaya gak kena clip oleh Compose Box
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     isVerticalScrollBarEnabled = false
                     isHorizontalScrollBarEnabled = false 
@@ -398,7 +415,7 @@ body {
 </style>
 </head>
 <body>
-<div class="mermaid-container">
+<div class="mermaid-container" id="mermaid-wrap">
 <pre class="mermaid">${mermaidContent.trim().replace("<", "&lt;").replace(">", "&gt;")}</pre>
 </div>
 <script>${assets.js}</script>
@@ -409,16 +426,27 @@ document.addEventListener("DOMContentLoaded", function() {
         theme: '$theme',
         securityLevel: 'loose'
     });
+    
     var el = document.querySelector('.mermaid');
+    var wrap = document.getElementById('mermaid-wrap');
     var rawContent = el ? el.textContent.trim() : '(empty)';
+    
     mermaid.run({
         nodes: [el],
         suppressErrors: false
     }).then(function() {
-        setTimeout(function() {
-            var h = el ? el.getBoundingClientRect().height : document.body.scrollHeight;
-            if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
-        }, 300);
+        // LOGIC UPGRADE: Real-time ResizeObserver buat Mermaid biar ga blank pas scroll
+        if (window.ResizeObserver) {
+            new ResizeObserver(function(entries) {
+                var h = entries[0].target.getBoundingClientRect().height;
+                if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
+            }).observe(wrap);
+        } else {
+            setTimeout(function() {
+                var h = wrap ? wrap.getBoundingClientRect().height : document.body.scrollHeight;
+                if (window.HeightBridge) window.HeightBridge.onHeightReady(Math.ceil(h) + 40);
+            }, 300);
+        }
     }).catch(function(err) {
         if (window.ErrorBridge) window.ErrorBridge.onMermaidError(
             (err && err.message ? err.message : String(err)) + '\n\n--- RAW ---\n' + rawContent
@@ -433,7 +461,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     var isRendered by remember(htmlContent) { mutableStateOf(false) }
     var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
-    var mermaidError by remember(htmlContent) { mutableStateOf<String?>(null) } // DI SINI TEMPAT YANG BENER
+    var mermaidError by remember(htmlContent) { mutableStateOf<String?>(null) }
 
     val density = LocalDensity.current
     val targetHeightDp = remember(webViewHeightPx) {
@@ -467,6 +495,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 .alpha(webViewAlpha),
             factory = { ctx ->
                 android.webkit.WebView(ctx).apply {
+                    // LOGIC UPGRADE: Wajib MATCH_PARENT supaya gak kena clip oleh Compose Box
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     isVerticalScrollBarEnabled = false
                     isHorizontalScrollBarEnabled = false 
