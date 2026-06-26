@@ -274,7 +274,6 @@ document.addEventListener("DOMContentLoaded", function() {
     // STATE CERDAS: Nahan shift layout dan nyalain animasi
     var isRendered by remember(htmlContent) { mutableStateOf(false) }
     var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
-    var mermaidError by remember(htmlContent) { mutableStateOf<String?>(null) }
 
     val density = LocalDensity.current
     val targetHeightDp = remember(webViewHeightPx) {
@@ -434,6 +433,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     var isRendered by remember(htmlContent) { mutableStateOf(false) }
     var webViewHeightPx by remember(htmlContent) { mutableStateOf(heightCache[htmlContent] ?: -1) }
+    var mermaidError by remember(htmlContent) { mutableStateOf<String?>(null) } // DI SINI TEMPAT YANG BENER
 
     val density = LocalDensity.current
     val targetHeightDp = remember(webViewHeightPx) {
