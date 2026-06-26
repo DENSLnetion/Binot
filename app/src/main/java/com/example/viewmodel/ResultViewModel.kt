@@ -270,6 +270,7 @@ class ResultViewModel(
                     return@launch
                 }
 
+                // PROMPT UPDATED: Added strict formatting rules for Math in explanations
                 var systemPrompt = """
                     You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
                     STRICT RULES YOU MUST OBEY:
@@ -277,16 +278,16 @@ class ResultViewModel(
                     2. NO conversational filler, pleasantries, or introductions.
                     3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT if you need to generate a ```mermaid diagram.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. STRICT MATH & CHEMISTRY RULE: DO NOT translate math/chemistry formulas into spoken words. Keep all mathematical concepts as pure universal LaTeX symbols. For chemical reactions/formulas, use the `\ce{}` macro inside LaTeX (e.g., `${'$'}\ce{H2O}${'$'}`).
+                    5. STRICT MATH FORMATTING: Convert all mathematical formulas into valid LaTeX syntax using `${'$'}${'$'}` or `${'$'}`. NEVER translate math/chemistry formulas into spoken words.
+                    6. NO MATH MARKDOWN & NO QUOTES: NEVER wrap LaTeX blocks in single or double quotes (WRONG: `'${'$'}x=1${'$'}'`). NEVER use asterisks (`**`, `*`) or underscores (`_`) inside or directly touching the LaTeX blocks. KaTeX handles its own styling.
                 """.trimIndent()
                 
-                // INJEKSI SPESIFIK GROQ (LLAMA) UNTUK EXPLAIN TEXT
                 if (provider == 1) {
                     systemPrompt += """
                         
                         [GROQ/LLAMA OVERRIDES]
-                        6. STRICT MATH ISOLATION: Keep math symbols inside `${'$'}${'$'}` strictly in Latin/Greek/Numbers. DO NOT put Arabic, Chinese, Korean, or any non-Latin translations INSIDE the math block. Put translated text OUTSIDE.
-                        7. MERMAID ALLOWED: You are ALLOWED and ENCOURAGED to use ` ```mermaid ` blocks for diagrams. Do not avoid backticks for diagrams.
+                        7. STRICT MATH ISOLATION: Keep math symbols inside `${'$'}${'$'}` strictly in Latin/Greek/Numbers. DO NOT put Arabic, Chinese, Korean, or any non-Latin translations INSIDE the math block. Put translated text OUTSIDE.
+                        8. MERMAID ALLOWED: You are ALLOWED and ENCOURAGED to use ` ```mermaid ` blocks for diagrams. Do not avoid backticks for diagrams.
                     """.trimIndent()
                 }
                 
@@ -568,6 +569,7 @@ class ResultViewModel(
                     else -> ""
                 }
 
+                // PROMPT SUPER STRICT: Anti markdown di dalam KaTeX & Wajib Quotes 100% di Mermaid
                 var systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
@@ -579,22 +581,22 @@ class ResultViewModel(
                     CRITICAL STRICT RULES YOU MUST OBEY:
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO GLOBAL WRAPPING: DO NOT wrap your entire output in quotes or a global markdown code block.
-                    3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX (e.g., `${'$'}${'$'} \ce{H2O -> H+ + OH-} ${'$'}${'$'}`). NEVER translate math/chemistry into spoken words.
-                    4. CRITICAL: DO NOT generate tables under any circumstances.
-                    5. VISUAL DIAGRAMS — MANDATORY ANALYSIS:
+                    3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX.
+                    4. STRICT MATH FORMATTING: NEVER wrap math equations in single or double quotes (e.g., WRONG: `'${'$'}x=1${'$'}'`, RIGHT: `${'$'}x=1${'$'}`). NEVER use Markdown formatting like asterisks (`**` or `*`) or underscores (`_`) INSIDE or directly touching the LaTeX blocks. KaTeX will crash if you format inside it. LaTeX handles its own styling.
+                    5. CRITICAL: DO NOT generate tables under any circumstances.
+                    6. VISUAL DIAGRAMS — MANDATORY ANALYSIS:
                        Before writing output, silently check: does the text contain IF/THEN conditions or branching? → flowchart TD. A sequence of events or steps? → flowchart LR. Person A interacts with Person B? → sequenceDiagram. Stages or schedule? → timeline.
                        If YES to any above, you MUST generate a Mermaid diagram in a ```mermaid ... ``` block.
-                       STRICT MERMAID SYNTAX: Always wrap node labels in double quotes if they contain commas, colons, parentheses, or any non-ASCII characters. Keep labels short (max 6 words). Example: A["Label with comma, here"] --> B["Another node"].
+                       STRICT MERMAID SYNTAX: You MUST wrap ALL node text/labels in double quotes to prevent syntax errors. Example: `A["Hitung S dan Produk"] --> B["Fungsi A (A n B)"]`. NEVER use nested double quotes inside a label; use single quotes instead (e.g., `D["Kelas '07.00'"]`). Keep labels short (max 6 words).
                        If text is purely factual/descriptive with no flow/logic/sequence → skip diagram entirely.
                 """.trimIndent()
                 
-                // INJEKSI SPESIFIK GROQ (LLAMA) UNTUK PROCESS TEXT AUTO
                 if (provider == 1) {
                     systemPrompt += """
                         
                         [GROQ/LLAMA OVERRIDES]
-                        6. MERMAID ALLOWANCE: Rule #2 forbids GLOBAL wrapping, but you MUST use ` ```mermaid ` blocks for diagrams. DO NOT avoid backticks for diagrams!
-                        7. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT translate variables or put Arabic, Chinese, Korean, or any Non-Latin characters INSIDE the math blocks. Put all translated text OUTSIDE the LaTeX blocks.
+                        7. MERMAID ALLOWANCE: Rule #2 forbids GLOBAL wrapping, but you MUST use ` ```mermaid ` blocks for diagrams. DO NOT avoid backticks for diagrams!
+                        8. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT translate variables or put Arabic, Chinese, Korean, or any Non-Latin characters INSIDE the math blocks. Put all translated text OUTSIDE the LaTeX blocks.
                     """.trimIndent()
                 }
                 
