@@ -457,7 +457,7 @@ class ResultViewModel(
                         2. VERBATIM TRANSCRIBE: Transcribe exactly what is spoken word-by-word, including informal words, repeated words, and natural speech flow.
                         3. KEEP PUNCTUATION & CAPITALIZATION: You MUST add accurate punctuation (periods, commas, question marks) and use proper capitalization to make it readable.
                         4. NO GRAMMAR CORRECTION: Absolutely DO NOT fix the speaker's grammatical errors or restructure their sentences.
-                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use Â², ^, ${'$'}, or ${'$'}${'$'}).
+                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use Ã‚Â², ^, ${'$'}, or ${'$'}${'$'}).
                         6. Automatically detect and transcribe in the spoken language.
                     """.trimIndent()
                     
@@ -572,7 +572,7 @@ class ResultViewModel(
                     else -> ""
                 }
 
-                // UPGRADE: Menambahkan FATAL WRONG vs CORRECT dan alternatif \mathbf{} buat KaTeX
+                // UPGRADE: Menambahkan FATAL WRONG vs CORRECT, penanganan LaTeX, dan perketatan syntax Mermaid.
                 var systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
@@ -590,11 +590,15 @@ class ResultViewModel(
                        - CORRECT: `${'$'}E=mc^2${'$'}`
                        If you desperately need to bold a mathematical element, YOU MUST use pure LaTeX: `${'$'}\mathbf{E}=mc^2${'$'}`. NEVER wrap equations in single or double quotes.
                     5. CRITICAL: DO NOT generate tables under any circumstances.
-                    6. VISUAL DIAGRAMS — MANDATORY ANALYSIS:
-                       Before writing output, silently check: does the text contain IF/THEN conditions or branching? → flowchart TD. A sequence of events or steps? → flowchart LR. Person A interacts with Person B? → sequenceDiagram. Stages or schedule? → timeline.
-                       If YES to any above, you MUST generate a Mermaid diagram in a ```mermaid ... ``` block.
-                       STRICT MERMAID SYNTAX: You MUST wrap ALL node text/labels in double quotes to prevent syntax errors. Example: `A["Hitung S dan Produk"] --> B["Fungsi A (A n B)"]`. NEVER use nested double quotes inside a label; use single quotes instead (e.g., `D["Kelas '07.00'"]`). Keep labels short (max 6 words).
-                       If text is purely factual/descriptive with no flow/logic/sequence → skip diagram entirely.
+                    6. VISUAL DIAGRAMS (MANDATORY ANALYSIS):
+                       - Silently check: Does the text contain a process, schedule, logic, IF/THEN, or sequence?
+                       - IF YES: You MUST generate a Mermaid diagram in a ```mermaid ... ``` block.
+                       - STRICT MERMAID RULES:
+                         a) ONLY use `flowchart TD` or `flowchart LR`. DO NOT use sequenceDiagram, timeline, or anything else.
+                         b) ALWAYS wrap node labels in double quotes. Example: `A["Start"] --> B["Check Data"]`.
+                         c) For IF/THEN conditions, use standard edge text. Example: `B -->|Yes| C["Success"]` or `B -->|No| D["Fail"]`. NEVER use `|>`.
+                         d) DO NOT use nested double quotes inside labels; use single quotes instead (e.g., `D["Kelas '07.00'"]`). Keep labels short (max 6 words).
+                       - IF NO (purely descriptive): Skip diagram completely.
                 """.trimIndent()
                 
                 if (provider == 1) {
@@ -602,7 +606,8 @@ class ResultViewModel(
                         
                         [GROQ/LLAMA OVERRIDES]
                         7. MERMAID ALLOWANCE: Rule #2 forbids GLOBAL wrapping, but you MUST use ` ```mermaid ` blocks for diagrams. DO NOT avoid backticks for diagrams!
-                        8. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT translate variables or put Arabic, Chinese, Korean, or any Non-Latin characters INSIDE the math blocks. Put all translated text OUTSIDE the LaTeX blocks.
+                        8. MERMAID ENFORCEMENT: If the text explains a system flow, login steps, conditions, or processes, YOU ARE FORCED to output a flowchart. Do not ignore logic.
+                        9. STRICT MATH ISOLATION: Equations inside `${'$'}${'$'}` or `${'$'}` MUST remain in standard universal symbols (Latin/Greek/Numbers). DO NOT translate variables or put Arabic, Chinese, Korean, or any Non-Latin characters INSIDE the math blocks. Put all translated text OUTSIDE the LaTeX blocks.
                     """.trimIndent()
                 }
                 
