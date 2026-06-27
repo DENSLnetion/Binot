@@ -1,17 +1,20 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.MaterialTheme
-import kotlin.math.sin
 
 @Composable
 fun AudioWaveform(
@@ -21,38 +24,58 @@ fun AudioWaveform(
     val primary = MaterialTheme.colorScheme.primary
     val tertiary = MaterialTheme.colorScheme.tertiary
     
-    Canvas(modifier = modifier
-        .fillMaxWidth()
-        .height(100.dp)) {
-        val width = size.width
-        val height = size.height
-        val centerY = height / 2
+    // Spring animation untuk fluiditas gerakan batang, mencegah jitter
+    val animatedAmplitude by animateFloatAsState(
+        targetValue = amplitude,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "smoothAmplitude"
+    )
 
-        val barWidth = 12f
-        val gap = 16f
-        val numBars = (width / (barWidth + gap)).toInt()
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(100.dp)
+    ) {
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        val centerY = canvasHeight / 2f
+
+        // Hardcode ke 5 batang ekspresif
+        val numBars = 5
+        val barWidth = 36.dp.toPx() 
+        val gap = 12.dp.toPx()
+        
+        // Kalkulasi posisi sentral
+        val totalWaveWidth = (numBars * barWidth) + ((numBars - 1) * gap)
+        val startX = (canvasWidth - totalWaveWidth) / 2f
 
         val gradient = Brush.linearGradient(
             colors = listOf(primary, tertiary)
         )
 
+        // Bobot distribusi amplitudo (tengah bereaksi paling ekstrem)
+        val weightMultipliers = listOf(0.3f, 0.7f, 1.0f, 0.7f, 0.3f)
+
         for (i in 0 until numBars) {
-            val x = i * (barWidth + gap)
+            val x = startX + (i * (barWidth + gap))
             
-            val dynamicHeight = if (amplitude > 0f) {
-                val baseHeight = (sin(i.toFloat() * 0.5f) * 10f) + 15f
-                (baseHeight + (amplitude * height * 0.8f * Math.random().toFloat())).coerceIn(10f, height)
+            // Base height ketika diam
+            val baseHeight = 16.dp.toPx() 
+            
+            val dynamicHeight = if (animatedAmplitude > 0f) {
+                baseHeight + (animatedAmplitude * (canvasHeight - baseHeight) * weightMultipliers[i])
             } else {
-                4f 
+                baseHeight 
             }
             
-            val yOffset = centerY - (dynamicHeight / 2)
+            val finalHeight = dynamicHeight.coerceIn(baseHeight, canvasHeight)
+            val yOffset = centerY - (finalHeight / 2f)
 
             drawRoundRect(
                 brush = gradient,
                 topLeft = Offset(x, yOffset),
-                size = Size(barWidth, dynamicHeight),
-                cornerRadius = CornerRadius(barWidth / 2, barWidth / 2)
+                size = Size(barWidth, finalHeight),
+                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
             )
         }
     }
