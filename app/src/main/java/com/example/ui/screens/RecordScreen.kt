@@ -5,16 +5,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,8 +30,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +65,8 @@ fun RecordScreen(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current // Injeksi Haptic Engine
+    
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
     val amplitude by viewModel.amplitude.collectAsState()
@@ -95,38 +101,14 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // Smart & Dynamic Greeting - Mainstream & English
+    // Smart & Dynamic Greeting
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetings = remember(hour) {
         when (hour) {
-            in 5..11 -> listOf(
-                "Good morning,", 
-                "Rise and shine,", 
-                "A fresh start,", 
-                "Morning inspiration,", 
-                "Start your day right,"
-            )
-            in 12..16 -> listOf(
-                "Good afternoon,", 
-                "Midday thoughts,", 
-                "Keep it going,", 
-                "Stay productive,", 
-                "Afternoon check-in,"
-            )
-            in 17..20 -> listOf(
-                "Good evening,", 
-                "Winding down,", 
-                "Evening reflection,", 
-                "Time to relax,", 
-                "Sunset thoughts,"
-            )
-            else -> listOf(
-                "Late night thoughts,", 
-                "Midnight notes,", 
-                "Still awake?,", 
-                "Quiet hours,", 
-                "Rest well,"
-            )
+            in 5..11 -> listOf("Good morning,", "Rise and shine,", "A fresh start,", "Morning inspiration,", "Start your day right,")
+            in 12..16 -> listOf("Good afternoon,", "Midday thoughts,", "Keep it going,", "Stay productive,", "Afternoon check-in,")
+            in 17..20 -> listOf("Good evening,", "Winding down,", "Evening reflection,", "Time to relax,", "Sunset thoughts,")
+            else -> listOf("Late night thoughts,", "Midnight notes,", "Still awake?,", "Quiet hours,", "Rest well,")
         }
     }
     val randomGreeting = remember(hour) { greetings.random() }
@@ -155,396 +137,437 @@ fun RecordScreen(
     val scrollState = rememberScrollState()
 
     with(animatedVisibilityScope) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(horizontal = 24.dp)
-                // Tap di area kosong mana saja (atas/bawah) untuk TUTUP saat expanded
-                .pointerInput(isExpanded) {
-                    if (isExpanded) {
-                        detectTapGestures(
-                            onTap = {
-                                isTappedExpanded = false
-                                isPressExpanded = false
-                            }
-                        )
-                    }
-                },
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
+            // Layer 0: Material 3 Expressive Background
+            M3ExpressiveBackground(isRecording = isRecording, isExpanded = isExpanded)
 
-            BoxWithConstraints(
+            // Layer 1: Main Content UI
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                val availableHeight = maxHeight
-                
-                // State Animasi Morphing
-                val boxHeight by animateDpAsState(
-                    targetValue = if (isExpanded) availableHeight else 160.dp,
-                    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow),
-                    label = "boxHeight"
-                )
-                val topAlpha by animateFloatAsState(
-                    targetValue = if (isExpanded) 0f else 1f,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "topAlpha"
-                )
-                val cornerRadius by animateDpAsState(
-                    targetValue = if (isExpanded) 40.dp else 32.dp,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "cornerRadius"
-                )
-                val containerColor by animateColorAsState(
-                    targetValue = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "containerColor"
-                )
-                val contentColor by animateColorAsState(
-                    targetValue = if (isExpanded) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "contentColor"
-                )
-
-                // Area Atas (Sapaan & Waveform)
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 176.dp)
-                        .alpha(topAlpha)
-                        .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        text = greetingText,
-                        style = MaterialTheme.typography.displaySmall,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.pointerInput(Unit) {
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp)
+                    // Tap luar untuk tutup
+                    .pointerInput(isExpanded) {
+                        if (isExpanded) {
                             detectTapGestures(
                                 onTap = {
-                                    greetingTapCount++
-                                    if (greetingTapCount > 4) {
-                                        greetingTapCount = 0
-                                        showEasterEggDialog = true
-                                        easterEggAnswer = ""
-                                    }
-                                }
-                            )
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Surface(
-                        shape = CircleShape,
-                        color = when {
-                            isPaused -> MaterialTheme.colorScheme.tertiaryContainer
-                            isRecording -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.secondaryContainer
-                        },
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    ) {
-                        Text(
-                            text = timeString,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = when {
-                                isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
-                                isRecording -> MaterialTheme.colorScheme.onPrimaryContainer
-                                else -> MaterialTheme.colorScheme.onSecondaryContainer
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    AudioWaveform(
-                        amplitude = amplitude,
-                        modifier = Modifier
-                            .padding(vertical = 16.dp)
-                            .animateEnterExit(enter = fadeIn())
-                    )
-                }
-
-                // Morphing Box UTAMA (Menangani logika BUKA dan NGINTIP saat nguncup)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(boxHeight)
-                        .clip(RoundedCornerShape(cornerRadius))
-                        .background(containerColor)
-                        // Gesture BUKA via Swipe Up (Hanya aktif saat nguncup)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                if (!isExpanded && dragAmount < -5) {
-                                    isTappedExpanded = true
-                                }
-                            }
-                        }
-                        // TAP: open permanently (only when collapsed)
-                        .pointerInput("tap", isTappedExpanded) {
-                            if (!isTappedExpanded) {
-                                detectTapGestures(
-                                    onTap = {
-                                        isTappedExpanded = true
-                                    }
-                                )
-                            }
-                        }
-                        // HOLD: peek while finger down, close on release (only when collapsed)
-                        .pointerInput("hold", isTappedExpanded) {
-                            if (!isTappedExpanded) {
-                                detectTapGestures(
-                                    onPress = {
-                                        isPressExpanded = true
-                                        tryAwaitRelease()
-                                        isPressExpanded = false
-                                        // Release always closes — tap is handled separately above
-                                    }
-                                )
-                            }
-                        }
-                        .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
-                ) {
-                    
-                    // Auto-scroll ke bawah saat ada teks baru
-                    LaunchedEffect(recognizedText, isExpanded) {
-                        if (recognizedText.isNotEmpty()) {
-                            scrollState.animateScrollTo(scrollState.maxValue)
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        // DRAG HANDLE - Terisolasi khusus nanganin TUTUP
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                // Tap untuk nutup instan tanpa delay (aktif hanya saat ngembang)
-                                .clickable(
-                                    enabled = isExpanded,
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null // Hilangin ripple biar tetep elegan
-                                ) {
                                     isTappedExpanded = false
                                     isPressExpanded = false
                                 }
-                                // Swipe ke bawah untuk nutup (aktif hanya saat ngembang)
-                                .pointerInput(isExpanded) {
-                                    if (isExpanded) {
-                                        detectVerticalDragGestures { _, dragAmount ->
-                                            if (dragAmount > 5) {
-                                                isTappedExpanded = false
-                                                isPressExpanded = false
-                                            }
-                                        }
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(32.dp)
-                                    .height(4.dp)
-                                    .clip(CircleShape)
-                                    .background(contentColor.copy(alpha = 0.3f))
                             )
                         }
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(safeTopMargin + 24.dp))
 
-                        AnimatedVisibility(visible = isExpanded) {
-                            Column {
-                                Text(
-                                    text = "Live Transcription",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    val availableHeight = maxHeight
+                    
+                    // FISIKA PEGAS: Damping 0.9f biar ga mental (wobble), Stiffness medium biar berat dan solid.
+                    val stiffSpring = spring<Dp>(dampingRatio = 0.9f, stiffness = 400f)
+                    
+                    val boxHeight by animateDpAsState(
+                        targetValue = if (isExpanded) availableHeight else 160.dp,
+                        animationSpec = stiffSpring,
+                        label = "boxHeight"
+                    )
+                    val topAlpha by animateFloatAsState(
+                        targetValue = if (isExpanded) 0f else 1f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                        label = "topAlpha"
+                    )
+                    val cornerRadius by animateDpAsState(
+                        targetValue = if (isExpanded) 40.dp else 32.dp,
+                        animationSpec = stiffSpring,
+                        label = "cornerRadius"
+                    )
+                    val containerColor by animateColorAsState(
+                        targetValue = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                        label = "containerColor"
+                    )
+                    val contentColor by animateColorAsState(
+                        targetValue = if (isExpanded) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                        label = "contentColor"
+                    )
+                    
+                    // Elevasi Haptic & Layering
+                    val boxElevation by animateDpAsState(
+                        targetValue = if (isExpanded) 12.dp else if (isPressExpanded) 4.dp else 2.dp,
+                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                        label = "boxElevation"
+                    )
+                    val boxScale by animateFloatAsState(
+                        targetValue = if (isPressExpanded) 0.97f else 1f,
+                        animationSpec = spring(stiffness = Spring.StiffnessHigh),
+                        label = "boxScale"
+                    )
+
+                    // Area Atas (Sapaan & Waveform)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 176.dp)
+                            .alpha(topAlpha)
+                            .animateEnterExit(enter = slideInVertically { -50 } + fadeIn()),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = greetingText,
+                            style = MaterialTheme.typography.displaySmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = {
+                                        greetingTapCount++
+                                        if (greetingTapCount > 4) {
+                                            greetingTapCount = 0
+                                            showEasterEggDialog = true
+                                            easterEggAnswer = ""
+                                        }
+                                    }
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Surface(
+                            shape = CircleShape,
+                            color = when {
+                                isPaused -> MaterialTheme.colorScheme.tertiaryContainer
+                                isRecording -> MaterialTheme.colorScheme.primaryContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        ) {
+                            AnimatedContent(targetState = timeString, label = "timeAnimation") { time ->
+                                Text(
+                                    text = time,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = when {
+                                        isPaused -> MaterialTheme.colorScheme.onTertiaryContainer
+                                        isRecording -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        else -> MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
                             }
                         }
 
-                        // Area Teks: Murni cuma buat Scroll, nggak bakal mengganggu gesture Drag Handle
-                        Text(
-                            text = displayLiveText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = contentColor,
-                            textAlign = TextAlign.Start,
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        AudioWaveform(
+                            amplitude = amplitude,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(scrollState, enabled = isExpanded) 
+                                .padding(vertical = 16.dp)
+                                .animateEnterExit(enter = fadeIn())
                         )
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Area Tombol Perekaman
-            val isSplit = isRecording || isPaused
-            val totalAreaWidth = 280.dp
-
-            Box(
-                modifier = Modifier
-                    .widthIn(min = totalAreaWidth)
-                    .height(80.dp)
-                    .animateEnterExit(enter = scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))),
-                contentAlignment = Alignment.Center
-            ) {
-                var isLeftPressed by remember { mutableStateOf(false) }
-                var isStopPressed by remember { mutableStateOf(false) }
-
-                val leftTargetWidth = when {
-                    isStopPressed && isSplit -> 88.dp 
-                    isLeftPressed && isSplit -> 152.dp  
-                    isLeftPressed            -> totalAreaWidth + 56.dp 
-                    isSplit                  -> 120.dp
-                    else                     -> totalAreaWidth
-                }
-                val rightTargetWidth = when {
-                    !isSplit                  -> 0.dp
-                    isStopPressed              -> 152.dp 
-                    isLeftPressed               -> 88.dp  
-                    else                        -> 120.dp
-                }
-                val gapTarget = if (isSplit) 16.dp else 0.dp
-
-                val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
-                val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
-                val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
-                val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
-                val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(gapWidth),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.wrapContentWidth()
-                ) {
+                    // Morphing Box UTAMA (Engine Gestur Presisi)
                     Box(
                         modifier = Modifier
-                            .width(leftButtonWidth)
-                            .height(80.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
-                                    isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                    else                 -> MaterialTheme.colorScheme.primary
-                                }
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(boxHeight)
+                            .scale(boxScale)
+                            .shadow(
+                                elevation = boxElevation,
+                                shape = RoundedCornerShape(cornerRadius),
+                                spotColor = MaterialTheme.colorScheme.primary,
+                                ambientColor = MaterialTheme.colorScheme.primary
                             )
-                            .pointerInput(isSplit, isPaused) {
-                                detectTapGestures(
-                                    onPress = {
-                                        isLeftPressed = true
-                                        tryAwaitRelease()
-                                        isLeftPressed = false
-                                        when {
-                                            !isSplit -> {
-                                                if (!hasPermission) {
-                                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
-                                                } else {
-                                                    val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
-                                                    viewModel.toggleRecording(isEmulator, recordMode)
+                            .clip(RoundedCornerShape(cornerRadius))
+                            .background(containerColor)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (!isExpanded && dragAmount < -5) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        isTappedExpanded = true
+                                    }
+                                }
+                            }
+                            .pointerInput("tap", isTappedExpanded) {
+                                if (!isTappedExpanded) {
+                                    detectTapGestures(
+                                        onTap = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isTappedExpanded = true
+                                        }
+                                    )
+                                }
+                            }
+                            .pointerInput("hold", isTappedExpanded) {
+                                if (!isTappedExpanded) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            isPressExpanded = true
+                                            tryAwaitRelease()
+                                            isPressExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(top = 8.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
+                    ) {
+                        LaunchedEffect(recognizedText, isExpanded) {
+                            if (recognizedText.isNotEmpty()) {
+                                scrollState.animateScrollTo(scrollState.maxValue)
+                            }
+                        }
+
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // DRAG HANDLE
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .clickable(
+                                        enabled = isExpanded,
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        isTappedExpanded = false
+                                        isPressExpanded = false
+                                    }
+                                    .pointerInput(isExpanded) {
+                                        if (isExpanded) {
+                                            detectVerticalDragGestures { _, dragAmount ->
+                                                if (dragAmount > 5) {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    isTappedExpanded = false
+                                                    isPressExpanded = false
                                                 }
                                             }
-                                            isPaused -> viewModel.resumeRecording()
-                                            else     -> viewModel.pauseRecording()
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(32.dp)
+                                        .height(4.dp)
+                                        .clip(CircleShape)
+                                        .background(contentColor.copy(alpha = 0.3f))
                                 )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = when {
-                                    isSplit && isPaused -> Icons.Default.PlayArrow
-                                    isSplit            -> Icons.Default.Pause
-                                    else               -> Icons.Default.Mic
-                                },
-                                contentDescription = when {
-                                    isSplit && isPaused -> "Resume"
-                                    isSplit            -> "Pause"
-                                    else               -> "Record"
-                                },
-                                tint = when {
-                                    isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
-                                    isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    else                 -> MaterialTheme.colorScheme.onPrimary
-                                },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .scale(leftIconScale)
-                            )
-                            if (!isSplit) {
-                                Spacer(modifier = Modifier.width(12.dp))
+                            }
+
+                            AnimatedVisibility(visible = isExpanded) {
+                                Column {
+                                    Text(
+                                        text = "Live Transcription",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+                            }
+
+                            // Teks dengan transisi Crossfade
+                            AnimatedContent(
+                                targetState = displayLiveText,
+                                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
+                                label = "TranscriptionFade"
+                            ) { text ->
                                 Text(
-                                    text = "Record",
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    style = MaterialTheme.typography.titleMedium
+                                    text = text,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = contentColor,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(scrollState, enabled = isExpanded) 
                                 )
                             }
                         }
                     }
+                }
 
-                    if (rightButtonWidth > 0.dp) {
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Area Tombol Perekaman dengan injeksi haptic dan micro-interaction
+                val isSplit = isRecording || isPaused
+                val totalAreaWidth = 280.dp
+
+                Box(
+                    modifier = Modifier
+                        .widthIn(min = totalAreaWidth)
+                        .height(80.dp)
+                        .animateEnterExit(enter = scaleIn(initialScale = 0.5f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    var isLeftPressed by remember { mutableStateOf(false) }
+                    var isStopPressed by remember { mutableStateOf(false) }
+
+                    val leftTargetWidth = when {
+                        isStopPressed && isSplit -> 88.dp 
+                        isLeftPressed && isSplit -> 152.dp  
+                        isLeftPressed            -> totalAreaWidth + 24.dp // Mengurangi melar biar lebih padat/stiff
+                        isSplit                  -> 120.dp
+                        else                     -> totalAreaWidth
+                    }
+                    val rightTargetWidth = when {
+                        !isSplit                  -> 0.dp
+                        isStopPressed              -> 152.dp 
+                        isLeftPressed               -> 88.dp  
+                        else                        -> 120.dp
+                    }
+                    val gapTarget = if (isSplit) 16.dp else 0.dp
+
+                    val buttonSpring = spring<Dp>(dampingRatio = 0.8f, stiffness = 400f)
+
+                    val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = buttonSpring, label = "leftWidth")
+                    val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = buttonSpring, label = "rightWidth")
+                    val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
+                    val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = buttonSpring, label = "gap")
+                    
+                    // Micro-interaction Scale
+                    val leftScale by animateFloatAsState(targetValue = if (isLeftPressed) 0.92f else 1f, animationSpec = spring(stiffness = Spring.StiffnessHigh), label = "leftScale")
+                    val rightScale by animateFloatAsState(targetValue = if (isStopPressed) 0.92f else 1f, animationSpec = spring(stiffness = Spring.StiffnessHigh), label = "rightScale")
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(gapWidth),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.wrapContentWidth()
+                    ) {
+                        // Tombol Play/Pause/Record
                         Box(
                             modifier = Modifier
-                                .width(rightButtonWidth)
+                                .width(leftButtonWidth)
                                 .height(80.dp)
-                                .alpha(rightButtonAlpha)
+                                .scale(leftScale)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.tertiary)
-                                .pointerInput(Unit) {
+                                .background(
+                                    when {
+                                        isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
+                                        isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
+                                        else                 -> MaterialTheme.colorScheme.primary
+                                    }
+                                )
+                                .pointerInput(isSplit, isPaused) {
                                     detectTapGestures(
                                         onPress = {
-                                            isStopPressed = true
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isLeftPressed = true
                                             tryAwaitRelease()
-                                            isStopPressed = false
-
-                                            viewModel.stopRecordingInstant()
-
-                                            coroutineScope.launch {
-                                                val saved = viewModel.saveNote(recordMode)
-                                                snackbarHostState.showSnackbar(
-                                                    message = if (saved) "Note saved" else "No text to save",
-                                                    duration = SnackbarDuration.Short
-                                                )
+                                            isLeftPressed = false
+                                            when {
+                                                !isSplit -> {
+                                                    if (!hasPermission) {
+                                                        launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                                    } else {
+                                                        val isEmulator = Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("Emulator")
+                                                        viewModel.toggleRecording(isEmulator, recordMode)
+                                                    }
+                                                }
+                                                isPaused -> viewModel.resumeRecording()
+                                                else     -> viewModel.pauseRecording()
                                             }
                                         }
                                     )
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (isStopPressed && recordMode == 1) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.onTertiary,
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "Stop",
-                                    tint = MaterialTheme.colorScheme.onTertiary,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AnimatedContent(
+                                    targetState = isSplit to isPaused,
+                                    label = "iconAnim"
+                                ) { (split, paused) ->
+                                    Icon(
+                                        imageVector = when {
+                                            split && paused -> Icons.Default.PlayArrow
+                                            split            -> Icons.Default.Pause
+                                            else               -> Icons.Default.Mic
+                                        },
+                                        contentDescription = null,
+                                        tint = when {
+                                            split && !paused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                            split && paused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                            else                 -> MaterialTheme.colorScheme.onPrimary
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                                if (!isSplit) {
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Record",
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+                        }
+
+                        // Tombol Stop
+                        if (rightButtonWidth > 0.dp) {
+                            Box(
+                                modifier = Modifier
+                                    .width(rightButtonWidth)
+                                    .height(80.dp)
+                                    .scale(rightScale)
+                                    .alpha(rightButtonAlpha)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.tertiary)
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onPress = {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                isStopPressed = true
+                                                tryAwaitRelease()
+                                                isStopPressed = false
+
+                                                viewModel.stopRecordingInstant()
+                                                coroutineScope.launch {
+                                                    val saved = viewModel.saveNote(recordMode)
+                                                    snackbarHostState.showSnackbar(
+                                                        message = if (saved) "Note saved" else "No text to save",
+                                                        duration = SnackbarDuration.Short
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isStopPressed && recordMode == 1) {
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.onTertiary,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = "Stop",
+                                        tint = MaterialTheme.colorScheme.onTertiary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
     }
 
-    // Easter Egg: Question Dialog
+    // Easter Egg: Question Dialog (Unchanged)
     if (showEasterEggDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -598,7 +621,7 @@ fun RecordScreen(
         )
     }
 
-    // Easter Egg: Love Popup
+    // Easter Egg: Love Popup (Unchanged)
     if (showLovePopup) {
         AlertDialog(
             onDismissRequest = { showLovePopup = false },
@@ -611,10 +634,7 @@ fun RecordScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Text(
-                        text = "💖",
-                        style = MaterialTheme.typography.displayMedium
-                    )
+                    Text(text = "💖", style = MaterialTheme.typography.displayMedium)
                     Text(
                         text = "For Dinda",
                         style = MaterialTheme.typography.headlineMedium,
@@ -652,5 +672,92 @@ fun RecordScreen(
                 }
             }
         )
+    }
+}
+
+// ==========================================
+// BACKGROUND RENDER ENGINE (MATHEMATIKA MURNI)
+// ==========================================
+@Composable
+private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
+    val primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+    val secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f)
+    val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+
+    // Animasi rotasi amoeba sangat pelan (20 detik per putaran), jalan waktu rekaman aja
+    val infiniteTransition = rememberInfiniteTransition(label = "amoebaRotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = if (isRecording) 360f else 0f, // Muter kalau record
+        animationSpec = infiniteRepeatable(
+            animation = tween(20000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+
+    // Parallax effect buat kapsul memanjang waktu box ditarik
+    val pillParallaxOffset by animateFloatAsState(
+        targetValue = if (isExpanded) 150f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "parallax"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        // 1. Ambient Glow (Gradiasi cahaya di latar murni)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(primaryColor, Color.Transparent),
+                center = Offset(w * 0.5f, h * 0.2f),
+                radius = w * 0.8f
+            ),
+            center = Offset(w * 0.5f, h * 0.2f),
+            radius = w * 0.8f
+        )
+        
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(secondaryColor, Color.Transparent),
+                center = Offset(w * 0.2f, h * 0.7f),
+                radius = w * 0.7f
+            ),
+            center = Offset(w * 0.2f, h * 0.7f),
+            radius = w * 0.7f
+        )
+
+        // 2. The Elongated Pill (Kiri Bawah, Parallax)
+        translate(left = -w * 0.1f, top = h * 0.6f + pillParallaxOffset) {
+            rotate(degrees = 35f, pivot = Offset(0f, 0f)) {
+                drawRoundRect(
+                    color = primaryContainer,
+                    topLeft = Offset(0f, 0f),
+                    size = Size(w * 0.8f, h * 0.18f),
+                    cornerRadius = CornerRadius(h * 0.09f, h * 0.09f)
+                )
+            }
+        }
+
+        // 3. The Amoeba (Kanan Atas, muter pelan, Bezier murni)
+        val path = Path().apply {
+            val scale = w * 0.45f
+            moveTo(scale, 0f)
+            cubicTo(scale * 1.5f, 0f, scale * 2f, scale * 0.5f, scale * 1.8f, scale)
+            cubicTo(scale * 1.5f, scale * 1.5f, scale * 0.5f, scale * 1.8f, 0f, scale * 1.2f)
+            cubicTo(-scale * 0.5f, scale * 0.5f, 0f, 0f, scale, 0f)
+            close()
+        }
+
+        translate(left = w * 0.7f, top = -h * 0.05f) {
+            rotate(degrees = rotation, pivot = Offset(w * 0.3f, w * 0.3f)) {
+                drawPath(
+                    path = path,
+                    color = tertiaryContainer
+                )
+            }
+        }
     }
 }
