@@ -30,14 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -142,8 +137,8 @@ fun RecordScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
-            // Layer 0: Material 3 Expressive Background
-            M3ExpressiveBackground(isRecording = isRecording, isExpanded = isExpanded)
+            // Layer 0: Material 3 Expressive Background (Glow Only)
+            M3ExpressiveBackground()
 
             // Layer 1: Main Content UI
             Column(
@@ -387,7 +382,7 @@ fun RecordScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Area Tombol Perekaman (DIKEMBALIKAN KE VERSI 30 PENUH)
+                // Area Tombol Perekaman
                 val isSplit = isRecording || isPaused
                 val totalAreaWidth = 280.dp
 
@@ -656,33 +651,12 @@ fun RecordScreen(
 }
 
 // ==========================================
-// BACKGROUND RENDER ENGINE (MATHEMATIKA MURNI)
+// BACKGROUND RENDER ENGINE (MINIMALIST GLOW)
 // ==========================================
 @Composable
-private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
+private fun M3ExpressiveBackground() {
     val primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
     val secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f)
-    val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-    val primaryContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-
-    // Animasi rotasi amoeba sangat pelan (20 detik per putaran), jalan waktu rekaman aja
-    val infiniteTransition = rememberInfiniteTransition(label = "amoebaRotation")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = if (isRecording) 360f else 0f, // Muter kalau record
-        animationSpec = infiniteRepeatable(
-            animation = tween(20000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation"
-    )
-
-    // Parallax effect buat kapsul memanjang waktu box ditarik
-    val pillParallaxOffset by animateFloatAsState(
-        targetValue = if (isExpanded) 150f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "parallax"
-    )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
@@ -708,36 +682,5 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
             center = Offset(w * 0.2f, h * 0.7f),
             radius = w * 0.7f
         )
-
-        // 2. The Elongated Pill (Kiri Bawah, Parallax)
-        translate(left = -w * 0.1f, top = h * 0.6f + pillParallaxOffset) {
-            rotate(degrees = 35f, pivot = Offset(0f, 0f)) {
-                drawRoundRect(
-                    color = primaryContainer,
-                    topLeft = Offset(0f, 0f),
-                    size = Size(w * 0.8f, h * 0.18f),
-                    cornerRadius = CornerRadius(h * 0.09f, h * 0.09f)
-                )
-            }
-        }
-
-        // 3. The Amoeba (Kanan Atas, muter pelan, Bezier murni)
-        val path = Path().apply {
-            val scale = w * 0.45f
-            moveTo(scale, 0f)
-            cubicTo(scale * 1.5f, 0f, scale * 2f, scale * 0.5f, scale * 1.8f, scale)
-            cubicTo(scale * 1.5f, scale * 1.5f, scale * 0.5f, scale * 1.8f, 0f, scale * 1.2f)
-            cubicTo(-scale * 0.5f, scale * 0.5f, 0f, 0f, scale, 0f)
-            close()
-        }
-
-        translate(left = w * 0.7f, top = -h * 0.05f) {
-            rotate(degrees = rotation, pivot = Offset(w * 0.3f, w * 0.3f)) {
-                drawPath(
-                    path = path,
-                    color = tertiaryContainer
-                )
-            }
-        }
     }
 }
