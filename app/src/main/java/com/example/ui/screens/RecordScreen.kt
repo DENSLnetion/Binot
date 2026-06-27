@@ -75,10 +75,12 @@ fun RecordScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
+    // State untuk kontrol morphing
     var isTappedExpanded by remember { mutableStateOf(false) }
     var isPressExpanded by remember { mutableStateOf(false) }
     val isExpanded = isTappedExpanded || isPressExpanded
 
+    // Easter egg state
     var greetingTapCount by remember { mutableStateOf(0) }
     var showEasterEggDialog by remember { mutableStateOf(false) }
     var easterEggAnswer by remember { mutableStateOf("") }
@@ -99,6 +101,7 @@ fun RecordScreen(
         hasPermission = granted
     }
 
+    // Smart & Dynamic Greeting
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetings = remember(hour) {
         when (hour) {
@@ -139,12 +142,15 @@ fun RecordScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
+            // Layer 0: Material 3 Expressive Background
             M3ExpressiveBackground(isRecording = isRecording, isExpanded = isExpanded)
 
+            // Layer 1: Main Content UI
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 24.dp)
+                    // Tap luar untuk tutup
                     .pointerInput(isExpanded) {
                         if (isExpanded) {
                             detectTapGestures(
@@ -166,6 +172,7 @@ fun RecordScreen(
                 ) {
                     val availableHeight = maxHeight
                     
+                    // FISIKA PEGAS: Damping 0.9f biar ga mental (wobble), Stiffness medium biar berat dan solid.
                     val stiffSpring = spring<Dp>(dampingRatio = 0.9f, stiffness = 400f)
                     
                     val boxHeight by animateDpAsState(
@@ -193,7 +200,15 @@ fun RecordScreen(
                         animationSpec = spring(stiffness = Spring.StiffnessMedium),
                         label = "contentColor"
                     )
+                    
+                    // Layering (Shadow dihapus)
+                    val boxScale by animateFloatAsState(
+                        targetValue = if (isPressExpanded) 0.97f else 1f,
+                        animationSpec = spring(stiffness = Spring.StiffnessHigh),
+                        label = "boxScale"
+                    )
 
+                    // Area Atas (Sapaan & Waveform)
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -255,12 +270,14 @@ fun RecordScreen(
                         )
                     }
 
+                    // Morphing Box UTAMA (Engine Gestur Presisi - Tanpa Shadow)
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(boxHeight)
-                            .clip(RoundedCornerShape(cornerRadius)) // SHADOW DIHAPUS DI SINI
+                            .scale(boxScale)
+                            .clip(RoundedCornerShape(cornerRadius))
                             .background(containerColor)
                             .pointerInput(Unit) {
                                 detectVerticalDragGestures { _, dragAmount ->
@@ -300,6 +317,7 @@ fun RecordScreen(
                         }
 
                         Column(modifier = Modifier.fillMaxSize()) {
+                            // DRAG HANDLE
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -347,6 +365,7 @@ fun RecordScreen(
                                 }
                             }
 
+                            // Teks dengan transisi Crossfade
                             AnimatedContent(
                                 targetState = displayLiveText,
                                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
@@ -368,7 +387,7 @@ fun RecordScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // AREA TOMBOL PEREKAMAN DIKEMBALIKAN KE BOUNCY ASLI LU
+                // Area Tombol Perekaman (DIKEMBALIKAN KE VERSI 30 PENUH)
                 val isSplit = isRecording || isPaused
                 val totalAreaWidth = 280.dp
 
@@ -382,7 +401,6 @@ fun RecordScreen(
                     var isLeftPressed by remember { mutableStateOf(false) }
                     var isStopPressed by remember { mutableStateOf(false) }
 
-                    // Lebar ditarik ke logic aslinya (totalAreaWidth + 56.dp)
                     val leftTargetWidth = when {
                         isStopPressed && isSplit -> 88.dp 
                         isLeftPressed && isSplit -> 152.dp  
@@ -398,13 +416,10 @@ fun RecordScreen(
                     }
                     val gapTarget = if (isSplit) 16.dp else 0.dp
 
-                    // Balik pake MediumBouncy lu
                     val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
                     val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
                     val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
                     val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
-                    
-                    // Efek scale icon tetep dijaga
                     val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
 
                     Row(
@@ -427,7 +442,6 @@ fun RecordScreen(
                                 .pointerInput(isSplit, isPaused) {
                                     detectTapGestures(
                                         onPress = {
-                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                             isLeftPressed = true
                                             tryAwaitRelease()
                                             isLeftPressed = false
@@ -449,27 +463,26 @@ fun RecordScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                AnimatedContent(
-                                    targetState = isSplit to isPaused,
-                                    label = "iconAnim"
-                                ) { (split, paused) ->
-                                    Icon(
-                                        imageVector = when {
-                                            split && paused -> Icons.Default.PlayArrow
-                                            split            -> Icons.Default.Pause
-                                            else               -> Icons.Default.Mic
-                                        },
-                                        contentDescription = null,
-                                        tint = when {
-                                            split && !paused -> MaterialTheme.colorScheme.onSecondaryContainer
-                                            split && paused  -> MaterialTheme.colorScheme.onPrimaryContainer
-                                            else                 -> MaterialTheme.colorScheme.onPrimary
-                                        },
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .scale(leftIconScale)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = when {
+                                        isSplit && isPaused -> Icons.Default.PlayArrow
+                                        isSplit            -> Icons.Default.Pause
+                                        else               -> Icons.Default.Mic
+                                    },
+                                    contentDescription = when {
+                                        isSplit && isPaused -> "Resume"
+                                        isSplit            -> "Pause"
+                                        else               -> "Record"
+                                    },
+                                    tint = when {
+                                        isSplit && !isPaused -> MaterialTheme.colorScheme.onSecondaryContainer
+                                        isSplit && isPaused  -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        else                 -> MaterialTheme.colorScheme.onPrimary
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .scale(leftIconScale)
+                                )
                                 if (!isSplit) {
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
@@ -492,12 +505,12 @@ fun RecordScreen(
                                     .pointerInput(Unit) {
                                         detectTapGestures(
                                             onPress = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 isStopPressed = true
                                                 tryAwaitRelease()
                                                 isStopPressed = false
 
                                                 viewModel.stopRecordingInstant()
+
                                                 coroutineScope.launch {
                                                     val saved = viewModel.saveNote(recordMode)
                                                     snackbarHostState.showSnackbar(
@@ -534,7 +547,7 @@ fun RecordScreen(
         }
     }
 
-    // Easter Egg dialog dan render background tidak diubah dari revisi sebelumnya
+    // Easter Egg: Question Dialog (Unchanged)
     if (showEasterEggDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -543,7 +556,7 @@ fun RecordScreen(
             },
             title = {
                 Text(
-                    text = "🔐 Secret Question",
+                    text = "柏 Secret Question",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -588,6 +601,7 @@ fun RecordScreen(
         )
     }
 
+    // Easter Egg: Love Popup (Unchanged)
     if (showLovePopup) {
         AlertDialog(
             onDismissRequest = { showLovePopup = false },
@@ -600,7 +614,7 @@ fun RecordScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Text(text = "💖", style = MaterialTheme.typography.displayMedium)
+                    Text(text = "猪", style = MaterialTheme.typography.displayMedium)
                     Text(
                         text = "For Dinda",
                         style = MaterialTheme.typography.headlineMedium,
@@ -614,7 +628,7 @@ fun RecordScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "In every line of code I write,\nin every bug I fix at night —\nit's always you I'm thinking of.\nYou are my favorite feature,\nmy most beautiful exception.\n\nForever yours,\nThe Developer 🌸",
+                            text = "In every line of code I write,\nin every bug I fix at night 窶能nit's always you I'm thinking of.\nYou are my favorite feature,\nmy most beautiful exception.\n\nForever yours,\nThe Developer 減",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             textAlign = TextAlign.Center,
@@ -622,7 +636,7 @@ fun RecordScreen(
                         )
                     }
                     Text(
-                        text = "✨ With all the love in the codebase ✨",
+                        text = "笨ｨ With all the love in the codebase 笨ｨ",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -634,7 +648,7 @@ fun RecordScreen(
                     onClick = { showLovePopup = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("🌹 Close")
+                    Text("源 Close")
                 }
             }
         )
@@ -642,7 +656,7 @@ fun RecordScreen(
 }
 
 // ==========================================
-// BACKGROUND RENDER ENGINE
+// BACKGROUND RENDER ENGINE (MATHEMATIKA MURNI)
 // ==========================================
 @Composable
 private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
@@ -651,10 +665,11 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
     val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
 
+    // Animasi rotasi amoeba sangat pelan (20 detik per putaran), jalan waktu rekaman aja
     val infiniteTransition = rememberInfiniteTransition(label = "amoebaRotation")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = if (isRecording) 360f else 0f, 
+        targetValue = if (isRecording) 360f else 0f, // Muter kalau record
         animationSpec = infiniteRepeatable(
             animation = tween(20000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -662,6 +677,7 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
         label = "rotation"
     )
 
+    // Parallax effect buat kapsul memanjang waktu box ditarik
     val pillParallaxOffset by animateFloatAsState(
         targetValue = if (isExpanded) 150f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
@@ -672,6 +688,7 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
         val w = size.width
         val h = size.height
 
+        // 1. Ambient Glow (Gradiasi cahaya di latar murni)
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(primaryColor, Color.Transparent),
@@ -692,6 +709,7 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
             radius = w * 0.7f
         )
 
+        // 2. The Elongated Pill (Kiri Bawah, Parallax)
         translate(left = -w * 0.1f, top = h * 0.6f + pillParallaxOffset) {
             rotate(degrees = 35f, pivot = Offset(0f, 0f)) {
                 drawRoundRect(
@@ -703,6 +721,7 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
             }
         }
 
+        // 3. The Amoeba (Kanan Atas, muter pelan, Bezier murni)
         val path = Path().apply {
             val scale = w * 0.45f
             moveTo(scale, 0f)
