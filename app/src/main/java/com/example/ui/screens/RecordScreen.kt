@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -66,7 +65,7 @@ fun RecordScreen(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val context = LocalContext.current
-    val haptics = LocalHapticFeedback.current // Injeksi Haptic Engine
+    val haptics = LocalHapticFeedback.current 
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -76,12 +75,10 @@ fun RecordScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // State untuk kontrol morphing
     var isTappedExpanded by remember { mutableStateOf(false) }
     var isPressExpanded by remember { mutableStateOf(false) }
     val isExpanded = isTappedExpanded || isPressExpanded
 
-    // Easter egg state
     var greetingTapCount by remember { mutableStateOf(0) }
     var showEasterEggDialog by remember { mutableStateOf(false) }
     var easterEggAnswer by remember { mutableStateOf("") }
@@ -102,7 +99,6 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // Smart & Dynamic Greeting
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetings = remember(hour) {
         when (hour) {
@@ -143,15 +139,12 @@ fun RecordScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
-            // Layer 0: Material 3 Expressive Background
             M3ExpressiveBackground(isRecording = isRecording, isExpanded = isExpanded)
 
-            // Layer 1: Main Content UI
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 24.dp)
-                    // Tap luar untuk tutup
                     .pointerInput(isExpanded) {
                         if (isExpanded) {
                             detectTapGestures(
@@ -173,7 +166,6 @@ fun RecordScreen(
                 ) {
                     val availableHeight = maxHeight
                     
-                    // FISIKA PEGAS: Damping 0.9f biar ga mental (wobble), Stiffness medium biar berat dan solid.
                     val stiffSpring = spring<Dp>(dampingRatio = 0.9f, stiffness = 400f)
                     
                     val boxHeight by animateDpAsState(
@@ -201,20 +193,7 @@ fun RecordScreen(
                         animationSpec = spring(stiffness = Spring.StiffnessMedium),
                         label = "contentColor"
                     )
-                    
-                    // Elevasi Haptic & Layering
-                    val boxElevation by animateDpAsState(
-                        targetValue = if (isExpanded) 12.dp else if (isPressExpanded) 4.dp else 2.dp,
-                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                        label = "boxElevation"
-                    )
-                    val boxScale by animateFloatAsState(
-                        targetValue = if (isPressExpanded) 0.97f else 1f,
-                        animationSpec = spring(stiffness = Spring.StiffnessHigh),
-                        label = "boxScale"
-                    )
 
-                    // Area Atas (Sapaan & Waveform)
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -276,20 +255,12 @@ fun RecordScreen(
                         )
                     }
 
-                    // Morphing Box UTAMA (Engine Gestur Presisi)
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(boxHeight)
-                            .scale(boxScale)
-                            .shadow(
-                                elevation = boxElevation,
-                                shape = RoundedCornerShape(cornerRadius),
-                                spotColor = MaterialTheme.colorScheme.primary,
-                                ambientColor = MaterialTheme.colorScheme.primary
-                            )
-                            .clip(RoundedCornerShape(cornerRadius))
+                            .clip(RoundedCornerShape(cornerRadius)) // SHADOW DIHAPUS DI SINI
                             .background(containerColor)
                             .pointerInput(Unit) {
                                 detectVerticalDragGestures { _, dragAmount ->
@@ -329,7 +300,6 @@ fun RecordScreen(
                         }
 
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // DRAG HANDLE
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -377,7 +347,6 @@ fun RecordScreen(
                                 }
                             }
 
-                            // Teks dengan transisi Crossfade
                             AnimatedContent(
                                 targetState = displayLiveText,
                                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
@@ -399,7 +368,7 @@ fun RecordScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Area Tombol Perekaman dengan injeksi haptic dan micro-interaction
+                // AREA TOMBOL PEREKAMAN DIKEMBALIKAN KE BOUNCY ASLI LU
                 val isSplit = isRecording || isPaused
                 val totalAreaWidth = 280.dp
 
@@ -413,10 +382,11 @@ fun RecordScreen(
                     var isLeftPressed by remember { mutableStateOf(false) }
                     var isStopPressed by remember { mutableStateOf(false) }
 
+                    // Lebar ditarik ke logic aslinya (totalAreaWidth + 56.dp)
                     val leftTargetWidth = when {
                         isStopPressed && isSplit -> 88.dp 
                         isLeftPressed && isSplit -> 152.dp  
-                        isLeftPressed            -> totalAreaWidth + 24.dp // Mengurangi melar biar lebih padat/stiff
+                        isLeftPressed            -> totalAreaWidth + 56.dp 
                         isSplit                  -> 120.dp
                         else                     -> totalAreaWidth
                     }
@@ -428,28 +398,24 @@ fun RecordScreen(
                     }
                     val gapTarget = if (isSplit) 16.dp else 0.dp
 
-                    val buttonSpring = spring<Dp>(dampingRatio = 0.8f, stiffness = 400f)
-
-                    val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = buttonSpring, label = "leftWidth")
-                    val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = buttonSpring, label = "rightWidth")
+                    // Balik pake MediumBouncy lu
+                    val leftButtonWidth by animateDpAsState(targetValue = leftTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftWidth")
+                    val rightButtonWidth by animateDpAsState(targetValue = rightTargetWidth, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "rightWidth")
                     val rightButtonAlpha by animateFloatAsState(targetValue = if (isSplit) 1f else 0f, animationSpec = spring(stiffness = Spring.StiffnessMedium), label = "rightAlpha")
-                    val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = buttonSpring, label = "gap")
+                    val gapWidth by animateDpAsState(targetValue = gapTarget, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "gap")
                     
-                    // Micro-interaction Scale
-                    val leftScale by animateFloatAsState(targetValue = if (isLeftPressed) 0.92f else 1f, animationSpec = spring(stiffness = Spring.StiffnessHigh), label = "leftScale")
-                    val rightScale by animateFloatAsState(targetValue = if (isStopPressed) 0.92f else 1f, animationSpec = spring(stiffness = Spring.StiffnessHigh), label = "rightScale")
+                    // Efek scale icon tetep dijaga
+                    val leftIconScale by animateFloatAsState(targetValue = if (isLeftPressed && !isSplit) 1.12f else 1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium), label = "leftIconScale")
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(gapWidth),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.wrapContentWidth()
                     ) {
-                        // Tombol Play/Pause/Record
                         Box(
                             modifier = Modifier
                                 .width(leftButtonWidth)
                                 .height(80.dp)
-                                .scale(leftScale)
                                 .clip(CircleShape)
                                 .background(
                                     when {
@@ -499,7 +465,9 @@ fun RecordScreen(
                                             split && paused  -> MaterialTheme.colorScheme.onPrimaryContainer
                                             else                 -> MaterialTheme.colorScheme.onPrimary
                                         },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .scale(leftIconScale)
                                     )
                                 }
                                 if (!isSplit) {
@@ -513,13 +481,11 @@ fun RecordScreen(
                             }
                         }
 
-                        // Tombol Stop
                         if (rightButtonWidth > 0.dp) {
                             Box(
                                 modifier = Modifier
                                     .width(rightButtonWidth)
                                     .height(80.dp)
-                                    .scale(rightScale)
                                     .alpha(rightButtonAlpha)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.tertiary)
@@ -568,7 +534,7 @@ fun RecordScreen(
         }
     }
 
-    // Easter Egg: Question Dialog (Unchanged)
+    // Easter Egg dialog dan render background tidak diubah dari revisi sebelumnya
     if (showEasterEggDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -622,7 +588,6 @@ fun RecordScreen(
         )
     }
 
-    // Easter Egg: Love Popup (Unchanged)
     if (showLovePopup) {
         AlertDialog(
             onDismissRequest = { showLovePopup = false },
@@ -677,7 +642,7 @@ fun RecordScreen(
 }
 
 // ==========================================
-// BACKGROUND RENDER ENGINE (MATHEMATIKA MURNI)
+// BACKGROUND RENDER ENGINE
 // ==========================================
 @Composable
 private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
@@ -686,11 +651,10 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
     val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
 
-    // Animasi rotasi amoeba sangat pelan (20 detik per putaran), jalan waktu rekaman aja
     val infiniteTransition = rememberInfiniteTransition(label = "amoebaRotation")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = if (isRecording) 360f else 0f, // Muter kalau record
+        targetValue = if (isRecording) 360f else 0f, 
         animationSpec = infiniteRepeatable(
             animation = tween(20000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -698,7 +662,6 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
         label = "rotation"
     )
 
-    // Parallax effect buat kapsul memanjang waktu box ditarik
     val pillParallaxOffset by animateFloatAsState(
         targetValue = if (isExpanded) 150f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
@@ -709,7 +672,6 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
         val w = size.width
         val h = size.height
 
-        // 1. Ambient Glow (Gradiasi cahaya di latar murni)
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(primaryColor, Color.Transparent),
@@ -730,7 +692,6 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
             radius = w * 0.7f
         )
 
-        // 2. The Elongated Pill (Kiri Bawah, Parallax)
         translate(left = -w * 0.1f, top = h * 0.6f + pillParallaxOffset) {
             rotate(degrees = 35f, pivot = Offset(0f, 0f)) {
                 drawRoundRect(
@@ -742,7 +703,6 @@ private fun M3ExpressiveBackground(isRecording: Boolean, isExpanded: Boolean) {
             }
         }
 
-        // 3. The Amoeba (Kanan Atas, muter pelan, Bezier murni)
         val path = Path().apply {
             val scale = w * 0.45f
             moveTo(scale, 0f)
