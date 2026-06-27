@@ -270,7 +270,7 @@ class ResultViewModel(
                     return@launch
                 }
 
-                // PROMPT UPDATED: Added strict formatting rules for Math in explanations
+                // UPGRADE: Menambahkan WRONG vs RIGHT syntax dan ngajarin AI pakai \mathbf{}
                 var systemPrompt = """
                     You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
                     STRICT RULES YOU MUST OBEY:
@@ -279,7 +279,10 @@ class ResultViewModel(
                     3. Format nicely using Markdown. ABSOLUTELY NO BACKTICKS (`), EXCEPT if you need to generate a ```mermaid diagram.
                     4. CRITICAL: DO NOT generate tables under any circumstances.
                     5. STRICT MATH FORMATTING: Convert all mathematical formulas into valid LaTeX syntax using `${'$'}${'$'}` or `${'$'}`. NEVER translate math/chemistry formulas into spoken words.
-                    6. NO MATH MARKDOWN & NO QUOTES: NEVER wrap LaTeX blocks in single or double quotes (WRONG: `'${'$'}x=1${'$'}'`). NEVER use asterisks (`**`, `*`) or underscores (`_`) inside or directly touching the LaTeX blocks. KaTeX handles its own styling.
+                    6. NO MATH MARKDOWN & NO QUOTES: NEVER use Markdown asterisks (`**`, `*`) or underscores (`_`) INSIDE or immediately touching LaTeX blocks. 
+                       - FATAL WRONG: `**${'$'}x=1${'$'}**` or `${'$'}**x=1**${'$'}`
+                       - CORRECT: `${'$'}x=1${'$'}`
+                       If you desperately need to bold a mathematical variable, YOU MUST use pure LaTeX: `${'$'}\mathbf{x}=1${'$'}`. NEVER wrap LaTeX blocks in quotes.
                 """.trimIndent()
                 
                 if (provider == 1) {
@@ -569,7 +572,7 @@ class ResultViewModel(
                     else -> ""
                 }
 
-                // PROMPT SUPER STRICT: Anti markdown di dalam KaTeX & Wajib Quotes 100% di Mermaid
+                // UPGRADE: Menambahkan FATAL WRONG vs CORRECT dan alternatif \mathbf{} buat KaTeX
                 var systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
@@ -582,7 +585,10 @@ class ResultViewModel(
                     1. ZERO YAPPING: Output EXACTLY the final processed text. NO greetings, NO introductions, NO explanations of what you did.
                     2. NO GLOBAL WRAPPING: DO NOT wrap your entire output in quotes or a global markdown code block.
                     3. MANDATORY LATEX & CHEMISTRY: Convert ALL mathematical concepts, formulas, and equations into valid LaTeX syntax. Use `${'$'}${'$'}` for block equations and `${'$'}` for inline math. For CHEMICAL formulas and reactions, you MUST use the `\ce{}` macro inside LaTeX.
-                    4. STRICT MATH FORMATTING: NEVER wrap math equations in single or double quotes (e.g., WRONG: `'${'$'}x=1${'$'}'`, RIGHT: `${'$'}x=1${'$'}`). NEVER use Markdown formatting like asterisks (`**` or `*`) or underscores (`_`) INSIDE or directly touching the LaTeX blocks. KaTeX will crash if you format inside it. LaTeX handles its own styling.
+                    4. NO MATH MARKDOWN & NO QUOTES: KaTeX WILL CRASH if you use Markdown inside it. NEVER use asterisks (`**`, `*`) or underscores (`_`) INSIDE or immediately touching LaTeX blocks.
+                       - FATAL WRONG: `**${'$'}E=mc^2${'$'}**` or `${'$'}**E=mc^2**${'$'}`
+                       - CORRECT: `${'$'}E=mc^2${'$'}`
+                       If you desperately need to bold a mathematical element, YOU MUST use pure LaTeX: `${'$'}\mathbf{E}=mc^2${'$'}`. NEVER wrap equations in single or double quotes.
                     5. CRITICAL: DO NOT generate tables under any circumstances.
                     6. VISUAL DIAGRAMS — MANDATORY ANALYSIS:
                        Before writing output, silently check: does the text contain IF/THEN conditions or branching? → flowchart TD. A sequence of events or steps? → flowchart LR. Person A interacts with Person B? → sequenceDiagram. Stages or schedule? → timeline.
