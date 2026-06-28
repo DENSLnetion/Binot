@@ -8,24 +8,21 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.staggeredgrid.LazyHorizontalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.ui.text.style.TextOverflow
-import com.example.data.NoteEntity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
@@ -49,16 +46,20 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import com.example.data.NoteEntity
 import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecordScreen(
     viewModel: RecordViewModel,
@@ -66,7 +67,8 @@ fun RecordScreen(
     recordMode: Int,
     snackbarHostState: SnackbarHostState,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onNoteClick: (Int) -> Unit = {}
+    sharedTransitionScope: SharedTransitionScope,
+    onNoteClick: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current 
@@ -76,8 +78,8 @@ fun RecordScreen(
     val amplitude by viewModel.amplitude.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
-
     val recentNotes by viewModel.recentNotes.collectAsState()
+
     val coroutineScope = rememberCoroutineScope()
 
     // State untuk kontrol morphing
@@ -90,6 +92,9 @@ fun RecordScreen(
     var showEasterEggDialog by remember { mutableStateOf(false) }
     var easterEggAnswer by remember { mutableStateOf("") }
     var showLovePopup by remember { mutableStateOf(false) }
+
+    // State untuk fitur Peek Note (Ngintip Note)
+    var peekedNote by remember { mutableStateOf<NoteEntity?>(null) }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -155,7 +160,7 @@ fun RecordScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 24.dp)
-                    // Tap luar untuk tutup
+                    // Tap luar untuk tutup overlay peek dan kotak teks
                     .pointerInput(isExpanded) {
                         if (isExpanded) {
                             detectTapGestures(
@@ -213,7 +218,7 @@ fun RecordScreen(
                         label = "boxScale"
                     )
 
-                    // Area Atas (Sapaan & Waveform)
+                    // Area Atas (Sapaan, Waktu, Dinamis: Waveform vs Recent Notes)
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -247,7 +252,7 @@ fun RecordScreen(
                             color = when {
                                 isPaused -> MaterialTheme.colorScheme.tertiaryContainer
                                 isRecording -> MaterialTheme.colorScheme.primaryContainer
-                                else -> MaterialTheme.colorScheme.secondaryContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                             },
                             modifier = Modifier.padding(bottom = 16.dp)
                         ) {
@@ -267,29 +272,76 @@ fun RecordScreen(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Recent note chips — hilang saat recording aktif
-                        AnimatedVisibility(
-                            visible = !isRecording && !isPaused,
-                            enter = fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) { it / 2 },
-                            exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(animationSpec = tween(150)) { it / 2 }
+                        // Dynamic Area: 16 Terbaru VS Amplitudo
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            RecentNoteChips(
-                                notes = recentNotes,
-                                onNoteClick = onNoteClick,
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                        }
+                            // Amplitudo (Muncul saat Recording)
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = isRecording || isPaused,
+                                enter = fadeIn(tween(400)) + scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = 0.8f)),
+                                exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.8f)
+                            ) {
+                                AudioWaveform(
+                                    amplitude = amplitude,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
 
-                        // Waveform — muncul saat recording aktif
-                        AnimatedVisibility(
-                            visible = isRecording && !isPaused,
-                            enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)),
-                            exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(animationSpec = tween(200))
-                        ) {
-                            AudioWaveform(
-                                amplitude = amplitude,
-                                modifier = Modifier.padding(vertical = 16.dp)
-                            )
+                            // Horizontal Staggered List (Muncul saat IDLE)
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = !isRecording && !isPaused && recentNotes.isNotEmpty(),
+                                enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { 50 }),
+                                exit = fadeOut(tween(200)) + slideOutVertically(targetOffsetY = { 50 })
+                            ) {
+                                LazyHorizontalStaggeredGrid(
+                                    rows = StaggeredGridCells.Fixed(2),
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalItemSpacing = 8.dp,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(vertical = 4.dp)
+                                ) {
+                                    items(recentNotes, key = { it.id }) { note ->
+                                        val displayTitle = if (note.title.isBlank()) "tidak ada title" else note.title
+                                        with(sharedTransitionScope) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .sharedBounds(
+                                                        sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                                        animatedVisibilityScope = animatedVisibilityScope,
+                                                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                                                        boundsTransform = { _, _ -> tween(300) }
+                                                    )
+                                                    .clip(RoundedCornerShape(24.dp))
+                                                    // Sesuai desain warna gelap untuk inactive pill notes
+                                                    .background(Color(0xFF232A29)) 
+                                                    .combinedClickable(
+                                                        onClick = { onNoteClick(note.id) },
+                                                        onLongClick = {
+                                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            peekedNote = note
+                                                        }
+                                                    )
+                                                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                                                    .widthIn(min = 80.dp, max = 220.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = displayTitle,
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = Color(0xFF67948F), // Sesuai warna teks biru/hijau pada desain referensi
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -459,7 +511,7 @@ fun RecordScreen(
                                     when {
                                         isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
                                         isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                        else                 -> MaterialTheme.colorScheme.primary
+                                        else                 -> MaterialTheme.colorScheme.primary // Base Color
                                     }
                                 )
                                 .pointerInput(isSplit, isPaused) {
@@ -570,7 +622,85 @@ fun RecordScreen(
         }
     }
 
-    // Easter Egg: Question Dialog (Unchanged)
+    // Modal Overlay untuk Peek (Ngintip Note pake Long-Press)
+    if (peekedNote != null) {
+        Dialog(
+            onDismissRequest = { peekedNote = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            val peekScroll = rememberScrollState()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { peekedNote = null })
+                    }
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Morphing box ala live transcription
+                Surface(
+                    shape = RoundedCornerShape(32.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = 500.dp)
+                        .pointerInput(Unit) {
+                            // Supaya klik di dalem dialog gak nutup overlay
+                            detectTapGestures(onTap = { /* do nothing */ })
+                        }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                    ) {
+                        val titleStr = if (peekedNote!!.title.isBlank()) "tidak ada title" else peekedNote!!.title
+                        Text(
+                            text = titleStr,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val contentText = peekedNote!!.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: peekedNote!!.rawText
+                        val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses atau tidak ada konten..." else contentText
+
+                        Text(
+                            text = displayContent,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(peekScroll)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            TextButton(onClick = { peekedNote = null }) {
+                                Text("Tutup")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = { 
+                                val noteToOpen = peekedNote!!.id
+                                peekedNote = null 
+                                onNoteClick(noteToOpen) 
+                            }) {
+                                Text("Buka Catatan")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Easter Egg: Question Dialog
     if (showEasterEggDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -579,7 +709,7 @@ fun RecordScreen(
             },
             title = {
                 Text(
-                    text = "柏 Secret Question",
+                    text = "✨ Secret Question",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -624,7 +754,7 @@ fun RecordScreen(
         )
     }
 
-    // Easter Egg: Love Popup (Unchanged)
+    // Easter Egg: Love Popup
     if (showLovePopup) {
         AlertDialog(
             onDismissRequest = { showLovePopup = false },
@@ -637,7 +767,7 @@ fun RecordScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Text(text = "猪", style = MaterialTheme.typography.displayMedium)
+                    Text(text = "💖", style = MaterialTheme.typography.displayMedium)
                     Text(
                         text = "For Dinda",
                         style = MaterialTheme.typography.headlineMedium,
@@ -651,7 +781,7 @@ fun RecordScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "In every line of code I write,\nin every bug I fix at night 窶能nit's always you I'm thinking of.\nYou are my favorite feature,\nmy most beautiful exception.\n\nForever yours,\nThe Developer 減",
+                            text = "In every line of code I write,\nin every bug I fix at night —\nit's always you I'm thinking of.\nYou are my favorite feature,\nmy most beautiful exception.\n\nForever yours,\nThe Developer 👨‍💻",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             textAlign = TextAlign.Center,
@@ -659,7 +789,7 @@ fun RecordScreen(
                         )
                     }
                     Text(
-                        text = "笨ｨ With all the love in the codebase 笨ｨ",
+                        text = "💻 With all the love in the codebase 💻",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -671,51 +801,10 @@ fun RecordScreen(
                     onClick = { showLovePopup = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("源 Close")
+                    Text("✨ Close")
                 }
             }
         )
-    }
-}
-
-// ==========================================
-// RECENT NOTE CHIPS
-// ==========================================
-@Composable
-fun RecentNoteChips(
-    notes: List<NoteEntity>,
-    onNoteClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (notes.isEmpty()) return
-
-    val scrollState = rememberScrollState()
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(scrollState),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        notes.forEach { note ->
-            val displayTitle = note.title.ifBlank { "No title" }
-            Surface(
-                onClick = { onNoteClick(note.id) },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                tonalElevation = 2.dp,
-                modifier = Modifier.widthIn(min = 80.dp, max = 200.dp)
-            ) {
-                Text(
-                    text = displayTitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                )
-            }
-        }
     }
 }
 
