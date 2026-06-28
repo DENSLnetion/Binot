@@ -220,7 +220,9 @@ fun BinotApp(appContainer: AppContainer, settingsViewModel: SettingsViewModel) {
                         userName = userName,
                         recordMode = recordMode, 
                         snackbarHostState = snackbarHostState,
-                        animatedVisibilityScope = this@composable
+                        animatedVisibilityScope = this@composable,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        onNoteClick = { id -> navController.navigate("result/$id") }
                     )
                 }
                 composable("history") {
