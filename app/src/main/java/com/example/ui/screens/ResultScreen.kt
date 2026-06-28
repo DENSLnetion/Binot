@@ -355,26 +355,38 @@ fun ResultScreen(
                                     .onFocusChanged { isTitleFocused = it.isFocused },
                                 decorationBox = { innerTextField ->
                                     if (!isTitleFocused) {
-                                        Text(
-                                            text = note!!.title,
-                                            style = MaterialTheme.typography.titleLarge,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        if (note!!.title.isBlank()) {
+                                            Text(
+                                                text = "Tap to add title...",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        } else {
+                                            Text(
+                                                text = note!!.title,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     } else {
                                         innerTextField()
                                     }
                                 }
                             )
                         } else if (note != null) {
-                            Text(
-                                text = note!!.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (note!!.title.isNotBlank()) {
+                                Text(
+                                    text = note!!.title,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     },
                     navigationIcon = {
