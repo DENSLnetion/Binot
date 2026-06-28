@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -64,14 +65,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
+import com.example.ui.components.MarkdownText
 import com.example.viewmodel.HistoryViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -173,7 +181,7 @@ fun HistoryScreen(
                         val sortOptions = listOf(
                             SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
                             SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
-                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "Aâ€“Z")
+                            SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
                             SegmentedButton(
@@ -605,8 +613,24 @@ fun HistoryScreen(
     }
 
     if (latestRelease != null) {
-        ModalBottomSheet(onDismissRequest = { viewModel.dismissUpdateNotification() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
-            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+        val scrollWall = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+            }
+        }
+        val updateListState = rememberLazyListState()
+
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.dismissUpdateNotification() },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.75f)
+                    .padding(horizontal = 24.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.NewReleases, contentDescription = "Update", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(12.dp))
@@ -615,9 +639,25 @@ fun HistoryScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Version ${latestRelease!!.tag_name} is ready to download.", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(16.dp))
-                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.4f), RoundedCornerShape(12.dp)).padding(16.dp)) {
-                    Text(latestRelease!!.body ?: "Performance improvements and new features.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.verticalScroll(rememberScrollState()))
+                
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.4f), RoundedCornerShape(12.dp))
+                    .nestedScroll(scrollWall)
+                ) {
+                    MarkdownText(
+                        text = latestRelease!!.body ?: "Performance improvements and new features.",
+                        listState = updateListState,
+                        highlightsInfo = null,
+                        onSavedHighlightClick = { _, _, _, _, _ -> },
+                        onResolveSelection = { null },
+                        highlightQuery = "",
+                        fontFamily = FontFamily.SansSerif,
+                        modifier = Modifier.fillMaxSize().padding(16.dp)
+                    )
                 }
+                
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = { val apkUrl = latestRelease!!.assets?.firstOrNull()?.browser_download_url ?: latestRelease!!.html_url; context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))); viewModel.dismissUpdateNotification() }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Download Update (APK)") }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -780,7 +820,7 @@ fun NoteCard(
 ) {
     val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "â³ Waiting for AI transcription..."
+    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
 
     Card(
         shape = RoundedCornerShape(16.dp),
