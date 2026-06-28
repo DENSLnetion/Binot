@@ -14,10 +14,18 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.data.NoteEntity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
@@ -57,7 +65,8 @@ fun RecordScreen(
     userName: String,
     recordMode: Int,
     snackbarHostState: SnackbarHostState,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    onNoteClick: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current 
@@ -68,6 +77,7 @@ fun RecordScreen(
     val recognizedText by viewModel.recognizedText.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
 
+    val recentNotes by viewModel.recentNotes.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     // State untuk kontrol morphing
@@ -257,12 +267,30 @@ fun RecordScreen(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        AudioWaveform(
-                            amplitude = amplitude,
-                            modifier = Modifier
-                                .padding(vertical = 16.dp)
-                                .animateEnterExit(enter = fadeIn())
-                        )
+                        // Recent note chips — hilang saat recording aktif
+                        AnimatedVisibility(
+                            visible = !isRecording && !isPaused,
+                            enter = fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) { it / 2 },
+                            exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(animationSpec = tween(150)) { it / 2 }
+                        ) {
+                            RecentNoteChips(
+                                notes = recentNotes,
+                                onNoteClick = onNoteClick,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                        }
+
+                        // Waveform — muncul saat recording aktif
+                        AnimatedVisibility(
+                            visible = isRecording && !isPaused,
+                            enter = fadeIn(animationSpec = tween(300)) + expandVertically(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)),
+                            exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(animationSpec = tween(200))
+                        ) {
+                            AudioWaveform(
+                                amplitude = amplitude,
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        }
                     }
 
                     // Morphing Box UTAMA (Engine Gestur Presisi - Tanpa Shadow)
@@ -647,6 +675,47 @@ fun RecordScreen(
                 }
             }
         )
+    }
+}
+
+// ==========================================
+// RECENT NOTE CHIPS
+// ==========================================
+@Composable
+fun RecentNoteChips(
+    notes: List<NoteEntity>,
+    onNoteClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (notes.isEmpty()) return
+
+    val scrollState = rememberScrollState()
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        notes.forEach { note ->
+            val displayTitle = note.title.ifBlank { "No title" }
+            Surface(
+                onClick = { onNoteClick(note.id) },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                tonalElevation = 2.dp,
+                modifier = Modifier.widthIn(min = 80.dp, max = 200.dp)
+            ) {
+                Text(
+                    text = displayTitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
     }
 }
 
