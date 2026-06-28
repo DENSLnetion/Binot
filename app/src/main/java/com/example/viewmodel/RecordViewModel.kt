@@ -38,20 +38,29 @@ class RecordViewModel(
 
     private var pendingAudioPath: String? = null
 
+    // State untuk 16 Catatan Terbaru
     private val _recentNotes = MutableStateFlow<List<NoteEntity>>(emptyList())
     val recentNotes: StateFlow<List<NoteEntity>> = _recentNotes.asStateFlow()
+    private var pollJob: Job? = null
 
     init {
-        loadRecentNotes()
+        startPollingRecentNotes()
     }
 
-    private fun loadRecentNotes() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val all = repository.getAllNotesSync()
-            _recentNotes.value = all
-                .filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
-                .sortedByDescending { it.timestamp }
-                .take(16)
+    private fun startPollingRecentNotes() {
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                try {
+                    // Tarik data secara sinkronus lalu ambil 16 terbaru
+                    val notes = repository.getAllNotesSync()
+                    val latest16 = notes.sortedByDescending { it.timestamp }.take(16)
+                    _recentNotes.value = latest16
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                delay(1500) // Polling tiap 1.5 detik agar UI tetep update
+            }
         }
     }
 
@@ -132,9 +141,8 @@ class RecordViewModel(
             return false
         }
 
-        val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
         val note = NoteEntity(
-            title = fallbackTitle,
+            title = "",
             rawText = text,
             summary = null,
             isPinned = false,
@@ -172,7 +180,6 @@ class RecordViewModel(
         }
 
         pendingAudioPath = null
-        loadRecentNotes()
         return true
     }
 
@@ -180,6 +187,7 @@ class RecordViewModel(
         super.onCleared()
         audioRecorderManager.stopRecording()
         stopTimer()
+        pollJob?.cancel()
         _isPaused.value = false
     }
 
