@@ -73,9 +73,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
@@ -818,9 +823,8 @@ fun NoteCard(
     onClick: () -> Unit,
     onLabelClick: (String) -> Unit
 ) {
-    val minHeight = remember(note.id) { kotlin.random.Random(note.id).nextInt(140, 221).dp }
     val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
-    val displayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else "⏳ Waiting for AI transcription..."
+    val rawDisplayText = if (!note.summary.isNullOrEmpty()) note.summary else if (note.rawText.isNotBlank()) note.rawText else null
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -830,7 +834,7 @@ fun NoteCard(
         border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = minHeight)
+            .heightIn(max = 320.dp)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -858,11 +862,118 @@ fun NoteCard(
 
             if (note.title.isNotBlank()) {
                 Text(note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
-            Text(displayText, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-            Spacer(modifier = Modifier.weight(1f))
-            Text(formatter.format(Date(note.timestamp)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 8.dp))
+
+            if (rawDisplayText != null) {
+                CardMarkdownPreview(
+                    text = rawDisplayText,
+                    maxLines = 7,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            } else {
+                Text(
+                    text = "⏳ Waiting for AI transcription...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(formatter.format(Date(note.timestamp)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
     }
+}
+
+/**
+ * Lightweight markdown preview for NoteCard — renders headings, bold, italic, bullet points,
+ * and strips LaTeX/Mermaid/meta blocks. No WebView, no LazyColumn, no heavy dependencies.
+ */
+@Composable
+fun CardMarkdownPreview(
+    text: String,
+    maxLines: Int = 7,
+    modifier: Modifier = Modifier
+) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+
+    val cleaned = remember(text) {
+        var t = text
+        t = t.replace(Regex("<!--BINOT_META:.*?-->"), "")
+        t = t.replace(Regex("```mermaid[\\s\\S]*?```", RegexOption.MULTILINE), "")
+        t = t.replace(Regex("\\$\\$[\\s\\S]*?\\$\\$", RegexOption.MULTILINE), "")
+        t = t.replace(Regex("""\$[^$\n]+?\$"""), "")
+        t = t.replace(Regex("^> ?", RegexOption.MULTILINE), "")
+        t.trim()
+    }
+
+    val previewLines = remember(cleaned) {
+        cleaned.lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .take(maxLines)
+    }
+
+    val annotated = buildAnnotatedString {
+        previewLines.forEachIndexed { i, line ->
+            when {
+                line.startsWith("# ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = onSurface)) {
+                        appendInlineMarkdown(line.removePrefix("# "))
+                    }
+                }
+                line.startsWith("## ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = onSurface.copy(alpha = 0.85f))) {
+                        appendInlineMarkdown(line.removePrefix("## "))
+                    }
+                }
+                line.startsWith("### ") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = onSurface.copy(alpha = 0.8f))) {
+                        appendInlineMarkdown(line.removePrefix("### "))
+                    }
+                }
+                line.startsWith("- ") || line.startsWith("* ") -> {
+                    withStyle(SpanStyle(color = onSurface.copy(alpha = 0.7f), fontSize = 11.sp)) {
+                        append("• ")
+                        appendInlineMarkdown(line.drop(2))
+                    }
+                }
+                line.matches(Regex("^\\d+\\. .*")) -> {
+                    withStyle(SpanStyle(color = onSurface.copy(alpha = 0.7f), fontSize = 11.sp)) {
+                        appendInlineMarkdown(line.replace(Regex("^\\d+\\. "), ""))
+                    }
+                }
+                else -> {
+                    withStyle(SpanStyle(color = onSurface.copy(alpha = 0.7f), fontSize = 11.sp)) {
+                        appendInlineMarkdown(line)
+                    }
+                }
+            }
+            if (i < previewLines.lastIndex) append("\n")
+        }
+    }
+
+    Text(
+        text = annotated,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        lineHeight = 17.sp,
+        modifier = modifier
+    )
+}
+
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendInlineMarkdown(text: String) {
+    val pattern = Regex("\\*\\*(.*?)\\*\\*|\\*(.*?)\\*|_(.*?)_")
+    var cursor = 0
+    for (match in pattern.findAll(text)) {
+        if (match.range.first > cursor) append(text.substring(cursor, match.range.first))
+        when {
+            match.groups[1] != null -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(match.groups[1]!!.value) }
+            match.groups[2] != null -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(match.groups[2]!!.value) }
+            match.groups[3] != null -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(match.groups[3]!!.value) }
+        }
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) append(text.substring(cursor))
 }
