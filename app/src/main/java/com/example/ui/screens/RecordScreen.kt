@@ -302,83 +302,78 @@ fun RecordScreen(
                                         val randomPadding = remember(note.id) { (note.id * 23 % 40).dp }
                                         val isPeeked = peekedNoteId == note.id
 
-                                        // Animasi smooth yang santai, bebas efek mantul pegas
-                                        val smoothAnimSpec = tween<Dp>(durationMillis = 400, easing = FastOutSlowInEasing)
+                                        // M3 Expressive Spring Spec (Lambat, Elegan, Gak Mantul Barbar)
+                                        val m3ExpressiveSpec = spring<Dp>(dampingRatio = 0.75f, stiffness = 250f)
 
                                         val animatedCornerRadius by animateDpAsState(
                                             targetValue = if (isPeeked) 16.dp else 32.dp,
-                                            animationSpec = smoothAnimSpec,
+                                            animationSpec = m3ExpressiveSpec,
                                             label = "corner"
                                         )
 
                                         with(sharedTransitionScope) {
-                                            // OUTER BOX: Mesin Penembus Limit Grid (Z-Index Paling Atas & Unbounded)
                                             Box(
                                                 modifier = Modifier
-                                                    .zIndex(if (isPeeked) 10f else 0f) // Selalu paling atas pas peeking
-                                                    .wrapContentSize(align = Alignment.Center, unbounded = true) // Biar bisa bebas nembus ke atas/bawah baris
-                                            ) {
-                                                // INNER BOX: Mesin Morphing Asli
-                                                Box(
-                                                    modifier = Modifier
-                                                        .sharedBounds(
-                                                            sharedContentState = rememberSharedContentState("record_note-${note.id}"),
-                                                            animatedVisibilityScope = animatedVisibilityScope,
-                                                            resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
-                                                            boundsTransform = { _, _ -> tween(400, easing = FastOutSlowInEasing) }
-                                                        )
-                                                        .clip(RoundedCornerShape(animatedCornerRadius))
-                                                        .background(MaterialTheme.colorScheme.surface) 
-                                                        .pointerInput(note.id) {
-                                                            detectTapGestures(
-                                                                onPress = {
-                                                                    tryAwaitRelease()
-                                                                    if (peekedNoteId == note.id) {
-                                                                        peekedNoteId = null
-                                                                    }
-                                                                },
-                                                                onLongPress = {
-                                                                    peekedNoteId = note.id
-                                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                },
-                                                                onTap = {
-                                                                    onNoteClick(note.id)
-                                                                }
-                                                            )
-                                                        }
-                                                        .animateContentSize(animationSpec = tween(400, easing = FastOutSlowInEasing)) // Animasi smooth lambat
-                                                        // Trik Morphing Size
-                                                        .then(
-                                                            if (isPeeked) {
-                                                                // Ukuran fix kotak yang presisi (ga bablas panjang)
-                                                                Modifier.size(width = 260.dp, height = 140.dp) 
-                                                            } else {
-                                                                // Ukuran kapsul normal dinamis
-                                                                Modifier.height(64.dp)
+                                                    .zIndex(if (isPeeked) 10f else 0f) // ENGINE 1: Prioritas Lapisan (Paling Depan)
+                                                    .animateItem() // ENGINE 2: Otomatis Ngegeser Capsule Lain dengan Smooth M3
+                                                    .sharedBounds(
+                                                        sharedContentState = rememberSharedContentState("record_note-${note.id}"),
+                                                        animatedVisibilityScope = animatedVisibilityScope,
+                                                        resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
+                                                        boundsTransform = { _, _ -> tween(300) }
+                                                    )
+                                                    .wrapContentSize(align = Alignment.Center, unbounded = true) // ENGINE 3: Bebas dari Penjara Grid
+                                                    .animateContentSize(animationSpec = spring(dampingRatio = 0.75f, stiffness = 250f)) // ENGINE 4: Morphing Bounds Presisi
+                                                    .clip(RoundedCornerShape(animatedCornerRadius))
+                                                    .background(MaterialTheme.colorScheme.surface) 
+                                                    .pointerInput(note.id) {
+                                                        detectTapGestures(
+                                                            onPress = {
+                                                                tryAwaitRelease()
+                                                                if (peekedNoteId == note.id) peekedNoteId = null
+                                                            },
+                                                            onLongPress = {
+                                                                peekedNoteId = note.id
+                                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            },
+                                                            onTap = {
+                                                                onNoteClick(note.id)
                                                             }
                                                         )
-                                                        .padding(
-                                                            horizontal = if (isPeeked) 20.dp else (32.dp + randomPadding),
-                                                            // Kasih padding vertikal cuma pas peeking (karena kotak)
-                                                            vertical = if (isPeeked) 16.dp else 0.dp 
-                                                        ),
-                                                    contentAlignment = if (isPeeked) Alignment.TopStart else Alignment.Center
+                                                    }
+                                                    .width(if (isPeeked) 280.dp else Dp.Unspecified) // Target Width Horisontal
+                                                    .heightIn(min = 64.dp)
+                                                    .padding(
+                                                        horizontal = if (isPeeked) 24.dp else (32.dp + randomPadding),
+                                                        vertical = if (isPeeked) 20.dp else 22.dp
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalAlignment = if (isPeeked) Alignment.Start else Alignment.CenterHorizontally
                                                 ) {
-                                                    if (isPeeked) {
-                                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                                            Text(
-                                                                text = displayTitle,
-                                                                style = MaterialTheme.typography.titleMedium,
-                                                                color = MaterialTheme.colorScheme.primary,
-                                                                fontWeight = FontWeight.Bold,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
+                                                    // Judul 
+                                                    Text(
+                                                        text = displayTitle,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = if (isPeeked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    
+                                                    // ENGINE 5: Transisi Konten Dalam (Biar Gak Meledak Kek HTML)
+                                                    AnimatedVisibility(
+                                                        visible = isPeeked,
+                                                        enter = fadeIn(tween(200, delayMillis = 50)) + expandVertically(spring(dampingRatio = 0.75f, stiffness = 250f)),
+                                                        exit = fadeOut(tween(150)) + shrinkVertically(spring(dampingRatio = 0.8f, stiffness = 300f))
+                                                    ) {
+                                                        val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
+                                                        val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses..." else contentText
+                                                        
+                                                        Column {
                                                             Spacer(modifier = Modifier.height(8.dp))
-                                                            
-                                                            val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
-                                                            val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses..." else contentText
-                                                            
                                                             Text(
                                                                 text = displayContent,
                                                                 style = MaterialTheme.typography.bodyMedium,
@@ -387,15 +382,6 @@ fun RecordScreen(
                                                                 overflow = TextOverflow.Ellipsis
                                                             )
                                                         }
-                                                    } else {
-                                                        Text(
-                                                            text = displayTitle,
-                                                            style = MaterialTheme.typography.titleMedium,
-                                                            color = MaterialTheme.colorScheme.secondaryContainer, 
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
                                                     }
                                                 }
                                             }
