@@ -919,17 +919,17 @@ fun CardMarkdownPreview(
         previewLines.forEachIndexed { i, line ->
             when {
                 line.startsWith("# ") -> {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = onSurface)) {
+                    withStyle(SpanStyle(fontSize = 11.sp, color = onSurface.copy(alpha = 0.85f))) {
                         appendInlineMarkdown(line.removePrefix("# "))
                     }
                 }
                 line.startsWith("## ") -> {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = onSurface.copy(alpha = 0.85f))) {
+                    withStyle(SpanStyle(fontSize = 11.sp, color = onSurface.copy(alpha = 0.75f))) {
                         appendInlineMarkdown(line.removePrefix("## "))
                     }
                 }
                 line.startsWith("### ") -> {
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = onSurface.copy(alpha = 0.8f))) {
+                    withStyle(SpanStyle(fontSize = 11.sp, color = onSurface.copy(alpha = 0.65f))) {
                         appendInlineMarkdown(line.removePrefix("### "))
                     }
                 }
