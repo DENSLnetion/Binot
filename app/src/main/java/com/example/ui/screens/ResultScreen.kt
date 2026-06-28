@@ -470,7 +470,7 @@ fun ResultScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
-                        .imePadding() // Critical for keeping keyboard from obscuring cursor in edit mode
+                        .imePadding() 
                         .onGloballyPositioned { coordinates ->
                             selectionContentBounds = coordinates.boundsInWindow()
                         }
@@ -666,7 +666,7 @@ fun ResultScreen(
                                                 }
                                                 textValue = newValue
                                             },
-                                            modifier = Modifier.fillMaxSize(), // Internally scrollable, preserves cursor
+                                            modifier = Modifier.fillMaxSize(), 
                                             textStyle = MaterialTheme.typography.bodyLarge.copy(
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 fontFamily = selectedFont
@@ -862,6 +862,7 @@ fun ResultScreen(
     if (showAiExplainSheet) {
         val explainResult by viewModel.explainResult.collectAsState()
         val isExplaining by viewModel.isExplaining.collectAsState()
+        val explainListState = rememberLazyListState()
 
         ModalBottomSheet(
             onDismissRequest = { 
@@ -873,10 +874,10 @@ fun ResultScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
+                    .fillMaxHeight(0.75f) 
                     .padding(horizontal = 24.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
+                // Header (Statis, aman buat trigger tutup sheet)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
@@ -888,17 +889,26 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
                 
-                if (isExplaining) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
+                // Konten (Scrollable terisolasi berkat weight)
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    if (isExplaining) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        MarkdownText(
+                            text = explainResult ?: "No explanation available.",
+                            listState = explainListState,
+                            highlightsInfo = null, 
+                            onSavedHighlightClick = { _, _, _, _, _ -> },
+                            onResolveSelection = { null },
+                            highlightQuery = "",
+                            fontFamily = selectedFont,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                } else {
-                    Text(
-                        text = explainResult ?: "No explanation available.",
-                        style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 26.sp)
-                    )
                 }
-                Spacer(Modifier.height(48.dp))
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
