@@ -115,9 +115,8 @@ class RecordViewModel(
             return false
         }
 
-        val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
         val note = NoteEntity(
-            title = fallbackTitle,
+            title = "",
             rawText = text,
             summary = null,
             isPinned = false,
