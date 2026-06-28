@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -52,9 +53,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.data.NoteEntity
-import com.example.ui.components.AudioWaveform
 import com.example.viewmodel.RecordViewModel
+import com.example.ui.components.AudioWaveform
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -82,7 +82,7 @@ fun RecordScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // State untuk kontrol morphing
+    // State untuk kontrol morphing transkripsi
     var isTappedExpanded by remember { mutableStateOf(false) }
     var isPressExpanded by remember { mutableStateOf(false) }
     val isExpanded = isTappedExpanded || isPressExpanded
@@ -93,15 +93,9 @@ fun RecordScreen(
     var easterEggAnswer by remember { mutableStateOf("") }
     var showLovePopup by remember { mutableStateOf(false) }
 
-    // State untuk fitur Peek Note (Ngintip Note) Tahan-Lepas
-    var peekedNote by remember { mutableStateOf<NoteEntity?>(null) }
-    var displayPeekNote by remember { mutableStateOf<NoteEntity?>(null) }
+    // State untuk Morphing Peeking Note
+    var peekedNoteId by remember { mutableStateOf<Int?>(null) }
     
-    // Simpan referensi note agar pas animasi ngilang (saat peekedNote = null), datanya ga ikutan hilang
-    LaunchedEffect(peekedNote) {
-        if (peekedNote != null) displayPeekNote = peekedNote
-    }
-
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -144,8 +138,9 @@ fun RecordScreen(
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
+    // Live text yang dipersingkat
     val displayLiveText = if (recordMode == 1) {
-        "Direct recording mode is active.\nLive transcription is disabled."
+        "Live transcription is disabled."
     } else {
         if (recognizedText.isEmpty()) "Waiting for voice input..." else recognizedText
     }
@@ -165,8 +160,6 @@ fun RecordScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    // Horizontal padding dihapus dari Column ini supaya Grid bisa nembus ke ujung layar!
-                    // Tap luar untuk tutup overlay teks
                     .pointerInput(isExpanded) {
                         if (isExpanded) {
                             detectTapGestures(
@@ -188,7 +181,6 @@ fun RecordScreen(
                 ) {
                     val availableHeight = maxHeight
                     
-                    // FISIKA PEGAS: Damping 0.9f biar ga mental (wobble), Stiffness medium biar berat dan solid.
                     val stiffSpring = spring<Dp>(dampingRatio = 0.9f, stiffness = 400f)
                     
                     val boxHeight by animateDpAsState(
@@ -217,7 +209,6 @@ fun RecordScreen(
                         label = "contentColor"
                     )
                     
-                    // Layering (Shadow dihapus)
                     val boxScale by animateFloatAsState(
                         targetValue = if (isPressExpanded) 0.97f else 1f,
                         animationSpec = spring(stiffness = Spring.StiffnessHigh),
@@ -239,7 +230,7 @@ fun RecordScreen(
                             color = MaterialTheme.colorScheme.onBackground,
                             textAlign = TextAlign.Start,
                             modifier = Modifier
-                                .padding(horizontal = 24.dp) // Manual padding supaya tulisan ga mepet
+                                .padding(horizontal = 24.dp)
                                 .pointerInput(Unit) {
                                 detectTapGestures(
                                     onTap = {
@@ -262,7 +253,7 @@ fun RecordScreen(
                                 isRecording -> MaterialTheme.colorScheme.primaryContainer
                                 else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                             },
-                            modifier = Modifier.padding(start = 24.dp, bottom = 16.dp) // Manual padding
+                            modifier = Modifier.padding(start = 24.dp, bottom = 16.dp)
                         ) {
                             AnimatedContent(targetState = timeString, label = "timeAnimation") { time ->
                                 Text(
@@ -278,14 +269,13 @@ fun RecordScreen(
                             }
                         }
 
-                        // Spacer atas buat ngedorong Grid agak ke bawah
                         Spacer(modifier = Modifier.weight(1f))
 
                         // Dynamic Area: 16 Terbaru VS Amplitudo
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp), // Container dibesarkan untuk pill yang lebih chunky
+                                .height(160.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             // Amplitudo (Muncul saat Recording)
@@ -311,64 +301,111 @@ fun RecordScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     horizontalItemSpacing = 12.dp,
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    // Ini yang bikin grid sejajar di awal (24dp) tapi bisa nembus ke ujung pas digeser!
                                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp) 
                                 ) {
                                     items(recentNotes, key = { it.id }) { note ->
-                                        val displayTitle = if (note.title.isBlank()) "tidak ada title" else note.title
-                                        
-                                        // Trik agar desain "nggak rigid/kaku": Tambah padding acak berdasarkan ID
+                                        val displayTitle = if (note.title.isBlank()) "No title" else note.title
                                         val randomPadding = remember(note.id) { (note.id * 23 % 40).dp }
+                                        val isPeeked = peekedNoteId == note.id
 
+                                        // Kembalikan sharedTransitionScope, tapi BEDA KEY (agar ga bentrok dgn Tab History)
                                         with(sharedTransitionScope) {
                                             Box(
                                                 modifier = Modifier
                                                     .sharedBounds(
-                                                        sharedContentState = rememberSharedContentState("note-${note.id}"),
+                                                        sharedContentState = rememberSharedContentState("record_note-${note.id}"),
                                                         animatedVisibilityScope = animatedVisibilityScope,
                                                         resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
                                                         boundsTransform = { _, _ -> tween(300) }
                                                     )
+                                                    .animateContentSize( // Morphing Engine Peeking
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                            stiffness = Spring.StiffnessLow
+                                                        )
+                                                    )
                                                     .clip(RoundedCornerShape(32.dp))
-                                                    // Background Pill dinamis ngikutin Box Live Transkripsi
                                                     .background(MaterialTheme.colorScheme.surface) 
-                                                    // ENGINE NGINTIP: Deteksi Sentuhan Pasif (Biar Ripple & Scroll Tetap Jalan)
+                                                    // Custom Gesture Detector yang Anti-Bocor saat Scroll
                                                     .pointerInput(note.id) {
                                                         awaitEachGesture {
                                                             val down = awaitFirstDown(requireUnconsumed = false)
+                                                            
                                                             val job = coroutineScope.launch {
-                                                                delay(250) // Delay buat misahin tap biasa vs hold
-                                                                peekedNote = note
+                                                                delay(300) // Delay hold untuk trigger peeking
+                                                                peekedNoteId = note.id
                                                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                             }
                                                             
-                                                            // Tunggu sampai jari dilepas (Atau di-cancel karena nge-scroll)
-                                                            do {
-                                                                val event = awaitPointerEvent()
-                                                                // Kalau LazyGrid mutusin buat scroll (event consumed), batalkan peek!
-                                                                if (event.changes.any { it.isConsumed }) {
-                                                                    break
-                                                                }
-                                                            } while (event.changes.any { it.pressed })
+                                                            var isConsumedByScroll = false
+                                                            var isReleased = false
                                                             
-                                                            job.cancel()
-                                                            peekedNote = null
+                                                            // Tunggu sampai layar dilepas atau scroll grid ambil alih event
+                                                            while (!isReleased && !isConsumedByScroll) {
+                                                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                                                if (event.changes.any { it.isConsumed }) {
+                                                                    isConsumedByScroll = true
+                                                                }
+                                                                if (event.changes.all { !it.pressed }) {
+                                                                    isReleased = true
+                                                                }
+                                                            }
+                                                            
+                                                            job.cancel() 
+                                                            val wasPeeking = (peekedNoteId == note.id)
+                                                            
+                                                            if (wasPeeking) {
+                                                                // Kalau udah peek (tahan lama) lalu lepas -> cukup kembaliin ke ukuran awal.
+                                                                peekedNoteId = null
+                                                            } else if (!isConsumedByScroll && isReleased) {
+                                                                // Kalau dilepas cepet (tap) dan nggak lagi nge-scroll -> BUKA CATATAN!
+                                                                onNoteClick(note.id)
+                                                            }
                                                         }
                                                     }
-                                                    .clickable { onNoteClick(note.id) }
-                                                    .padding(horizontal = 32.dp + randomPadding, vertical = 22.dp)
+                                                    .padding(
+                                                        horizontal = if (isPeeked) 24.dp else (32.dp + randomPadding), 
+                                                        vertical = if (isPeeked) 24.dp else 22.dp
+                                                    )
+                                                    .widthIn(min = if (isPeeked) 260.dp else Dp.Unspecified)
                                                     .heightIn(min = 64.dp),
-                                                contentAlignment = Alignment.Center
+                                                contentAlignment = if (isPeeked) Alignment.TopStart else Alignment.Center
                                             ) {
-                                                Text(
-                                                    text = displayTitle,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    // Warna teks dinamis ngikutin Background Timer Pill
-                                                    color = MaterialTheme.colorScheme.secondaryContainer, 
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
+                                                if (isPeeked) {
+                                                    // Tampilan Saat Kapsul Membesar (Peeking)
+                                                    Column(modifier = Modifier.width(260.dp)) {
+                                                        Text(
+                                                            text = displayTitle,
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        
+                                                        val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
+                                                        val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses..." else contentText
+                                                        
+                                                        Text(
+                                                            text = displayContent,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            maxLines = 4,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                } else {
+                                                    // Tampilan Normal (Kapsul Kecil)
+                                                    Text(
+                                                        text = displayTitle,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = MaterialTheme.colorScheme.secondaryContainer, 
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -376,18 +413,17 @@ fun RecordScreen(
                             }
                         }
                         
-                        // Spacer bawah dikasih bobot supaya Grid ketarik ke atas dikit (Agak di tengah-tengah)
                         Spacer(modifier = Modifier.weight(0.5f)) 
                     }
 
-                    // Morphing Box UTAMA (Engine Gestur Presisi - Tanpa Shadow)
+                    // Morphing Box UTAMA (Engine Gestur Presisi)
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(boxHeight)
                             .scale(boxScale)
-                            .padding(horizontal = 24.dp) // Manual horizontal padding dikembaliin khusus buat Morphing Box
+                            .padding(horizontal = 24.dp) 
                             .clip(RoundedCornerShape(cornerRadius))
                             .background(containerColor)
                             .pointerInput(Unit) {
@@ -654,60 +690,6 @@ fun RecordScreen(
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
-            }
-
-            // ===============================================
-            // OVERLAY ANIMASI PEEKING (MORPHING BUKAN POPUP!)
-            // ===============================================
-            AnimatedVisibility(
-                visible = peekedNote != null,
-                enter = fadeIn(tween(200)),
-                exit = fadeOut(tween(200)),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // Background Gelap
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    displayPeekNote?.let { note ->
-                        val titleStr = if (note.title.isBlank()) "tidak ada title" else note.title
-                        val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
-                        val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses atau tidak ada konten..." else contentText
-
-                        // Morphing Box Peeking
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth(0.85f)
-                                .heightIn(min = 200.dp, max = 500.dp)
-                                .animateEnterExit(
-                                    // Animasi Bounce persis Live Transcription Box
-                                    enter = scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f)),
-                                    exit = scaleOut(targetScale = 0.7f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f))
-                                )
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(24.dp)
-                        ) {
-                            Text(
-                                text = titleStr,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            // Konten sengaja ga dipasang verticalScroll karena ini cuma NGINTIP (Peek)
-                            Text(
-                                text = displayContent,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f, fill = false), // Auto menyesuaikan tinggi
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
             }
         }
     }
