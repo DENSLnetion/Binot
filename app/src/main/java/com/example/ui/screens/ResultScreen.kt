@@ -52,6 +52,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
@@ -142,9 +143,15 @@ fun ResultScreen(
     var showSidePanel by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
     
-    var showEditSheet by remember { mutableStateOf(false) }
+    // States for Inline Editing (Replaces BottomSheet)
+    var isEditingRawText by remember { mutableStateOf(false) }
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
+    var showDestructiveConfirmDialog by remember { mutableStateOf(false) }
+    
+    var textValue by remember(note?.id) { mutableStateOf(TextFieldValue(note?.rawText ?: "")) }
+    val undoStack = remember { mutableStateListOf<TextFieldValue>() }
+    val redoStack = remember { mutableStateListOf<TextFieldValue>() }
 
     var newLabelInput by remember { mutableStateOf("") }
     
@@ -246,18 +253,6 @@ fun ResultScreen(
         onNavigateBack()
     }
 
-    val editSheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true,
-        confirmValueChange = { dismissValue ->
-            if (dismissValue == SheetValue.Hidden && hasUnsavedChanges) {
-                showCancelConfirmDialog = true
-                false 
-            } else {
-                true
-            }
-        }
-    )
-
     BackHandler(enabled = true) {
         if (isTextSelected || showCustomMenu) {
             clearSelection()
@@ -265,11 +260,11 @@ fun ResultScreen(
             showCancelConfirmDialog = false
         } else if (showSidePanel) {
             showSidePanel = false
-        } else if (showEditSheet) {
+        } else if (isEditingRawText) {
             if (hasUnsavedChanges) {
                 showCancelConfirmDialog = true
             } else {
-                coroutineScope.launch { editSheetState.hide(); showEditSheet = false }
+                isEditingRawText = false
             }
         } else if (isTitleFocused) {
             focusManager.clearFocus()
@@ -384,19 +379,52 @@ fun ResultScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (isTitleFocused) focusManager.clearFocus() else closeNote()
+                            if (isTitleFocused) {
+                                focusManager.clearFocus()
+                            } else if (isEditingRawText) {
+                                if (hasUnsavedChanges) showCancelConfirmDialog = true else isEditingRawText = false
+                            } else {
+                                closeNote()
+                            }
                         }) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
-                        AnimatedVisibility(
-                            visible = !isTitleFocused && showContent && note?.rawText != "Pending Transcription",
-                            enter = fadeIn() + scaleIn(),
-                            exit = fadeOut() + scaleOut()
-                        ) {
-                            IconButton(onClick = { showSidePanel = true }) {
-                                Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                        if (isEditingRawText) {
+                            IconButton(
+                                onClick = {
+                                    if (undoStack.isNotEmpty()) {
+                                        redoStack.add(textValue)
+                                        textValue = undoStack.removeLast()
+                                        hasUnsavedChanges = textValue.text != note!!.rawText
+                                    }
+                                },
+                                enabled = undoStack.isNotEmpty()
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                            }
+                            IconButton(
+                                onClick = {
+                                    if (redoStack.isNotEmpty()) {
+                                        undoStack.add(textValue)
+                                        textValue = redoStack.removeLast()
+                                        hasUnsavedChanges = textValue.text != note!!.rawText
+                                    }
+                                },
+                                enabled = redoStack.isNotEmpty()
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo", tint = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                            }
+                        } else {
+                            AnimatedVisibility(
+                                visible = !isTitleFocused && showContent && note?.rawText != "Pending Transcription",
+                                enter = fadeIn() + scaleIn(),
+                                exit = fadeOut() + scaleOut()
+                            ) {
+                                IconButton(onClick = { showSidePanel = true }) {
+                                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options")
+                                }
                             }
                         }
                     },
@@ -408,10 +436,20 @@ fun ResultScreen(
                     val isFabExpanded by remember { derivedStateOf { rawTextScrollState.value == 0 } }
                     with(sharedTransitionScope) {
                         ExtendedFloatingActionButton(
-                            onClick = { showEditSheet = true },
+                            onClick = {
+                                if (isEditingRawText) {
+                                    showDestructiveConfirmDialog = true
+                                } else {
+                                    textValue = TextFieldValue(note!!.rawText)
+                                    undoStack.clear()
+                                    redoStack.clear()
+                                    hasUnsavedChanges = false
+                                    isEditingRawText = true
+                                }
+                            },
                             expanded = isFabExpanded,
-                            icon = { Icon(Icons.Default.Edit, "Edit") },
-                            text = { Text("Edit") },
+                            icon = { Icon(if (isEditingRawText) Icons.Default.AutoAwesome else Icons.Default.Edit, contentDescription = null) },
+                            text = { Text(if (isEditingRawText) "Process" else "Edit") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier
@@ -419,7 +457,6 @@ fun ResultScreen(
                                 .alpha(if (animatedVisibilityScope.transition.targetState == EnterExitState.Visible) 1f else 0f)
                                 .then(with(animatedVisibilityScope) { 
                                     Modifier.animateEnterExit(
-                                        // FIX 4: Ubah spring ke absolute tween
                                         enter = scaleIn(initialScale = 0f, animationSpec = tween(300)),
                                         exit = scaleOut(targetScale = 0f, animationSpec = tween(300))
                                     ) 
@@ -465,7 +502,6 @@ fun ResultScreen(
                             }
                         }
                 ) {
-                CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
                     key(selectionResetKey) {
                         SelectionContainer(modifier = Modifier.fillMaxSize().padding(paddingValues).clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -585,89 +621,70 @@ fun ResultScreen(
                             }
 
                             if (!note!!.summary.isNullOrEmpty() && !isLoading) {
-                                val cleanSummary = note!!.summary!!.replace(Regex("<!--BINOT_META:.*?-->"), "").trimEnd()
-                                MarkdownText(
-                                    text = cleanSummary, 
-                                    listState = listState,
-                                    highlightsInfo = note!!.highlightsInfo,
-                                    onSavedHighlightClick = { word, noteText, line, start, end ->
-                                        currentHighlightWord = word
-                                        highlightNoteInput = noteText
-                                        pendingHighlightLine = line
-                                        pendingHighlightStart = start
-                                        pendingHighlightEnd = end
-                                        showHighlightDialog = true
-                                    },
-                                    onResolveSelection = { resolver -> resolveMarkdownSelection = resolver },
-                                    highlightQuery = temporaryHighlight,
-                                    fontFamily = selectedFont,
-                                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
-                                )
+                                // Custom toolbar HANYA untuk text summary (Markdown)
+                                CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
+                                    val cleanSummary = note!!.summary!!.replace(Regex("<!--BINOT_META:.*?-->"), "").trimEnd()
+                                    MarkdownText(
+                                        text = cleanSummary, 
+                                        listState = listState,
+                                        highlightsInfo = note!!.highlightsInfo,
+                                        onSavedHighlightClick = { word, noteText, line, start, end ->
+                                            currentHighlightWord = word
+                                            highlightNoteInput = noteText
+                                            pendingHighlightLine = line
+                                            pendingHighlightStart = start
+                                            pendingHighlightEnd = end
+                                            showHighlightDialog = true
+                                        },
+                                        onResolveSelection = { resolver -> resolveMarkdownSelection = resolver },
+                                        highlightQuery = temporaryHighlight,
+                                        fontFamily = selectedFont,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
+                                    )
+                                }
+                            } else if (isEditingRawText) {
+                                // Mode Editing Inline
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                        .padding(16.dp)
+                                ) {
+                                    BasicTextField(
+                                        value = textValue,
+                                        onValueChange = { newValue ->
+                                            if (newValue.text != textValue.text) {
+                                                undoStack.add(textValue)
+                                                redoStack.clear()
+                                                hasUnsavedChanges = newValue.text != note!!.rawText
+                                            }
+                                            textValue = newValue
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .verticalScroll(rawTextScrollState),
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontFamily = selectedFont
+                                        ),
+                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
                             } else if (!isLoading && note!!.rawText != "Pending Transcription") {
+                                // Mode Lihat Raw Text (TIDAK ADA custom toolbar)
                                 val rawPrefix = "Raw Transcript:\n\n"
-                                val savedRawHighlights = remember(note!!.highlightsInfo) {
-                                    val list = mutableListOf<Triple<String, Int, Int>>()
-                                    val json = note!!.highlightsInfo
-                                    if (!json.isNullOrBlank() && json != "[]") {
-                                        try {
-                                            val array = org.json.JSONArray(json)
-                                            for (i in 0 until array.length()) {
-                                                val obj = array.getJSONObject(i)
-                                                if (obj.optInt("line", -1) == -1 && obj.optInt("start", -1) >= 0) {
-                                                    list.add(Triple(obj.getString("text"), obj.getInt("start"), obj.getInt("end")))
-                                                }
-                                            }
-                                        } catch (e: Exception) { e.printStackTrace() }
-                                    }
-                                    list
-                                }
-                                val rawHighlightNotesByKey = remember(note!!.highlightsInfo) {
-                                    val map = mutableMapOf<String, String>()
-                                    val json = note!!.highlightsInfo
-                                    if (!json.isNullOrBlank() && json != "[]") {
-                                        try {
-                                            val array = org.json.JSONArray(json)
-                                            for (i in 0 until array.length()) {
-                                                val obj = array.getJSONObject(i)
-                                                val isRaw = obj.optInt("line", -1) == -1
-                                                if (!isRaw) continue
-                                                val start = obj.optInt("start", -1)
-                                                val key = if (start >= 0) "${obj.getInt("start")}:${obj.getInt("end")}" else "legacy:${obj.getString("text")}"
-                                                map[key] = obj.getString("note")
-                                            }
-                                        } catch (e: Exception) { e.printStackTrace() }
-                                    }
-                                    map
-                                }
-                                val legacyRawHighlights = remember(note!!.highlightsInfo) {
-                                    val map = mutableMapOf<String, String>()
-                                    val json = note!!.highlightsInfo
-                                    if (!json.isNullOrBlank() && json != "[]") {
-                                        try {
-                                            val array = org.json.JSONArray(json)
-                                            for (i in 0 until array.length()) {
-                                                val obj = array.getJSONObject(i)
-                                                if (obj.optInt("line", -1) == -1 && obj.optInt("start", -1) < 0) {
-                                                    map[obj.getString("text")] = obj.getString("note")
-                                                }
-                                            }
-                                        } catch (e: Exception) { e.printStackTrace() }
-                                    }
-                                    map
-                                }
-                                val rawSavedHighlightColor = MaterialTheme.colorScheme.tertiaryContainer
-                                val rawSavedHighlightTextColor = MaterialTheme.colorScheme.onTertiaryContainer
                                 val rawTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                val rawAnnotatedString = remember(note!!.rawText, savedRawHighlights, legacyRawHighlights, temporaryHighlight, rawSavedHighlightColor, rawSavedHighlightTextColor, rawTextColor) {
+                                val rawAnnotatedString = remember(note!!.rawText, temporaryHighlight, rawTextColor) {
                                     buildHighlightedString(
                                         prefix = rawPrefix,
                                         text = note!!.rawText,
                                         query = temporaryHighlight,
-                                        savedHighlights = savedRawHighlights,
-                                        legacyHighlights = legacyRawHighlights,
+                                        savedHighlights = emptyList(), // Hapus dukungan highlight di raw text
+                                        legacyHighlights = emptyMap(), // Hapus dukungan highlight di raw text
                                         highlightColor = Color.Yellow.copy(alpha = 0.5f),
-                                        savedHighlightColor = rawSavedHighlightColor,
-                                        savedHighlightTextColor = rawSavedHighlightTextColor,
                                         textColor = rawTextColor
                                     )
                                 }
@@ -689,28 +706,7 @@ fun ResultScreen(
                                             }
                                             .pointerInput(rawAnnotatedString) {
                                                 detectTapGestures { pos ->
-                                                    rawTextLayoutResult?.let { layoutResult ->
-                                                        val offset = layoutResult.getOffsetForPosition(pos)
-                                                        rawAnnotatedString.getStringAnnotations(tag = "SAVED_HIGHLIGHT", start = offset, end = offset)
-                                                            .firstOrNull()?.let { annotation ->
-                                                                val parts = annotation.item.split("@@KEY@@")
-                                                                val displayWord = parts.getOrElse(0) { "" }
-                                                                val key = parts.getOrNull(1) ?: "legacy:$displayWord"
-                                                                currentHighlightWord = displayWord
-                                                                highlightNoteInput = rawHighlightNotesByKey[key] ?: ""
-                                                                if (key.startsWith("legacy:")) {
-                                                                    pendingHighlightLine = -1
-                                                                    pendingHighlightStart = -1
-                                                                    pendingHighlightEnd = -1
-                                                                } else {
-                                                                    val (s, e) = key.split(":").map { it.toInt() }
-                                                                    pendingHighlightLine = -1
-                                                                    pendingHighlightStart = s
-                                                                    pendingHighlightEnd = e
-                                                                }
-                                                                showHighlightDialog = true
-                                                            }
-                                                    }
+                                                    // Hapus fungsi tap highlight dari raw text
                                                 }
                                             },
                                         onTextLayout = { rawTextLayoutResult = it }
@@ -720,7 +716,6 @@ fun ResultScreen(
                         }
                         }
                     }
-                }
                 }
             }
         }
@@ -880,46 +875,9 @@ fun ResultScreen(
                                         pendingHighlightEnd = -1
                                     }
                                 } else {
-                                    val rawPrefix = "Raw Transcript:\n\n"
-                                    val layoutResult = rawTextLayoutResult
-                                    val bounds = rawTextWindowBounds
-                                    if (layoutResult != null && bounds != null) {
-                                        val localX = (capturedRect.left - bounds.left).coerceIn(0f, bounds.width)
-                                        val localY = (capturedRect.center.y - bounds.top).coerceIn(0f, bounds.height)
-                                        val approxOffset = try {
-                                            layoutResult.getOffsetForPosition(androidx.compose.ui.geometry.Offset(localX, localY))
-                                        } catch (e: Exception) { -1 }
-                                        val fullText = rawPrefix + note!!.rawText
-                                        val fullLower = fullText.lowercase()
-                                        val textLower = text.lowercase()
-                                        var bestStart = -1
-                                        var bestDist = Int.MAX_VALUE
-                                        var searchFrom = 0
-                                        while (true) {
-                                            val idx = fullLower.indexOf(textLower, searchFrom)
-                                            if (idx == -1) break
-                                            if (approxOffset >= 0) {
-                                                val dist = kotlin.math.abs(idx - approxOffset)
-                                                if (dist < bestDist) { bestDist = dist; bestStart = idx }
-                                            } else if (bestStart == -1) {
-                                                bestStart = idx
-                                            }
-                                            searchFrom = idx + 1
-                                        }
-                                        if (bestStart >= rawPrefix.length) {
-                                            pendingHighlightLine = -1
-                                            pendingHighlightStart = bestStart - rawPrefix.length
-                                            pendingHighlightEnd = bestStart - rawPrefix.length + text.length
-                                        } else {
-                                            pendingHighlightLine = -1
-                                            pendingHighlightStart = -1
-                                            pendingHighlightEnd = -1
-                                        }
-                                    } else {
-                                        pendingHighlightLine = -1
-                                        pendingHighlightStart = -1
-                                        pendingHighlightEnd = -1
-                                    }
+                                    pendingHighlightLine = -1
+                                    pendingHighlightStart = -1
+                                    pendingHighlightEnd = -1
                                 }
                                 showHighlightDialog = true
                             }
@@ -965,10 +923,7 @@ fun ResultScreen(
                     onClick = {
                         showCancelConfirmDialog = false
                         hasUnsavedChanges = false 
-                        coroutineScope.launch { 
-                            editSheetState.hide()
-                            showEditSheet = false 
-                        }
+                        isEditingRawText = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -978,6 +933,33 @@ fun ResultScreen(
             dismissButton = {
                 TextButton(onClick = { showCancelConfirmDialog = false }) {
                     Text("Keep editing")
+                }
+            }
+        )
+    }
+
+    if (showDestructiveConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDestructiveConfirmDialog = false },
+            title = { Text("Overwrite & Process?") },
+            text = { Text("Original raw text will be permanently overwritten and processed by the AI Engine. Continue?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateRawText(textValue.text)
+                        hasUnsavedChanges = false
+                        showDestructiveConfirmDialog = false
+                        isEditingRawText = false
+                        coroutineScope.launch { snackbarHostState.showSnackbar("AI Engine is processing...") }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Process")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDestructiveConfirmDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -1007,162 +989,6 @@ fun ResultScreen(
             },
             dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
         )
-    }
-
-    if (showEditSheet && note != null && note!!.rawText != "Pending Transcription") {
-        var textValue by remember(note!!.id) { mutableStateOf(TextFieldValue(note!!.rawText)) }
-        val undoStack = remember { mutableStateListOf<TextFieldValue>() }
-        val redoStack = remember { mutableStateListOf<TextFieldValue>() }
-        var showDestructiveConfirmDialog by remember { mutableStateOf(false) }
-
-        LaunchedEffect(textValue.text) {
-            hasUnsavedChanges = textValue.text != note!!.rawText
-        }
-
-        ModalBottomSheet(
-            onDismissRequest = {
-                if (hasUnsavedChanges) showCancelConfirmDialog = true
-                else showEditSheet = false
-            },
-            sheetState = editSheetState
-        ) {
-            val scrollWall = remember {
-                object : NestedScrollConnection {
-                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available 
-                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available 
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.9f)
-                    .nestedScroll(scrollWall) 
-                    .draggable(
-                        orientation = Orientation.Vertical,
-                        state = rememberDraggableState { } 
-                    )
-                    .padding(horizontal = 24.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Edit Transcript", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        BouncyCapsule(
-                            onClick = {
-                                if (undoStack.isNotEmpty()) {
-                                    redoStack.add(textValue)
-                                    textValue = undoStack.removeLast()
-                                }
-                            },
-                            containerColor = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Undo, "Undo", tint = if (undoStack.isNotEmpty()) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        BouncyCapsule(
-                            onClick = {
-                                if (redoStack.isNotEmpty()) {
-                                    undoStack.add(textValue)
-                                    textValue = redoStack.removeLast()
-                                }
-                            },
-                            containerColor = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Redo, "Redo", tint = if (redoStack.isNotEmpty()) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(16.dp)
-                ) {
-                    BasicTextField(
-                        value = textValue,
-                        onValueChange = { newValue ->
-                            if (newValue.text != textValue.text) {
-                                undoStack.add(textValue)
-                                redoStack.clear()
-                            }
-                            textValue = newValue
-                        },
-                        modifier = Modifier.fillMaxSize(), 
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontFamily = selectedFont
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp)
-                        .imePadding(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    BouncyCapsule(
-                        onClick = { 
-                            if (hasUnsavedChanges) showCancelConfirmDialog = true
-                            else {
-                                coroutineScope.launch { editSheetState.hide(); showEditSheet = false }
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Cancel", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
-                    }
-                    BouncyCapsule(
-                        onClick = {
-                            showDestructiveConfirmDialog = true
-                        },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Process", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            
-            if (showDestructiveConfirmDialog) {
-                AlertDialog(
-                    onDismissRequest = { showDestructiveConfirmDialog = false },
-                    title = { Text("Overwrite & Process?") },
-                    text = { Text("Original raw text will be permanently overwritten and processed by the AI Engine. Continue?") },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                viewModel.updateRawText(textValue.text)
-                                hasUnsavedChanges = false
-                                showDestructiveConfirmDialog = false
-                                coroutineScope.launch { 
-                                    editSheetState.hide()
-                                    showEditSheet = false 
-                                    snackbarHostState.showSnackbar("AI Engine is processing...") 
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Process")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDestructiveConfirmDialog = false }) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-        }
     }
 
     if (showSidePanel && note != null) {
