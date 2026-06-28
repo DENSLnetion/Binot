@@ -38,6 +38,23 @@ class RecordViewModel(
 
     private var pendingAudioPath: String? = null
 
+    private val _recentNotes = MutableStateFlow<List<NoteEntity>>(emptyList())
+    val recentNotes: StateFlow<List<NoteEntity>> = _recentNotes.asStateFlow()
+
+    init {
+        loadRecentNotes()
+    }
+
+    private fun loadRecentNotes() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val all = repository.getAllNotesSync()
+            _recentNotes.value = all
+                .filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
+                .sortedByDescending { it.timestamp }
+                .take(16)
+        }
+    }
+
     fun toggleRecording(isEmulator: Boolean, recordMode: Int) {
         if (isRecording.value) {
             pendingAudioPath = audioRecorderManager.stopRecording()
@@ -115,8 +132,9 @@ class RecordViewModel(
             return false
         }
 
+        val fallbackTitle = "Catatan " + System.currentTimeMillis().toString().takeLast(4)
         val note = NoteEntity(
-            title = "",
+            title = fallbackTitle,
             rawText = text,
             summary = null,
             isPinned = false,
@@ -154,6 +172,7 @@ class RecordViewModel(
         }
 
         pendingAudioPath = null
+        loadRecentNotes()
         return true
     }
 
