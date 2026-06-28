@@ -276,7 +276,7 @@ fun RecordScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp),
+                                .height(160.dp), // Container dibesarkan untuk pill yang lebih chunky
                             contentAlignment = Alignment.Center
                         ) {
                             // Amplitudo (Muncul saat Recording)
@@ -300,12 +300,18 @@ fun RecordScreen(
                                 LazyHorizontalStaggeredGrid(
                                     rows = StaggeredGridCells.Fixed(2),
                                     modifier = Modifier.fillMaxSize(),
-                                    horizontalItemSpacing = 8.dp,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalItemSpacing = 12.dp, // Spacing yang pas
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                     contentPadding = PaddingValues(vertical = 4.dp)
                                 ) {
                                     items(recentNotes, key = { it.id }) { note ->
+                                        // Estetika: Kalau kosong nampilin "tidak ada title" lagi.
                                         val displayTitle = if (note.title.isBlank()) "tidak ada title" else note.title
+                                        
+                                        // Trik agar desain "nggak rigid/kaku": Tambah padding acak berdasarkan ID
+                                        // Walaupun teksnya sama persis panjangnya, kotaknya bakal beda lebar (staggered natural).
+                                        val randomPadding = remember(note.id) { (note.id * 23 % 40).dp }
+
                                         with(sharedTransitionScope) {
                                             Box(
                                                 modifier = Modifier
@@ -315,9 +321,8 @@ fun RecordScreen(
                                                         resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
                                                         boundsTransform = { _, _ -> tween(300) }
                                                     )
-                                                    .clip(RoundedCornerShape(24.dp))
-                                                    // Sesuai desain warna gelap untuk inactive pill notes
-                                                    .background(Color(0xFF232A29)) 
+                                                    .clip(RoundedCornerShape(32.dp)) // Pill shape sempurna
+                                                    .background(MaterialTheme.colorScheme.surface) // Sesuai warna box live transkripsi
                                                     .combinedClickable(
                                                         onClick = { onNoteClick(note.id) },
                                                         onLongClick = {
@@ -325,14 +330,15 @@ fun RecordScreen(
                                                             peekedNote = note
                                                         }
                                                     )
-                                                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                                                    .widthIn(min = 80.dp, max = 220.dp),
+                                                    // Padding horizontal ditambah random padding biar lebarnya bervariasi
+                                                    .padding(horizontal = 32.dp + randomPadding, vertical = 22.dp)
+                                                    .heightIn(min = 64.dp), // Minimal tinggi biar chunky
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = displayTitle,
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    color = Color(0xFF67948F), // Sesuai warna teks biru/hijau pada desain referensi
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.secondaryContainer, // Sesuai warna timer pill idle
                                                     fontWeight = FontWeight.Bold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
@@ -665,7 +671,7 @@ fun RecordScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
-                        val contentText = peekedNote!!.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: peekedNote!!.rawText
+                        val contentText = peekedNote!!.summary?.takeIf { it.isNotBlank() }?.replace(Regex(""), "")?.trim() ?: peekedNote!!.rawText
                         val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses atau tidak ada konten..." else contentText
 
                         Text(
