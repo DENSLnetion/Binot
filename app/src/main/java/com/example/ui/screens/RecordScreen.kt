@@ -11,8 +11,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,7 +38,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -51,11 +48,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.viewmodel.RecordViewModel
 import com.example.ui.components.AudioWaveform
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -138,7 +135,6 @@ fun RecordScreen(
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
 
-    // Live text yang dipersingkat
     val displayLiveText = if (recordMode == 1) {
         "Live transcription is disabled."
     } else {
@@ -275,7 +271,7 @@ fun RecordScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp),
+                                .height(180.dp), // Container sedikit dinaikkan agar kotak peeking muat lebih bebas
                             contentAlignment = Alignment.Center
                         ) {
                             // Amplitudo (Muncul saat Recording)
@@ -308,7 +304,13 @@ fun RecordScreen(
                                         val randomPadding = remember(note.id) { (note.id * 23 % 40).dp }
                                         val isPeeked = peekedNoteId == note.id
 
-                                        // Kembalikan sharedTransitionScope, tapi BEDA KEY (agar ga bentrok dgn Tab History)
+                                        // Morphing Corner Radius: 32dp (Pill) -> 16dp (Box)
+                                        val animatedCornerRadius by animateDpAsState(
+                                            targetValue = if (isPeeked) 16.dp else 32.dp,
+                                            animationSpec = spring(dampingRatio = 0.9f, stiffness = 400f),
+                                            label = "corner"
+                                        )
+
                                         with(sharedTransitionScope) {
                                             Box(
                                                 modifier = Modifier
@@ -318,62 +320,43 @@ fun RecordScreen(
                                                         resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
                                                         boundsTransform = { _, _ -> tween(300) }
                                                     )
-                                                    .animateContentSize( // Morphing Engine Peeking
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                            stiffness = Spring.StiffnessLow
-                                                        )
-                                                    )
-                                                    .clip(RoundedCornerShape(32.dp))
+                                                    .clip(RoundedCornerShape(animatedCornerRadius))
                                                     .background(MaterialTheme.colorScheme.surface) 
-                                                    // Custom Gesture Detector yang Anti-Bocor saat Scroll
+                                                    // SUPER FIX BUG 1: Native Tap Gestures (Pintar Batal Kalo di Scroll)
                                                     .pointerInput(note.id) {
-                                                        awaitEachGesture {
-                                                            val down = awaitFirstDown(requireUnconsumed = false)
-                                                            
-                                                            val job = coroutineScope.launch {
-                                                                delay(300) // Delay hold untuk trigger peeking
+                                                        detectTapGestures(
+                                                            onPress = {
+                                                                // Tunggu sampe user ngelepas jari
+                                                                tryAwaitRelease()
+                                                                // Pas jari lepas ATAU kegeser scroll, batalin peeking
+                                                                if (peekedNoteId == note.id) {
+                                                                    peekedNoteId = null
+                                                                }
+                                                            },
+                                                            onLongPress = {
                                                                 peekedNoteId = note.id
                                                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            }
-                                                            
-                                                            var isConsumedByScroll = false
-                                                            var isReleased = false
-                                                            
-                                                            // Tunggu sampai layar dilepas atau scroll grid ambil alih event
-                                                            while (!isReleased && !isConsumedByScroll) {
-                                                                val event = awaitPointerEvent(PointerEventPass.Main)
-                                                                if (event.changes.any { it.isConsumed }) {
-                                                                    isConsumedByScroll = true
-                                                                }
-                                                                if (event.changes.all { !it.pressed }) {
-                                                                    isReleased = true
-                                                                }
-                                                            }
-                                                            
-                                                            job.cancel() 
-                                                            val wasPeeking = (peekedNoteId == note.id)
-                                                            
-                                                            if (wasPeeking) {
-                                                                // Kalau udah peek (tahan lama) lalu lepas -> cukup kembaliin ke ukuran awal.
-                                                                peekedNoteId = null
-                                                            } else if (!isConsumedByScroll && isReleased) {
-                                                                // Kalau dilepas cepet (tap) dan nggak lagi nge-scroll -> BUKA CATATAN!
+                                                            },
+                                                            onTap = {
                                                                 onNoteClick(note.id)
                                                             }
-                                                        }
+                                                        )
                                                     }
-                                                    .padding(
-                                                        horizontal = if (isPeeked) 24.dp else (32.dp + randomPadding), 
-                                                        vertical = if (isPeeked) 24.dp else 22.dp
+                                                    // FIX BUG 2: Engine Morphing Lebar
+                                                    .animateContentSize(
+                                                        animationSpec = spring<IntSize>(dampingRatio = 0.9f, stiffness = 400f)
                                                     )
-                                                    .widthIn(min = if (isPeeked) 260.dp else Dp.Unspecified)
+                                                    .padding(
+                                                        horizontal = if (isPeeked) 20.dp else (32.dp + randomPadding), 
+                                                        vertical = if (isPeeked) 16.dp else 22.dp
+                                                    )
+                                                    .widthIn(min = if (isPeeked) 280.dp else 64.dp)
                                                     .heightIn(min = 64.dp),
                                                 contentAlignment = if (isPeeked) Alignment.TopStart else Alignment.Center
                                             ) {
                                                 if (isPeeked) {
-                                                    // Tampilan Saat Kapsul Membesar (Peeking)
-                                                    Column(modifier = Modifier.width(260.dp)) {
+                                                    // Tampilan Peeking Kotak (Bisa 2 Baris)
+                                                    Column(modifier = Modifier.fillMaxWidth()) {
                                                         Text(
                                                             text = displayTitle,
                                                             style = MaterialTheme.typography.titleMedium,
@@ -382,7 +365,7 @@ fun RecordScreen(
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
-                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        Spacer(modifier = Modifier.height(6.dp))
                                                         
                                                         val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
                                                         val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses..." else contentText
@@ -391,12 +374,12 @@ fun RecordScreen(
                                                             text = displayContent,
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             color = MaterialTheme.colorScheme.onSurface,
-                                                            maxLines = 4,
+                                                            maxLines = 2, // Dibatasi 2 baris agar tetap aman dalam grid
                                                             overflow = TextOverflow.Ellipsis
                                                         )
                                                     }
                                                 } else {
-                                                    // Tampilan Normal (Kapsul Kecil)
+                                                    // Tampilan Pill Normal
                                                     Text(
                                                         text = displayTitle,
                                                         style = MaterialTheme.typography.titleMedium,
