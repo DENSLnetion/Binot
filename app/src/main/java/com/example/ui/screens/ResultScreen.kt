@@ -79,6 +79,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -864,6 +866,15 @@ fun ResultScreen(
         val isExplaining by viewModel.isExplaining.collectAsState()
         val explainListState = rememberLazyListState()
 
+        // Tembok buat nahan sisa drag supaya ModalBottomSheet gak ngerasa ditarik ke bawah 
+        // pas user udah scroll teks ke paling atas.
+        val scrollWall = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+            }
+        }
+
         ModalBottomSheet(
             onDismissRequest = { 
                 showAiExplainSheet = false
@@ -877,7 +888,7 @@ fun ResultScreen(
                     .fillMaxHeight(0.75f) 
                     .padding(horizontal = 24.dp)
             ) {
-                // Header (Statis, aman buat trigger tutup sheet)
+                // Header (Statis, ini area yang aman buat di-drag buat nutup sheet)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
@@ -889,8 +900,13 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
                 
-                // Konten (Scrollable terisolasi berkat weight)
-                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // Konten (Scrollable terisolasi dengan scrollWall)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .nestedScroll(scrollWall)
+                ) {
                     if (isExplaining) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
