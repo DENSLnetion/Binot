@@ -16,6 +16,7 @@ import com.example.data.NoteRepository
 import com.example.data.Part
 import com.example.data.RetrofitClient
 import com.example.data.SettingsRepository
+import com.example.utils.ImportExportHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -113,6 +114,27 @@ class ResultViewModel(
             
             if (noteToProcess.summary == null || !noteToProcess.summary.contains(currentMeta)) {
                 processTextAuto(noteToProcess, lang, task, format, currentMeta)
+            }
+        }
+    }
+
+    // LOGIKA SHARE ZIP MURNI KE WHATSAPP / EXTERNAL (Baru)
+    fun shareBinotFile(context: Context, onResult: (Uri?, String) -> Unit) {
+        val currentNote = _note.value
+        if (currentNote == null) {
+            onResult(null, "Note is empty!")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            _loadingMessage.value = "Generating secure .binot package..."
+            val uri = ImportExportHelper.exportNoteToBinot(context, currentNote)
+            _isLoading.value = false
+            
+            if (uri != null) {
+                launch(Dispatchers.Main) { onResult(uri, "File ready!") }
+            } else {
+                launch(Dispatchers.Main) { onResult(null, "Failed to generate .binot file") }
             }
         }
     }
@@ -270,7 +292,6 @@ class ResultViewModel(
                     return@launch
                 }
 
-                // UPGRADE: Menambahkan WRONG vs RIGHT syntax dan ngajarin AI pakai \mathbf{}
                 var systemPrompt = """
                     You are an expert encyclopedia. Explain the given term/sentence purely, briefly, and with high relevance. 
                     STRICT RULES YOU MUST OBEY:
@@ -457,7 +478,7 @@ class ResultViewModel(
                         2. VERBATIM TRANSCRIBE: Transcribe exactly what is spoken word-by-word, including informal words, repeated words, and natural speech flow.
                         3. KEEP PUNCTUATION & CAPITALIZATION: You MUST add accurate punctuation (periods, commas, question marks) and use proper capitalization to make it readable.
                         4. NO GRAMMAR CORRECTION: Absolutely DO NOT fix the speaker's grammatical errors or restructure their sentences.
-                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use Ã‚Â², ^, ${'$'}, or ${'$'}${'$'}).
+                        5. NO MARKDOWN & NO MATH FORMATTING: DO NOT add Markdown styling. DO NOT convert spoken math, numbers, or symbols into LaTeX format. Write them as plain text (e.g., write "two squared" or "dua pangkat tiga", do not use ², ^, ${'$'}, or ${'$'}${'$'}).
                         6. Automatically detect and transcribe in the spoken language.
                     """.trimIndent()
                     
@@ -572,7 +593,6 @@ class ResultViewModel(
                     else -> ""
                 }
 
-                // UPGRADE: Menambahkan FATAL WRONG vs CORRECT, penanganan LaTeX, dan perketatan syntax Mermaid.
                 var systemPrompt = """
                     [SYSTEM: ENGINE MODE ENABLED]
                     You are a strict text processing engine, NOT a conversational chatbot.
@@ -632,7 +652,6 @@ class ResultViewModel(
                 
                 launch(Dispatchers.Main) {
                     if (processedText != null) {
-                        // Quotes removal logic aman karena hanya menghapus quote di AWAL dan AKHIR blok teks (kalau AI ngeyel ngasih quotes ke seluruh response)
                         val cleanedText = processedText.trim().removeSurrounding("'", "'").removeSurrounding("\"", "\"")
                         val finalOutput = cleanedText + "\n\n" + metaTag
                         
