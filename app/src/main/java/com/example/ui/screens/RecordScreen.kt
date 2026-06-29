@@ -69,7 +69,7 @@ fun RecordScreen(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current 
-    val isDark = isSystemInDarkTheme() 
+    val isDark = isSystemInDarkTheme() // Cek tema sistem
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -317,11 +317,12 @@ fun RecordScreen(
                                                     ),
                                                 contentAlignment = Alignment.Center
                                             ) {
+                                                // INI BAGIAN YANG GW UBAH DARI TADI WOY
                                                 Text(
                                                     text = displayTitle,
                                                     style = MaterialTheme.typography.titleMedium,
-                                                    // FIX: Dark = secondaryContainer, Light = onSecondaryContainer (Warna pekat bernuansa, bukan abu/hitam mati)
-                                                    color = if (isDark) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    // FIX: Dark = secondaryContainer, Light = secondary (Pekat, tegas, berwarna, bukan BnW)
+                                                    color = if (isDark) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.secondary,
                                                     fontWeight = FontWeight.Bold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
