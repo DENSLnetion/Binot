@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -61,7 +62,6 @@ import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -124,11 +124,11 @@ fun HistoryScreen(
     var showDeleteMultipleLabelsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
-
     var isSearchFocused by remember { mutableStateOf(false) }
     
-    // Ganti jadi rememberSaveable biar gak keriset ke grid kalau balik dari halaman lain
-    var isGridView by rememberSaveable { mutableStateOf(true) } 
+    // Logic SharedPreferences biar mode grid/list gak ngereset
+    val sharedPreferences = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+    var isGridView by remember { mutableStateOf(sharedPreferences.getBoolean("is_grid_view", true)) } 
     
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -390,7 +390,11 @@ fun HistoryScreen(
                                 }
                             },
                             isGridView = isGridView,
-                            onToggleViewClick = { isGridView = !isGridView },
+                            onToggleViewClick = { 
+                                isGridView = !isGridView 
+                                // Simpen pilihan ke memori
+                                sharedPreferences.edit().putBoolean("is_grid_view", isGridView).apply()
+                            },
                             modifier = Modifier.animateEnterExit(
                                 enter = scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(tween(300)),
                                 exit = scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(tween(300))
