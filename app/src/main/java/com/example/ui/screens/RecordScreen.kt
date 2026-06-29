@@ -69,7 +69,7 @@ fun RecordScreen(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current 
-    val isDark = isSystemInDarkTheme() // Cek tema sistem
+    val isDark = isSystemInDarkTheme() 
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -80,12 +80,10 @@ fun RecordScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // State untuk kontrol morphing transkripsi
     var isTappedExpanded by remember { mutableStateOf(false) }
     var isPressExpanded by remember { mutableStateOf(false) }
     val isExpanded = isTappedExpanded || isPressExpanded
 
-    // Easter egg state
     var greetingTapCount by remember { mutableStateOf(0) }
     var showEasterEggDialog by remember { mutableStateOf(false) }
     var easterEggAnswer by remember { mutableStateOf("") }
@@ -106,7 +104,6 @@ fun RecordScreen(
         hasPermission = granted
     }
 
-    // Smart & Dynamic Greeting
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greetings = remember(hour) {
         when (hour) {
@@ -147,10 +144,8 @@ fun RecordScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
-            // Layer 0: Material 3 Expressive Background (Glow Only)
             M3ExpressiveBackground()
 
-            // Layer 1: Main Content UI
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -209,7 +204,6 @@ fun RecordScreen(
                         label = "boxScale"
                     )
 
-                    // Area Atas (Sapaan, Waktu, Dinamis: Waveform vs Recent Notes)
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -265,7 +259,6 @@ fun RecordScreen(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Dynamic Area: 16 Terbaru VS Amplitudo
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -311,7 +304,6 @@ fun RecordScreen(
                                                     .clip(RoundedCornerShape(32.dp))
                                                     .background(MaterialTheme.colorScheme.surface) 
                                                     .pointerInput(note.id) {
-                                                        // Gestur pintar murni klik, 100% aman anti-bocor waktu scroll
                                                         detectTapGestures(
                                                             onTap = {
                                                                 onNoteClick(note.id)
@@ -328,8 +320,8 @@ fun RecordScreen(
                                                 Text(
                                                     text = displayTitle,
                                                     style = MaterialTheme.typography.titleMedium,
-                                                    // LOGIKA BARU: Pertahankan dark mode lu, benerin light mode nya
-                                                    color = if (isDark) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                                                    // FIX: Dark = secondaryContainer, Light = onSecondaryContainer (Warna pekat bernuansa, bukan abu/hitam mati)
+                                                    color = if (isDark) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                                                     fontWeight = FontWeight.Bold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
@@ -344,7 +336,6 @@ fun RecordScreen(
                         Spacer(modifier = Modifier.weight(0.5f)) 
                     }
 
-                    // Morphing Box UTAMA (Engine Gestur Presisi)
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -392,7 +383,6 @@ fun RecordScreen(
                         }
 
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // DRAG HANDLE
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -440,7 +430,6 @@ fun RecordScreen(
                                 }
                             }
 
-                            // Teks dengan transisi Crossfade
                             AnimatedContent(
                                 targetState = displayLiveText,
                                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(150)) },
@@ -462,7 +451,6 @@ fun RecordScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Area Tombol Perekaman
                 val isSplit = isRecording || isPaused
                 val totalAreaWidth = 280.dp
 
@@ -511,7 +499,7 @@ fun RecordScreen(
                                     when {
                                         isSplit && !isPaused -> MaterialTheme.colorScheme.secondaryContainer
                                         isSplit && isPaused  -> MaterialTheme.colorScheme.primaryContainer
-                                        else                 -> MaterialTheme.colorScheme.primary // Base Color
+                                        else                 -> MaterialTheme.colorScheme.primary 
                                     }
                                 )
                                 .pointerInput(isSplit, isPaused) {
@@ -622,7 +610,6 @@ fun RecordScreen(
         }
     }
 
-    // Easter Egg: Question Dialog
     if (showEasterEggDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -676,7 +663,6 @@ fun RecordScreen(
         )
     }
 
-    // Easter Egg: Love Popup
     if (showLovePopup) {
         AlertDialog(
             onDismissRequest = { showLovePopup = false },
@@ -730,9 +716,6 @@ fun RecordScreen(
     }
 }
 
-// ==========================================
-// BACKGROUND RENDER ENGINE (MINIMALIST GLOW)
-// ==========================================
 @Composable
 private fun M3ExpressiveBackground() {
     val primaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
@@ -742,7 +725,6 @@ private fun M3ExpressiveBackground() {
         val w = size.width
         val h = size.height
 
-        // 1. Ambient Glow (Gradiasi cahaya di latar murni)
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(primaryColor, Color.Transparent),
