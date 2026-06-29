@@ -25,7 +25,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 enum class UpdateState { Idle, Checking, Available, Downloading, Downloaded, Error }
 
@@ -165,43 +170,123 @@ class SettingsViewModel(
     }
 
     fun exportBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val notes = noteRepository.getAllNotesSync()
-                val jsonStr = adapter.toJson(notes)
+
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    outputStream.write(jsonStr.toByteArray())
+                    ZipOutputStream(outputStream).use { zos ->
+
+                        // 1. Tulis notes.json — audioPath diganti jadi nama file saja (bukan full path)
+                        val notesForJson = notes.map { note ->
+                            val audioFileName = note.audioPath?.let { File(it).name }
+                            note.copy(audioPath = audioFileName)
+                        }
+                        val jsonStr = adapter.toJson(notesForJson)
+                        val jsonBytes = jsonStr.toByteArray(Charsets.UTF_8)
+                        val jsonEntry = ZipEntry("notes.json").apply { method = ZipEntry.DEFLATED }
+                        zos.putNextEntry(jsonEntry)
+                        zos.write(jsonBytes)
+                        zos.closeEntry()
+
+                        // 2. Masukkan semua file audio yang ada
+                        notes.forEach { note ->
+                            val audioPath = note.audioPath ?: return@forEach
+                            val audioFile = File(audioPath)
+                            if (audioFile.exists()) {
+                                val crc = CRC32()
+                                val fileSize = audioFile.length()
+                                audioFile.inputStream().use { fis ->
+                                    val buf = ByteArray(8192)
+                                    var len: Int
+                                    while (fis.read(buf).also { len = it } > 0) crc.update(buf, 0, len)
+                                }
+                                val audioEntry = ZipEntry("audio/${audioFile.name}").apply {
+                                    method = ZipEntry.STORED
+                                    size = fileSize
+                                    compressedSize = fileSize
+                                    this.crc = crc.value
+                                }
+                                zos.putNextEntry(audioEntry)
+                                audioFile.inputStream().use { it.copyTo(zos) }
+                                zos.closeEntry()
+                            }
+                        }
+                    }
                 }
-                onResult("Backup successful!")
+                launch(Dispatchers.Main) { onResult("Backup successful!") }
             } catch (e: Exception) {
-                onResult("Backup failed: ${e.message}")
+                launch(Dispatchers.Main) { onResult("Backup failed: ${e.message}") }
             }
         }
     }
 
     fun importBackup(context: Context, uri: Uri, onResult: (String) -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val stringBuilder = StringBuilder()
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        var line: String? = reader.readLine()
-                        while (line != null) {
-                            stringBuilder.append(line)
-                            line = reader.readLine()
+                val audioDir = File(context.filesDir, "audio_records").apply { mkdirs() }
+                var jsonStr: String? = null
+                val extractedAudioFiles = mutableMapOf<String, File>() // fileName -> File
+
+                // Coba baca sebagai ZIP (format backup baru)
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        ZipInputStream(inputStream).use { zis ->
+                            var entry = zis.nextEntry
+                            while (entry != null) {
+                                when {
+                                    entry.name == "notes.json" -> {
+                                        jsonStr = zis.bufferedReader(Charsets.UTF_8).readText()
+                                    }
+                                    entry.name.startsWith("audio/") -> {
+                                        val fileName = entry.name.removePrefix("audio/")
+                                        if (fileName.isNotEmpty()) {
+                                            val destFile = File(audioDir, fileName)
+                                            destFile.outputStream().use { zis.copyTo(it) }
+                                            extractedAudioFiles[fileName] = destFile
+                                        }
+                                    }
+                                }
+                                zis.closeEntry()
+                                entry = zis.nextEntry
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    // Bukan file ZIP — akan di-handle fallback di bawah
                 }
-                val jsonStr = stringBuilder.toString()
-                val notes = adapter.fromJson(jsonStr)
+
+                // Fallback: backup lama (JSON biasa, bukan ZIP)
+                if (jsonStr == null) {
+                    val sb = StringBuilder()
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                            var line = reader.readLine()
+                            while (line != null) { sb.append(line); line = reader.readLine() }
+                        }
+                    }
+                    jsonStr = sb.toString()
+                }
+
+                val notes = adapter.fromJson(jsonStr!!)
                 if (notes != null) {
-                    noteRepository.insertNotes(notes) 
-                    onResult("Restore successful!")
+                    // Remap audioPath: nama file → full path baru hasil ekstrak
+                    val remappedNotes = notes.map { note ->
+                        val audioFileName = note.audioPath
+                        val finalAudioPath = if (audioFileName != null) {
+                            extractedAudioFiles[audioFileName]?.absolutePath
+                                ?: note.audioPath // fallback: pakai path lama kalau backup lama
+                        } else null
+                        note.copy(audioPath = finalAudioPath)
+                    }
+                    noteRepository.deleteAllNotes()
+                    noteRepository.insertNotes(remappedNotes)
+                    launch(Dispatchers.Main) { onResult("Restore successful!") }
                 } else {
-                    onResult("Invalid backup file.")
+                    launch(Dispatchers.Main) { onResult("Invalid backup file.") }
                 }
             } catch (e: Exception) {
-                onResult("Restore failed: ${e.message}")
+                launch(Dispatchers.Main) { onResult("Restore failed: ${e.message}") }
             }
         }
     }
