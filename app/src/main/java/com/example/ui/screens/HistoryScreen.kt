@@ -57,6 +57,8 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -124,6 +126,8 @@ fun HistoryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var isSearchFocused by remember { mutableStateOf(false) }
+    var isGridView by remember { mutableStateOf(true) } // State for Grid vs List View
+    
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
@@ -383,6 +387,8 @@ fun HistoryScreen(
                                     coroutineScope.launch { drawerState.open() }
                                 }
                             },
+                            isGridView = isGridView,
+                            onToggleViewClick = { isGridView = !isGridView },
                             modifier = Modifier.animateEnterExit(
                                 enter = scaleIn(initialScale = 0.9f, animationSpec = tween(300)) + fadeIn(tween(300)),
                                 exit = scaleOut(targetScale = 0.9f, animationSpec = tween(300)) + fadeOut(tween(300))
@@ -428,7 +434,7 @@ fun HistoryScreen(
                 } else {
                     with(animatedVisibilityScope) {
                         LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(2),
+                            columns = StaggeredGridCells.Fixed(if (isGridView) 2 else 1), // Menggunakan state Grid/List
                             state = gridState,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -763,50 +769,81 @@ fun MorphingSearchBar(
     onFocusChange: (Boolean) -> Unit,
     onClearFocus: () -> Unit,
     onMenuClick: () -> Unit,
+    isGridView: Boolean,
+    onToggleViewClick: () -> Unit,
     modifier: Modifier = Modifier 
 ) {
     val topInsets = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
     val safeTopMargin = if (topInsets < 24.dp) 24.dp else topInsets
     
     val cornerRadius by animateDpAsState(targetValue = if (isFocused) 0.dp else 50.dp, animationSpec = spring(), label = "corner")
-    val horizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 16.dp, animationSpec = spring(), label = "hPad")
     val topMargin by animateDpAsState(targetValue = if (isFocused) 0.dp else safeTopMargin + 8.dp, animationSpec = spring(), label = "tMargin")
-    val contentTopPadding by animateDpAsState(targetValue = if (isFocused) safeTopMargin + 24.dp else 16.dp, animationSpec = spring(), label = "cTopPad")
+    val innerTopPadding by animateDpAsState(targetValue = if (isFocused) safeTopMargin + 16.dp else 12.dp, animationSpec = spring(), label = "innerTopPad")
+    val outerHorizontalPadding by animateDpAsState(targetValue = if (isFocused) 0.dp else 8.dp, animationSpec = spring(), label = "outerHPad")
 
-    Box(
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontalPadding)
             .padding(top = topMargin, bottom = 8.dp)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(MaterialTheme.colorScheme.surface) 
+            .padding(horizontal = outerHorizontalPadding)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(top = contentTopPadding, bottom = 16.dp, start = 8.dp, end = 20.dp)
-                .defaultMinSize(minHeight = 48.dp) 
+        // Kiri: Tombol Menu Garis Tiga
+        AnimatedVisibility(
+            visible = !isFocused, 
+            enter = expandHorizontally(animationSpec = spring()) + fadeIn(animationSpec = spring()), 
+            exit = shrinkHorizontally(animationSpec = spring()) + fadeOut(animationSpec = spring())
         ) {
-            AnimatedVisibility(visible = !isFocused, enter = expandHorizontally(animationSpec = spring()), exit = shrinkHorizontally(animationSpec = spring())) {
-                IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = onMenuClick) { 
+                Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurfaceVariant) 
             }
-            Spacer(modifier = Modifier.width(if (isFocused) 12.dp else 4.dp))
-            Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.width(12.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                if (query.isEmpty()) { Text("Search notes...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
-                BasicTextField(
-                    value = query, onValueChange = onQueryChange,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), singleLine = true,
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) }
-                )
+        }
+
+        // Tengah: Search Bar
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(cornerRadius))
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(start = 16.dp, end = 16.dp, top = innerTopPadding, bottom = 12.dp)
+                    .defaultMinSize(minHeight = 48.dp) 
+            ) {
+                Icon(Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.width(12.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) { Text("Search notes...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) }
+                    BasicTextField(
+                        value = query, onValueChange = onQueryChange,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), singleLine = true,
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) }
+                    )
+                }
+                if (isFocused || query.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { onQueryChange(""); onClearFocus() }
+                    )
+                }
             }
-            if (isFocused || query.isNotEmpty()) {
+        }
+
+        // Kanan: Tombol Grid/List Mode
+        AnimatedVisibility(
+            visible = !isFocused, 
+            enter = expandHorizontally(animationSpec = spring()) + fadeIn(animationSpec = spring()), 
+            exit = shrinkHorizontally(animationSpec = spring()) + fadeOut(animationSpec = spring())
+        ) {
+            IconButton(onClick = onToggleViewClick) { 
                 Icon(
-                    imageVector = Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { onQueryChange(""); onClearFocus() }
-                )
+                    imageVector = if (isGridView) Icons.Default.ViewAgenda else Icons.Default.GridView, 
+                    contentDescription = "Toggle View Mode", 
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                ) 
             }
         }
     }
