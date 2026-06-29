@@ -41,9 +41,10 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     val trashedNotes: StateFlow<List<NoteEntity>> = repository.trashedNotes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // LOGIKA FIX: Pastikan customLabels di-trim biar tidak ada bug spasi tak terlihat
     val uniqueLabels: StateFlow<List<String>> = repository.allNotes.map { notes ->
         val systemNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
-        val customLabels = systemNote?.rawText?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+        val customLabels = systemNote?.rawText?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
         val noteLabels = notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }
             .flatMap { it.label?.split("|")?.map { l -> l.trim() }?.filter { l -> l.isNotBlank() } ?: emptyList() }
         
@@ -118,19 +119,30 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     }
 
     fun createIndependentLabel(label: String) {
+        // LOGIKA FIX: Bersihkan label dari karakter | dan spasi kosong
+        val cleanLabel = label.replace("|", "").trim()
+        if (cleanLabel.isBlank()) return
+        
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             
             if (sysNote != null) {
-                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
-                existingLabels.add(label)
-                repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+                val existingLabels = sysNote.rawText.split("|").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                if (!existingLabels.contains(cleanLabel)) {
+                    existingLabels.add(cleanLabel)
+                    // LOGIKA FIX: Update timestamp secara paksa agar Flow & Room memicu perubahan UI
+                    repository.update(sysNote.copy(
+                        rawText = existingLabels.joinToString("|"),
+                        timestamp = System.currentTimeMillis()
+                    ))
+                }
             } else {
                 val newSysNote = NoteEntity(
                     title = "[[BINOT_SYSTEM_LABELS]]", 
-                    rawText = label, 
-                    summary = null
+                    rawText = cleanLabel, 
+                    summary = null,
+                    timestamp = System.currentTimeMillis()
                 )
                 repository.insert(newSysNote)
             }
@@ -138,59 +150,78 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
     }
 
     fun renameLabel(oldLabel: String, newLabel: String) {
-        if (oldLabel.isBlank() || newLabel.isBlank() || oldLabel == newLabel) return
+        val cleanOld = oldLabel.trim()
+        val cleanNew = newLabel.replace("|", "").trim()
+        if (cleanOld.isBlank() || cleanNew.isBlank() || cleanOld == cleanNew) return
+        
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
 
             notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
                 val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                if (labels.contains(oldLabel)) {
-                    val updatedLabels = labels.map { if (it == oldLabel) newLabel else it }.distinct()
-                    repository.update(note.copy(label = updatedLabels.joinToString("|")))
+                if (labels.contains(cleanOld)) {
+                    val updatedLabels = labels.map { if (it == cleanOld) cleanNew else it }.distinct()
+                    repository.update(note.copy(
+                        label = updatedLabels.joinToString("|"),
+                        timestamp = System.currentTimeMillis()
+                    ))
                 }
             }
 
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             if (sysNote != null) {
-                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
-                existingLabels.remove(oldLabel)
-                existingLabels.add(newLabel)
-                repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+                val existingLabels = sysNote.rawText.split("|").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                if (existingLabels.remove(cleanOld)) {
+                    existingLabels.add(cleanNew)
+                    repository.update(sysNote.copy(
+                        rawText = existingLabels.joinToString("|"),
+                        timestamp = System.currentTimeMillis()
+                    ))
+                }
             }
 
-            if (oldLabel in _selectedLabels.value) {
-                _selectedLabels.value = (_selectedLabels.value - oldLabel) + newLabel
+            if (cleanOld in _selectedLabels.value) {
+                _selectedLabels.value = (_selectedLabels.value - cleanOld) + cleanNew
             }
         }
     }
 
     fun deleteLabel(label: String) {
-        if (label.isBlank()) return
+        val cleanLabel = label.trim()
+        if (cleanLabel.isBlank()) return
+        
         viewModelScope.launch(Dispatchers.IO) {
             val notes = repository.getAllNotesSync()
 
             notes.filter { it.title != "[[BINOT_SYSTEM_LABELS]]" }.forEach { note ->
                 val labels = note.label?.split("|")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                if (labels.contains(label)) {
-                    val updatedLabels = labels.filter { it != label }
+                if (labels.contains(cleanLabel)) {
+                    val updatedLabels = labels.filter { it != cleanLabel }
                     val newLabelString = if (updatedLabels.isEmpty()) null else updatedLabels.joinToString("|")
-                    repository.update(note.copy(label = newLabelString))
+                    repository.update(note.copy(
+                        label = newLabelString,
+                        timestamp = System.currentTimeMillis()
+                    ))
                 }
             }
 
             val sysNote = notes.find { it.title == "[[BINOT_SYSTEM_LABELS]]" }
             if (sysNote != null) {
-                val existingLabels = sysNote.rawText.split("|").filter { it.isNotBlank() }.toMutableSet()
-                existingLabels.remove(label)
-                if (existingLabels.isEmpty()) {
-                    repository.deleteById(sysNote.id)
-                } else {
-                    repository.update(sysNote.copy(rawText = existingLabels.joinToString("|")))
+                val existingLabels = sysNote.rawText.split("|").map { it.trim() }.filter { it.isNotBlank() }.toMutableSet()
+                if (existingLabels.remove(cleanLabel)) {
+                    if (existingLabels.isEmpty()) {
+                        repository.deleteById(sysNote.id)
+                    } else {
+                        repository.update(sysNote.copy(
+                            rawText = existingLabels.joinToString("|"),
+                            timestamp = System.currentTimeMillis()
+                        ))
+                    }
                 }
             }
 
-            if (label in _selectedLabels.value) {
-                _selectedLabels.value = _selectedLabels.value - label
+            if (cleanLabel in _selectedLabels.value) {
+                _selectedLabels.value = _selectedLabels.value - cleanLabel
             }
         }
     }
@@ -234,8 +265,6 @@ class HistoryViewModel(private val repository: NoteRepository) : ViewModel() {
         viewModelScope.launch {
             val notesToTrash = ids.mapNotNull { repository.getNoteById(it) }
             _recentlyDeleted.value = notesToTrash
-            // FIX LOGIKA BUG: Jangan cabut status isPinned saat masuk tong sampah.
-            // Biarkan saja, query di DAO tetap tidak akan menampilkan karena isTrashed = true.
             notesToTrash.forEach { repository.update(it.copy(isTrashed = true)) }
         }
     }
