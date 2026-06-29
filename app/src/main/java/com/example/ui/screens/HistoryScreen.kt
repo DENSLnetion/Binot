@@ -47,7 +47,6 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Menu
@@ -57,11 +56,12 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -126,7 +126,9 @@ fun HistoryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var isSearchFocused by remember { mutableStateOf(false) }
-    var isGridView by remember { mutableStateOf(true) } // State for Grid vs List View
+    
+    // Ganti jadi rememberSaveable biar gak keriset ke grid kalau balik dari halaman lain
+    var isGridView by rememberSaveable { mutableStateOf(true) } 
     
     val focusManager = LocalFocusManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -840,7 +842,7 @@ fun MorphingSearchBar(
         ) {
             IconButton(onClick = onToggleViewClick) { 
                 Icon(
-                    imageVector = if (isGridView) Icons.Default.ViewAgenda else Icons.Default.GridView, 
+                    imageVector = if (isGridView) Icons.Outlined.ViewAgenda else Icons.Outlined.GridView, 
                     contentDescription = "Toggle View Mode", 
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 ) 
