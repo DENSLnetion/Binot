@@ -166,7 +166,7 @@ fun SettingsScreen(
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0" } catch (e: Exception) { "1.0.0" }
     }
     
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { viewModel.exportBackup(context, it) { msg -> coroutineScope.launch { snackbarHostState.showSnackbar(msg) } } }
     }
 
@@ -607,8 +607,8 @@ fun SettingsScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Notes Backup", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.End) {
-                                BouncyOutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }, modifier = Modifier.padding(end = 8.dp)) { Text("Restore") }
-                                BouncyButton(onClick = { exportLauncher.launch("Binot_Backup_${formatter.format(Date())}.json") }) { Text("Backup") }
+                                BouncyOutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, modifier = Modifier.padding(end = 8.dp)) { Text("Restore") }
+                                BouncyButton(onClick = { exportLauncher.launch("Binot_Backup_${formatter.format(Date())}.binotbak") }) { Text("Backup") }
                              }
                         }
                         
