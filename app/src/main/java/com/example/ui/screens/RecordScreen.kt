@@ -14,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.LazyHorizontalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -38,6 +37,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -69,7 +69,10 @@ fun RecordScreen(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current 
-    val isDark = isSystemInDarkTheme() // Cek tema sistem
+    
+    // LOGIKA BARU: Cek langsung apakah warna background terang atau gelap! 
+    // Bebas dari bug theme system yang ngebajak.
+    val isAppInLightMode = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     
     val isRecording by viewModel.isRecording.collectAsState()
     val isPaused by viewModel.isPaused.collectAsState()
@@ -317,12 +320,12 @@ fun RecordScreen(
                                                     ),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                // INI BAGIAN YANG GW UBAH DARI TADI WOY
                                                 Text(
                                                     text = displayTitle,
                                                     style = MaterialTheme.typography.titleMedium,
-                                                    // FIX: Dark = secondaryContainer, Light = secondary (Pekat, tegas, berwarna, bukan BnW)
-                                                    color = if (isDark) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.secondary,
+                                                    // INI BARIS YANG BERUBAH DARI TADI:
+                                                    // Kalau terang, pake primary (warna tema, bukan item/bnw). Kalau gelap, secondaryContainer lu.
+                                                    color = if (isAppInLightMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                                                     fontWeight = FontWeight.Bold,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
