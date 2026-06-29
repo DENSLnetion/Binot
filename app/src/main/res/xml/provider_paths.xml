@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Buka akses direktori cache khusus buat hasil export ZIP (.binot) -->
+    <cache-path name="shared_notes" path="shared_notes/" />
+</paths>
