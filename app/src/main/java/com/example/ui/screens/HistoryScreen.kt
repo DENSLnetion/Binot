@@ -100,7 +100,8 @@ fun HistoryScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit,
-    onTrashClick: () -> Unit
+    onTrashClick: () -> Unit,
+    onImportFile: suspend (Uri) -> Int? // Fungsi eksekutor Injeksi baru
 ) {
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
@@ -126,7 +127,6 @@ fun HistoryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchFocused by remember { mutableStateOf(false) }
     
-    // Logic SharedPreferences biar mode grid/list gak ngereset
     val sharedPreferences = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var isGridView by remember { mutableStateOf(sharedPreferences.getBoolean("is_grid_view", true)) } 
     
@@ -155,8 +155,19 @@ fun HistoryScreen(
         viewModel.checkForAppUpdate(currentVersion)
     }
 
+    // Launch khusus untuk import universal (*/* membolehkan deteksi .binot/.zip sekaligus audio)
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { viewModel.importAudio(context, it) { newNoteId -> onNoteClick(newNoteId) } }
+        uri?.let {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Mengimpor file...")
+                val newId = onImportFile(it)
+                if (newId != null) {
+                    onNoteClick(newId)
+                } else {
+                    snackbarHostState.showSnackbar("Gagal mengimpor file! Pastikan format sesuai.")
+                }
+            }
+        }
     }
 
     BackHandler(enabled = isSearchFocused || searchQuery.isNotEmpty() || selectionMode || drawerState.isOpen) {
@@ -392,7 +403,6 @@ fun HistoryScreen(
                             isGridView = isGridView,
                             onToggleViewClick = { 
                                 isGridView = !isGridView 
-                                // Simpen pilihan ke memori
                                 sharedPreferences.edit().putBoolean("is_grid_view", isGridView).apply()
                             },
                             modifier = Modifier.animateEnterExit(
@@ -407,10 +417,10 @@ fun HistoryScreen(
                 if (!selectionMode) {
                     with(sharedTransitionScope) {
                         ExtendedFloatingActionButton(
-                            onClick = { importLauncher.launch("audio/*") },
+                            onClick = { importLauncher.launch("*/*") },
                             expanded = isFabExpanded,
-                            icon = { Icon(Icons.Default.Audiotrack, "Import Audio") },
-                            text = { Text("Import Audio") },
+                            icon = { Icon(Icons.Default.Audiotrack, "Import / Open .binot") },
+                            text = { Text("Import Audio/.binot") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier
@@ -440,7 +450,7 @@ fun HistoryScreen(
                 } else {
                     with(animatedVisibilityScope) {
                         LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(if (isGridView) 2 else 1), // Menggunakan state Grid/List
+                            columns = StaggeredGridCells.Fixed(if (isGridView) 2 else 1),
                             state = gridState,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -794,7 +804,6 @@ fun MorphingSearchBar(
             .padding(top = topMargin, bottom = 8.dp)
             .padding(horizontal = outerHorizontalPadding)
     ) {
-        // Kiri: Tombol Menu Garis Tiga
         AnimatedVisibility(
             visible = !isFocused, 
             enter = expandHorizontally(animationSpec = spring()) + fadeIn(animationSpec = spring()), 
@@ -805,7 +814,6 @@ fun MorphingSearchBar(
             }
         }
 
-        // Tengah: Search Bar
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -838,7 +846,6 @@ fun MorphingSearchBar(
             }
         }
 
-        // Kanan: Tombol Grid/List Mode
         AnimatedVisibility(
             visible = !isFocused, 
             enter = expandHorizontally(animationSpec = spring()) + fadeIn(animationSpec = spring()), 
@@ -929,10 +936,6 @@ fun NoteCard(
     }
 }
 
-/**
- * Lightweight markdown preview for NoteCard — renders headings, bold, italic, bullet points,
- * and strips LaTeX/Mermaid/meta blocks. No WebView, no LazyColumn, no heavy dependencies.
- */
 @Composable
 fun CardMarkdownPreview(
     text: String,
