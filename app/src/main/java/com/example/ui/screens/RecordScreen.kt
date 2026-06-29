@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import com.example.viewmodel.RecordViewModel
 import com.example.ui.components.AudioWaveform
@@ -89,9 +88,6 @@ fun RecordScreen(
     var showEasterEggDialog by remember { mutableStateOf(false) }
     var easterEggAnswer by remember { mutableStateOf("") }
     var showLovePopup by remember { mutableStateOf(false) }
-
-    // State untuk Morphing Peeking Note
-    var peekedNoteId by remember { mutableStateOf<Int?>(null) }
     
     var hasPermission by remember {
         mutableStateOf(
@@ -271,7 +267,7 @@ fun RecordScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp),
+                                .height(160.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             androidx.compose.animation.AnimatedVisibility(
@@ -300,90 +296,41 @@ fun RecordScreen(
                                     items(recentNotes, key = { it.id }) { note ->
                                         val displayTitle = if (note.title.isBlank()) "No title" else note.title
                                         val randomPadding = remember(note.id) { (note.id * 23 % 40).dp }
-                                        val isPeeked = peekedNoteId == note.id
-
-                                        // M3 Expressive Spring Spec (Lambat, Elegan, Gak Mantul Barbar)
-                                        val m3ExpressiveSpec = spring<Dp>(dampingRatio = 0.75f, stiffness = 250f)
-
-                                        val animatedCornerRadius by animateDpAsState(
-                                            targetValue = if (isPeeked) 16.dp else 32.dp,
-                                            animationSpec = m3ExpressiveSpec,
-                                            label = "corner"
-                                        )
 
                                         with(sharedTransitionScope) {
                                             Box(
                                                 modifier = Modifier
-                                                    .zIndex(if (isPeeked) 10f else 0f) // ENGINE 1: Prioritas Lapisan (Paling Depan)
-                                                    .animateItem() // ENGINE 2: Otomatis Ngegeser Capsule Lain dengan Smooth M3
                                                     .sharedBounds(
                                                         sharedContentState = rememberSharedContentState("record_note-${note.id}"),
                                                         animatedVisibilityScope = animatedVisibilityScope,
                                                         resizeMode = SharedTransitionScope.ResizeMode.ScaleToBounds(),
                                                         boundsTransform = { _, _ -> tween(300) }
                                                     )
-                                                    .wrapContentSize(align = Alignment.Center, unbounded = true) // ENGINE 3: Bebas dari Penjara Grid
-                                                    .animateContentSize(animationSpec = spring(dampingRatio = 0.75f, stiffness = 250f)) // ENGINE 4: Morphing Bounds Presisi
-                                                    .clip(RoundedCornerShape(animatedCornerRadius))
+                                                    .clip(RoundedCornerShape(32.dp))
                                                     .background(MaterialTheme.colorScheme.surface) 
                                                     .pointerInput(note.id) {
+                                                        // Gestur pintar murni klik, 100% aman anti-bocor waktu scroll
                                                         detectTapGestures(
-                                                            onPress = {
-                                                                tryAwaitRelease()
-                                                                if (peekedNoteId == note.id) peekedNoteId = null
-                                                            },
-                                                            onLongPress = {
-                                                                peekedNoteId = note.id
-                                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            },
                                                             onTap = {
                                                                 onNoteClick(note.id)
                                                             }
                                                         )
                                                     }
-                                                    .width(if (isPeeked) 280.dp else Dp.Unspecified) // Target Width Horisontal
                                                     .heightIn(min = 64.dp)
                                                     .padding(
-                                                        horizontal = if (isPeeked) 24.dp else (32.dp + randomPadding),
-                                                        vertical = if (isPeeked) 20.dp else 22.dp
+                                                        horizontal = (32.dp + randomPadding),
+                                                        vertical = 22.dp
                                                     ),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Column(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalAlignment = if (isPeeked) Alignment.Start else Alignment.CenterHorizontally
-                                                ) {
-                                                    // Judul 
-                                                    Text(
-                                                        text = displayTitle,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        color = if (isPeeked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    
-                                                    // ENGINE 5: Transisi Konten Dalam (Biar Gak Meledak Kek HTML)
-                                                    AnimatedVisibility(
-                                                        visible = isPeeked,
-                                                        enter = fadeIn(tween(200, delayMillis = 50)) + expandVertically(spring(dampingRatio = 0.75f, stiffness = 250f)),
-                                                        exit = fadeOut(tween(150)) + shrinkVertically(spring(dampingRatio = 0.8f, stiffness = 300f))
-                                                    ) {
-                                                        val contentText = note.summary?.takeIf { it.isNotBlank() }?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trim() ?: note.rawText
-                                                        val displayContent = if (contentText.isBlank() || contentText == "Pending Transcription") "Sedang memproses..." else contentText
-                                                        
-                                                        Column {
-                                                            Spacer(modifier = Modifier.height(8.dp))
-                                                            Text(
-                                                                text = displayContent,
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                color = MaterialTheme.colorScheme.onSurface,
-                                                                maxLines = 3, 
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                        }
-                                                    }
-                                                }
+                                                Text(
+                                                    text = displayTitle,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                     }
