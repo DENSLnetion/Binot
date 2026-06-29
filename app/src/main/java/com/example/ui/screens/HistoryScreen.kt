@@ -302,7 +302,7 @@ fun HistoryScreen(
                         label = { Text("Create New Label") },
                         icon = { Icon(Icons.Default.Add, null) },
                         selected = false,
-                        onClick = { showNewLabelDialog = true; coroutineScope.launch { drawerState.close() } },
+                        onClick = { newLabelInput = ""; showNewLabelDialog = true },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
@@ -578,10 +578,16 @@ fun HistoryScreen(
                         viewModel.createIndependentLabel(newLabelInput.trim())
                         showNewLabelDialog = false
                         newLabelInput = ""
+                        coroutineScope.launch { drawerState.close() }
                     }
                 }) { Text("Create Label") }
             },
-            dismissButton = { TextButton(onClick = { showNewLabelDialog = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = {
+                    showNewLabelDialog = false
+                    coroutineScope.launch { drawerState.close() }
+                }) { Text("Cancel") }
+            }
         )
     }
 
