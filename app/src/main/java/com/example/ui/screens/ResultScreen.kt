@@ -141,7 +141,6 @@ fun ResultScreen(
     var showSidePanel by remember { mutableStateOf(false) }
     var showNewLabelDialog by remember { mutableStateOf(false) }
     
-    // States for Edit Mode (In-line)
     var isEditMode by remember { mutableStateOf(false) }
     var textValue by remember(note?.id) { mutableStateOf(TextFieldValue(note?.rawText ?: "")) }
     val undoStack = remember { mutableStateListOf<TextFieldValue>() }
@@ -159,7 +158,6 @@ fun ResultScreen(
     var temporaryHighlight by remember { mutableStateOf("") }
     var selectedFont by remember { mutableStateOf(FontFamily.SansSerif) }
 
-    // States for Highlights & AI Explain
     var showHighlightDialog by remember { mutableStateOf(false) }
     var currentHighlightWord by remember { mutableStateOf("") }
     var highlightNoteInput by remember { mutableStateOf("") }
@@ -174,7 +172,6 @@ fun ResultScreen(
     var showAiExplainSheet by remember { mutableStateOf(false) }
     var aiExplainTargetWord by remember { mutableStateOf("") }
 
-    // States for Custom Selection Toolbar
     var selectionRect by remember { mutableStateOf(Rect.Zero) }
     var showCustomMenu by remember { mutableStateOf(false) }
     var isTextSelected by remember { mutableStateOf(false) }
@@ -261,11 +258,7 @@ fun ResultScreen(
         } else if (showSidePanel) {
             showSidePanel = false
         } else if (isEditMode) {
-            if (hasUnsavedChanges) {
-                showCancelConfirmDialog = true
-            } else {
-                isEditMode = false
-            }
+            if (hasUnsavedChanges) showCancelConfirmDialog = true else isEditMode = false
         } else if (isTitleFocused) {
             focusManager.clearFocus()
         } else {
@@ -283,12 +276,10 @@ fun ResultScreen(
     val customTextToolbar = remember {
         object : TextToolbar {
             override var status: TextToolbarStatus = TextToolbarStatus.Hidden
-
             override fun hide() {
                 status = TextToolbarStatus.Hidden
                 showCustomMenu = false
             }
-
             override fun showMenu(
                 rect: Rect,
                 onCopyRequested: (() -> Unit)?,
@@ -551,7 +542,7 @@ fun ResultScreen(
                                     AiThinkingAnimation(color = MaterialTheme.colorScheme.primary)
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Text(
-                                        text = loadingMessage.ifBlank { "AI Engine is structuring your note..." },
+                                        text = loadingMessage.ifBlank { "AI Engine is processing..." },
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
@@ -624,7 +615,6 @@ fun ResultScreen(
                         }
 
                         if (!note!!.summary.isNullOrEmpty() && !isLoading) {
-                            // Render Processed AI Result with Custom Selection Toolbar
                             CompositionLocalProvider(LocalTextToolbar provides customTextToolbar) {
                                 key(selectionResetKey) {
                                     SelectionContainer(modifier = Modifier.fillMaxSize().clickable(
@@ -655,7 +645,6 @@ fun ResultScreen(
                                 }
                             }
                         } else if (!isLoading && note!!.rawText != "Pending Transcription") {
-                            // Render Raw Text (Edit Mode OR Read Mode) - NO Custom Selection Toolbar
                             if (isEditMode) {
                                 Column(
                                     modifier = Modifier
@@ -878,8 +867,6 @@ fun ResultScreen(
         val isExplaining by viewModel.isExplaining.collectAsState()
         val explainListState = rememberLazyListState()
 
-        // Tembok buat nahan sisa drag supaya ModalBottomSheet gak ngerasa ditarik ke bawah 
-        // pas user udah scroll teks ke paling atas.
         val scrollWall = remember {
             object : NestedScrollConnection {
                 override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
@@ -900,7 +887,6 @@ fun ResultScreen(
                     .fillMaxHeight(0.75f) 
                     .padding(horizontal = 24.dp)
             ) {
-                // Header (Statis, ini area yang aman buat di-drag buat nutup sheet)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
@@ -912,7 +898,6 @@ fun ResultScreen(
                 HorizontalDivider()
                 Spacer(Modifier.height(16.dp))
                 
-                // Konten (Scrollable terisolasi dengan scrollWall)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1348,9 +1333,7 @@ fun ResultScreen(
                                 }
                             }
                         }
-                    }
 
-                    if (note!!.audioPath != null) {
                         item {
                             BouncyCapsule(
                                 onClick = { exportAudioLauncher.launch("Binot_Audio_${note!!.id}.mp4") },
@@ -1381,21 +1364,29 @@ fun ResultScreen(
                     }
 
                     item {
+                        // LOGIKA TOMBOL SHARE YANG BARU (Eksklusif JSON + MP4)
                         BouncyCapsule(
                             onClick = {
-                                val cleanSummaryToShare = note!!.summary?.replace(Regex("<!--BINOT_META:.*?-->"), "")?.trimEnd()
-                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${note!!.title}\n\n${cleanSummaryToShare ?: note!!.rawText}")
+                                viewModel.shareBinotFile(context) { uri, msg ->
+                                    if (uri != null) {
+                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/zip" 
+                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                            putExtra(Intent.EXTRA_TEXT, "Catatan Binot: ${note!!.title}")
+                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "Share .binot note via"))
+                                    } else {
+                                        coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                                    }
                                 }
-                                context.startActivity(Intent.createChooser(sendIntent, "Share note via"))
                                 showSidePanel = false
                             },
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Share", color = MaterialTheme.colorScheme.onSurface)
+                            Text("Share .binot", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
