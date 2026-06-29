@@ -17,7 +17,6 @@ import java.util.zip.ZipOutputStream
 
 object ImportExportHelper {
 
-    // Logika ZIP dengan metode STORED (Nol Kompresi). Aman dari OOM dan hemat baterai.
     suspend fun exportNoteToBinot(context: Context, note: NoteEntity): Uri? = withContext(Dispatchers.IO) {
         try {
             val cacheDir = File(context.cacheDir, "shared_notes").apply { mkdirs() }
@@ -26,7 +25,6 @@ object ImportExportHelper {
             val outFile = File(cacheDir, fileName)
 
             ZipOutputStream(FileOutputStream(outFile)).use { zos ->
-                // 1. Tulis data.json
                 val json = JSONObject().apply {
                     put("version", 1)
                     put("title", note.title)
@@ -48,11 +46,9 @@ object ImportExportHelper {
                 zos.write(jsonBytes)
                 zos.closeEntry()
 
-                // 2. Tulis audio.mp4 (kalau ada)
                 if (note.audioPath != null) {
                     val audioFile = File(note.audioPath)
                     if (audioFile.exists()) {
-                        // Untuk metode STORED, kita WAJIB ngitung ukuran & CRC32 sebelum write.
                         val crc = CRC32()
                         var size = 0L
                         audioFile.inputStream().use { fis ->
@@ -76,7 +72,6 @@ object ImportExportHelper {
                 }
             }
             
-            // Generate URI aman via FileProvider
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", outFile)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -84,49 +79,39 @@ object ImportExportHelper {
         }
     }
 
-    // Logika Import Universal (Terima Audio MP4 biasa, atau .binot ZIP archive)
     suspend fun importFile(context: Context, uri: Uri, repository: NoteRepository): Int? = withContext(Dispatchers.IO) {
         try {
             val contentResolver = context.contentResolver
-            val mimeType = contentResolver.getType(uri)
-            val isZip = mimeType?.contains("zip") == true || uri.toString().endsWith(".binot") || uri.toString().endsWith(".zip")
-
-            // Jika yang di-import murni Audio biasa (Legacy behavior)
-            if (!isZip) {
-                val audioDir = File(context.filesDir, "audio_records").apply { mkdirs() }
-                val newAudioFile = File(audioDir, "RECORD_${System.currentTimeMillis()}.mp4")
-                contentResolver.openInputStream(uri)?.use { input ->
-                    newAudioFile.outputStream().use { output -> input.copyTo(output) }
-                }
-                val newNote = NoteEntity(title = "", rawText = "Pending Transcription", summary = null, audioPath = newAudioFile.absolutePath)
-                return@withContext repository.insert(newNote).toInt()
-            }
-
-            // Jika yang di-import adalah file .binot (ZIP Archive)
+            
+            var isBinotArchive = false
             var jsonData = ""
             var audioTempFile: File? = null
 
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                ZipInputStream(inputStream).use { zis ->
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        when (entry.name) {
-                            "data.json" -> {
+            // LOGIKA BARU: Jangan percaya OS. Langsung bongkar filenya.
+            // Kalau ketemu data.json, ini mutlak file .binot (ZIP).
+            try {
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    ZipInputStream(inputStream).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            if (entry.name == "data.json") {
+                                isBinotArchive = true
                                 jsonData = zis.bufferedReader(Charsets.UTF_8).readText()
-                            }
-                            "audio.mp4" -> {
+                            } else if (entry.name == "audio.mp4") {
                                 val tempAudio = File(context.cacheDir, "temp_import_audio.mp4")
                                 tempAudio.outputStream().use { output -> zis.copyTo(output) }
                                 audioTempFile = tempAudio
                             }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
                         }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
                     }
                 }
+            } catch (e: Exception) {
+                // Biarkan lewat. Ini berarti murni file audio, bukan file ZIP/Binot.
             }
 
-            if (jsonData.isNotEmpty()) {
+            if (isBinotArchive && jsonData.isNotEmpty()) {
                 val json = JSONObject(jsonData)
                 var finalAudioPath: String? = null
 
@@ -134,11 +119,10 @@ object ImportExportHelper {
                     val audioDir = File(context.filesDir, "audio_records").apply { mkdirs() }
                     val newAudioFile = File(audioDir, "RECORD_${System.currentTimeMillis()}.mp4")
                     audioTempFile!!.copyTo(newAudioFile, overwrite = true)
-                    audioTempFile!!.delete() // Bersihkan cache
+                    audioTempFile!!.delete() 
                     finalAudioPath = newAudioFile.absolutePath
                 }
 
-                // Injeksi database (Aman dari proses AI otomatis karena summary tidak kosong)
                 val newNote = NoteEntity(
                     title = json.optString("title", ""),
                     rawText = json.optString("rawText", ""),
@@ -148,8 +132,24 @@ object ImportExportHelper {
                     audioPath = finalAudioPath
                 )
                 return@withContext repository.insert(newNote).toInt()
+                
+            } else {
+                // LOGIKA FALLBACK: Kalau nggak ada data.json, perlakukan sebagai file rekaman Audio biasa.
+                val audioDir = File(context.filesDir, "audio_records").apply { mkdirs() }
+                val newAudioFile = File(audioDir, "RECORD_${System.currentTimeMillis()}.mp4")
+                
+                contentResolver.openInputStream(uri)?.use { input ->
+                    newAudioFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                
+                if (newAudioFile.exists() && newAudioFile.length() > 0) {
+                    val newNote = NoteEntity(title = "", rawText = "Pending Transcription", summary = null, audioPath = newAudioFile.absolutePath)
+                    return@withContext repository.insert(newNote).toInt()
+                } else {
+                    newAudioFile.delete()
+                    return@withContext null
+                }
             }
-            null
         } catch (e: Exception) {
             e.printStackTrace()
             null
