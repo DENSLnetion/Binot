@@ -109,16 +109,18 @@ class ResultViewModel(
             val lang = settingsRepository.aiLanguageFlow.first()
             val task = settingsRepository.aiTaskFlow.first()
             val format = settingsRepository.aiFormatFlow.first()
-            
             val currentMeta = "<!--BINOT_META:${lang}_${task}_${format}-->"
             
-            if (noteToProcess.summary == null || !noteToProcess.summary.contains(currentMeta)) {
+            // LOGIKA IMUNITAS (KEBAL AI):
+            // Catatan hanya akan di-proses ulang jika summary BENAR-BENAR KOSONG.
+            // Biarpun meta tag-nya beda (catatan dari teman beda bahasa), sistem akan membiarkannya.
+            // User hanya bisa memproses ulang secara paksa kalau menekan "Restore Original".
+            if (noteToProcess.summary == null) {
                 processTextAuto(noteToProcess, lang, task, format, currentMeta)
             }
         }
     }
 
-    // LOGIKA SHARE ZIP MURNI KE WHATSAPP / EXTERNAL (Baru)
     fun shareBinotFile(context: Context, onResult: (Uri?, String) -> Unit) {
         val currentNote = _note.value
         if (currentNote == null) {
@@ -211,14 +213,23 @@ class ResultViewModel(
         }
 
         if (mediaPlayer == null) {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(path)
-                prepare()
-                setOnCompletionListener {
-                    _isPlaying.value = false
-                    _playbackProgress.value = 0f
-                    progressJob?.cancel()
+            try {
+                // LOGIKA ANTI-CRASH: Tangkap error kalau file nggak valid diputar (mencegah Force Close)
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(path)
+                    prepare()
+                    setOnCompletionListener {
+                        _isPlaying.value = false
+                        _playbackProgress.value = 0f
+                        progressJob?.cancel()
+                    }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _error.value = "Failed to play audio. File is corrupted or not a valid media file."
+                mediaPlayer?.release()
+                mediaPlayer = null
+                return
             }
         }
 
