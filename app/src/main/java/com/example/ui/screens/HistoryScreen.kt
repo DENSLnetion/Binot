@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.ViewAgenda
@@ -87,6 +88,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.data.NoteEntity
 import com.example.ui.components.MarkdownText
+import com.example.utils.ImportExportHelper
 import com.example.viewmodel.HistoryViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -101,7 +103,7 @@ fun HistoryScreen(
     sharedTransitionScope: SharedTransitionScope,
     onNoteClick: (Int) -> Unit,
     onTrashClick: () -> Unit,
-    onImportFile: suspend (Uri) -> Int? // Fungsi eksekutor Injeksi baru
+    onImportFile: suspend (Uri) -> Int? 
 ) {
     val context = LocalContext.current
     val notes by viewModel.filteredNotes.collectAsState()
@@ -155,16 +157,15 @@ fun HistoryScreen(
         viewModel.checkForAppUpdate(currentVersion)
     }
 
-    // Launch khusus untuk import universal (*/* membolehkan deteksi .binot/.zip sekaligus audio)
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             coroutineScope.launch {
-                snackbarHostState.showSnackbar("Mengimpor file...")
+                snackbarHostState.showSnackbar("Importing file...")
                 val newId = onImportFile(it)
                 if (newId != null) {
                     onNoteClick(newId)
                 } else {
-                    snackbarHostState.showSnackbar("Gagal mengimpor file! Pastikan format sesuai.")
+                    snackbarHostState.showSnackbar("Failed to import file! Ensure the format is supported.")
                 }
             }
         }
@@ -201,8 +202,8 @@ fun HistoryScreen(
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                         data class SortOption(val icon: androidx.compose.ui.graphics.vector.ImageVector, val description: String)
                         val sortOptions = listOf(
-                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Terbaru"),
-                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Terlama"),
+                            SortOption(androidx.compose.material.icons.Icons.Default.AccessTime, "Newest"),
+                            SortOption(androidx.compose.material.icons.Icons.Default.History, "Oldest"),
                             SortOption(androidx.compose.material.icons.Icons.AutoMirrored.Default.Sort, "A–Z")
                         )
                         sortOptions.forEachIndexed { index, option ->
@@ -374,6 +375,40 @@ fun HistoryScreen(
                                             showSelectionMenu = false
                                         }
                                     )
+                                    
+                                    if (selectedNotes.size == 1) {
+                                        DropdownMenuItem(
+                                            text = { Text("Share") },
+                                            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                            onClick = {
+                                                val noteId = selectedNotes.first()
+                                                val noteToShare = notes.find { it.id == noteId }
+                                                
+                                                if (noteToShare != null) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar("Generating .binot file...")
+                                                        val uri = ImportExportHelper.exportNoteToBinot(context, noteToShare)
+                                                        if (uri != null) {
+                                                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                                                type = "application/zip" 
+                                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                                putExtra(Intent.EXTRA_TEXT, "Binot Note: ${noteToShare.title}")
+                                                                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                                            }
+                                                            context.startActivity(Intent.createChooser(sendIntent, "Share .binot note via"))
+                                                        } else {
+                                                            snackbarHostState.showSnackbar("Failed to generate file.")
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                selectionMode = false
+                                                selectedNotes = emptySet()
+                                                showSelectionMenu = false
+                                            }
+                                        )
+                                    }
+
                                     DropdownMenuItem(
                                         text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                         leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
@@ -419,8 +454,8 @@ fun HistoryScreen(
                         ExtendedFloatingActionButton(
                             onClick = { importLauncher.launch("*/*") },
                             expanded = isFabExpanded,
-                            icon = { Icon(Icons.Default.Audiotrack, "Import / Open .binot") },
-                            text = { Text("Import Audio/.binot") },
+                            icon = { Icon(Icons.Default.Audiotrack, "Import File") },
+                            text = { Text("Import File") },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier
@@ -596,7 +631,7 @@ fun HistoryScreen(
         AlertDialog(
             onDismissRequest = { showDeleteMultipleLabelsDialog = false },
             title = { Text("Delete Labels") },
-            text = { Text("${selectedLabels.size} label${if (selectedLabels.size > 1) "s" else ""} will be removed from all notes. This can't be undone.") },
+            text = { Text("${selectedLabels.size} label(s) will be removed from all notes. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteMultipleLabels(selectedLabels)
