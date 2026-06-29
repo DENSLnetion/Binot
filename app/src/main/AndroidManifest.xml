@@ -25,22 +25,34 @@
             android:launchMode="singleTask"
             android:label="@string/app_name"
             android:theme="@style/Theme.MyApplication">
+            
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Intent Filter Maut: Bikin Binot ke-detect pas user klik file .binot di WA/File Manager -->
+            <!-- Filter 1: Tangkap dari File Manager lokal (file://) yang ekstensi-nya .binot -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file" />
-                <data android:scheme="content" />
-                <data android:mimeType="*/*" />
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.binot" />
             </intent-filter>
+
+            <!-- Filter 2: Tangkap dari WhatsApp/Telegram/Google Drive (content://) -->
+            <!-- Karena aplikasi luar menyamarkan nama file, kita tangkap tipe MIME-nya -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            
         </activity>
 
         <!-- FileProvider: Syarat mutlak Android 7+ buat nge-share file ke app luar -->
